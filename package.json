@@ -1,13 +1,67 @@
 {
-  "name": "tanstack-auth",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+	"name": "@monarcode/tanstack-auth",
+	"version": "0.1.0-alpha.0",
+	"description": "Simple TanStack Router authentication tools",
+	"type": "module",
+	"license": "MIT",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+		"./react": {
+			"types": "./dist/react/index.d.ts",
+			"import": "./dist/react/index.js"
+		},
+		"./http": {
+			"types": "./dist/http/index.d.ts",
+			"import": "./dist/http/index.js"
+		},
+		"./package.json": "./package.json"
+	},
+	"files": ["dist", "README.md", "LICENSE"],
+	"sideEffects": false,
+	"publishConfig": {
+		"access": "public",
+		"registry": "https://registry.npmjs.org/"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/monarcode/tanstack-auth.git"
+	},
+	"homepage": "https://github.com/monarcode/tanstack-auth#readme",
+	"bugs": {
+		"url": "https://github.com/monarcode/tanstack-auth/issues"
+	},
+	"keywords": ["tanstack", "router", "auth", "react", "standard-schema"],
+	"engines": { "node": ">=24" },
+	"scripts": {
+		"clean": "node scripts/clean.mjs",
+		"build": "npm run clean && tsc -p tsconfig.json",
+		"dev": "tsc -p tsconfig.json --watch",
+		"typecheck": "tsc -p tsconfig.json --noEmit",
+		"test": "node --test tests/package.test.mjs",
+		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json",
+		"check": "npm run build && npm test && npm run test:types",
+		"prepack": "npm run check"
+	},
+	"dependencies": {
+		"@standard-schema/spec": "^1.1.0",
+		"@tanstack/store": "^0.11.1",
+		"@tanstack/react-store": "^0.11.1"
+	},
+	"peerDependencies": {
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0",
+		"@tanstack/react-router": "^1.170.38"
+	},
+	"devDependencies": {
+		"typescript": "6.0.3",
+		"@types/node": "22.20.4",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"react": "19.3.0",
+		"react-dom": "19.3.0",
+		"@tanstack/react-router": "1.170.38",
+		"zod": "4.4.3"
+	}
 }
