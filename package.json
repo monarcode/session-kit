@@ -1,6 +1,7 @@
 {
 	"name": "@monarcode/tanstack-auth",
 	"version": "0.1.0-alpha.0",
+	"packageManager": "pnpm@10.12.1",
 	"description": "Simple TanStack Router authentication tools",
 	"type": "module",
 	"license": "MIT",

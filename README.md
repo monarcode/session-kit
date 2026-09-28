@@ -482,3 +482,6 @@ memory history. The `development` condition enables its client redirect test.
 Hook tests mount React DOM in jsdom, including StrictMode subscription cleanup.
 These tests do not cover a live backend or a real browser. `pnpm pack` runs the
 package checks before creating a local tarball; it does not publish to npm.
+GitHub Actions installs from the frozen pnpm lockfile, runs the same checks, and
+creates a local tarball in the runner's temporary directory on pushes to `main`
+and pull requests. The workflow does not publish or create a release.
