@@ -36,13 +36,13 @@
 	"engines": { "node": ">=24" },
 	"scripts": {
 		"clean": "node scripts/clean.mjs",
-		"build": "npm run clean && tsc -p tsconfig.json",
+		"build": "pnpm run clean && tsc -p tsconfig.json",
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "node --test tests/package.test.mjs",
 		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json",
-		"check": "npm run build && npm test && npm run test:types",
-		"prepack": "npm run check"
+		"check": "pnpm run build && pnpm test && pnpm run test:types",
+		"prepack": "pnpm run check"
 	},
 	"dependencies": {
 		"@standard-schema/spec": "^1.1.0",
