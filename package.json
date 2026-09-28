@@ -55,6 +55,7 @@
 		"@tanstack/react-router": "^1.170.38"
 	},
 	"devDependencies": {
+		"jsdom": "26.1.0",
 		"typescript": "6.0.3",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
