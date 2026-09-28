@@ -40,7 +40,8 @@
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "node --conditions=development --test tests/*.test.mjs",
-		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json",
+		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
+		"test:docs": "node scripts/check-readme.mjs",
 		"check": "pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"
 	},

@@ -2,45 +2,483 @@
 
 Schema-driven browser authentication for React and TanStack Router.
 
-## Status
+**Version: 0.1.0-alpha.0. Early development; not ready for production.**
 
-Early development. Not ready for production.
+One auth client lives in Router context. TanStack Store makes its state reactive,
+with no separate AuthProvider. Tokens are stored in JavaScript-readable cookies;
+the validated user profile is stored in localStorage.
 
-The current implementation uses JavaScript-readable cookies for tokens
-and localStorage for the user profile. Cross-tab synchronization and
-TanStack Start SSR support are not implemented.
+## Installation
+
+Publication to npm has not been confirmed. To use the locally verified package,
+run `pnpm pack` in this repository, then install the resulting tarball in your app:
+
+```sh
+pnpm add /absolute/path/to/monarcode-tanstack-auth-0.1.0-alpha.0.tgz
+```
+
+The declared peer ranges are React and React DOM `^19.3.0`, and TanStack React
+Router `^1.170.38`. Use matching React and React DOM versions. This example uses
+Zod for its Standard Schema implementation:
+
+```sh
+pnpm add react@19.3.0 react-dom@19.3.0 @tanstack/react-router@1.170.38 zod@4.4.3
+```
+
+Zod is optional: any compatible Standard Schema V1 implementation can describe
+users. The package is ESM-only, declares Node.js `>=24`, and is checked with
+TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
+have not been verified. Browser use requires modern APIs including
+`structuredClone`, `AbortController`, and `crypto.randomUUID`.
+
+## Quick start
+
+This example uses TanStack Router's file-based routing in a React browser app.
+It assumes the app already has a `root` HTML element and the Router Vite plugin.
+If file routing is not configured yet, add the plugin before the React plugin:
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+
+export default defineConfig({
+  plugins: [tanstackRouter({ target: "react", autoCodeSplitting: true }), react()],
+});
+```
+
+The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
+Keep that generated file in the Router import below, and never edit it by hand.
+
+The example expects these same-origin backend endpoints. Supply them in your
+application; the package does not implement a login server:
+
+| Endpoint | Request | Successful response |
+| --- | --- | --- |
+| `POST /api/auth/login` | JSON `{ email, password }` | `{ accessToken, refreshToken?, expiresAt?, user }` |
+| `POST /api/auth/refresh` | JSON `{ refreshToken }` | `{ accessToken, refreshToken?, expiresAt?, user? }` |
+
+`expiresAt` is positive Unix time in **milliseconds**. In this example, a refresh
+401 means terminal rejection; other failures are operational. Adapt that mapping
+to your backend's contract. If it returns `expiresIn` in seconds, convert it to
+`Date.now() + expiresIn * 1000` before passing tokens to auth.
+
+### 1. Define the user and client
+
+`src/auth.ts`
+
+<!-- file: src/auth.ts -->
+```ts
+import { z } from "zod";
+import { createAuth, createRefreshFn } from "@monarcode/tanstack-auth";
+
+export const userSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+});
+
+const tokensSchema = z.object({
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresAt: z.number().positive().optional(),
+});
+export const loginResponseSchema = tokensSchema.extend({ user: userSchema });
+const refreshResponseSchema = tokensSchema.extend({ user: userSchema.optional() });
+
+export const auth = createAuth({
+  name: "my-app",
+  userSchema,
+  refresh: createRefreshFn(async ({ refreshToken, signal }) => {
+    // Use plain fetch here to avoid recursive auth refresh.
+    const response = await fetch("/api/auth/refresh", {
+      method: "POST",
+      signal,
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (response.status === 401) return null;
+    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+    return refreshResponseSchema.parse(await response.json());
+  }),
+});
+
+export type AppAuth = typeof auth;
+```
+
+Create one active client per auth name in each tab. A schema supplies both runtime
+validation and inferred input/output types. Its output must be a plain JSON object
+and must remain valid when restored through the same schema. Avoid one-way
+transforms that cannot accept their own output. Accepted user data is cloned and
+frozen; use `updateUser` to replace it.
+
+### 2. Type the root route
+
+`src/routes/__root.tsx`
+
+<!-- file: src/routes/__root.tsx -->
+```tsx
+import { createRootRouteWithContext, Outlet, useRouter } from "@tanstack/react-router";
+import { useAuth, useAuthClient } from "@monarcode/tanstack-auth/react";
+import type { AppAuth } from "../auth.js";
+
+export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
+  component: Root,
+});
+
+function Root() {
+  const error = useAuth((state) => state.error);
+  const auth = useAuthClient();
+  const router = useRouter();
+
+  return <>
+    {error && <div role="alert">
+      <p>{error.message}</p>
+      {error.code === "PERSISTENCE_FAILED" && <button onClick={() => {
+        void auth.signOut().then(() => router.invalidate()).catch(() => {
+          // signOut keeps the failure in reactive state for this banner.
+        });
+      }}>Clear saved session again</button>}
+    </div>}
+    <Outlet />
+  </>;
+}
+```
+
+The root route defines the Router context shared by every generated file route.
+Keeping the error banner above `Outlet` makes cleanup failures visible after a
+protected route unmounts.
+
+### 3. Add the login route
+
+`src/routes/login.tsx`
+
+<!-- file: src/routes/login.tsx -->
+```tsx
+import { useState, type FormEvent } from "react";
+import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import { safeReturnTo, useAuthClient } from "@monarcode/tanstack-auth/react";
+import { loginResponseSchema } from "../auth.js";
+
+export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirectTo: safeReturnTo(search.redirectTo),
+  }),
+  beforeLoad: async ({ context, search }) => {
+    if (await context.auth.getSession()) {
+      throw redirect({ href: safeReturnTo(search.redirectTo) });
+    }
+  },
+  component: Login,
+});
+
+function Login() {
+  const auth = useAuthClient();
+  const router = useRouter();
+  const { redirectTo } = Route.useSearch();
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        redirect: "error",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+        }),
+      });
+      if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+      await auth.signIn(loginResponseSchema.parse(await response.json()));
+      await router.navigate({ href: safeReturnTo(redirectTo), replace: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not sign in");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return <form onSubmit={submit}>
+    <h1>Sign in</h1>
+    <label>Email <input name="email" type="email" autoComplete="username" required /></label>
+    <label>Password <input name="password" type="password" autoComplete="current-password" required /></label>
+    {error && <p role="alert">{error}</p>}
+    <button disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
+  </form>;
+}
+```
+
+### 4. Add a pathless protected layout
+
+The leading underscore makes `_authenticated.tsx` a pathless layout. Its child
+routes inherit the guard without adding `authenticated` to the URL.
+
+`src/routes/_authenticated.tsx`
+
+<!-- file: src/routes/_authenticated.tsx -->
+```tsx
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { AuthError } from "@monarcode/tanstack-auth";
+import { useAuth } from "@monarcode/tanstack-auth/react";
+
+export const Route = createFileRoute("/_authenticated")({
+  beforeLoad: async ({ context, location }) => {
+    const session = await context.auth.getSession();
+    if (!session) throw redirect({
+      to: "/login",
+      search: { redirectTo: location.href },
+    });
+    if (!context.auth.isCurrent(session)) {
+      throw new AuthError("SESSION_CHANGED", "Session changed; retry navigation");
+    }
+    // Return public context only. Never put the token-bearing session here.
+    return {
+      sessionId: session.id,
+      authVersion: context.auth.state.get().version,
+    };
+  },
+  component: ProtectedLayout,
+});
+
+function ProtectedLayout() {
+  const { authVersion } = Route.useRouteContext();
+  const status = useAuth((state) => state.status);
+  const version = useAuth((state) => state.version);
+  if (status !== "authenticated" || version !== authVersion) {
+    return <p>Checking session…</p>;
+  }
+  return <Outlet key={authVersion} />;
+}
+```
+
+### 5. Add a protected index route
+
+Placing `index.tsx` inside the `_authenticated` directory makes `/` a child of
+the protected layout. Add other private routes beside it, such as
+`src/routes/_authenticated/settings.tsx`.
+
+`src/routes/_authenticated/index.tsx`
+
+<!-- file: src/routes/_authenticated/index.tsx -->
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+import { useAuth, useAuthClient } from "@monarcode/tanstack-auth/react";
+
+export const Route = createFileRoute("/_authenticated/")({
+  component: Home,
+});
+
+function Home() {
+  const user = useAuth((state) => state.user);
+  const auth = useAuthClient();
+
+  return <main>
+    <h1>Welcome, {user?.email}</h1>
+    <button onClick={() => void auth.signOut().catch(() => {
+      // The root error banner displays persistence failures.
+    })}>Sign out</button>
+  </main>;
+}
+```
+
+### 6. Create and connect the Router
+
+`src/router.tsx`
+
+<!-- file: src/router.tsx -->
+```tsx
+import { createRouter, useRouter } from "@tanstack/react-router";
+import { connectAuth } from "@monarcode/tanstack-auth/react";
+import { auth } from "./auth.js";
+import { routeTree } from "./routeTree.gen.js";
+
+export const router = createRouter({
+  routeTree,
+  context: { auth },
+  defaultPreload: "intent",
+  defaultPreloadStaleTime: 0,
+  defaultPendingComponent: () => <p>Loading…</p>,
+  defaultErrorComponent: ({ error }) => <RouteError error={error} />,
+});
+
+function RouteError({ error }: { error: unknown }) {
+  const router = useRouter();
+  return <div role="alert">
+    <p>{error instanceof Error ? error.message : "Could not load this page"}</p>
+    <button onClick={() => void router.invalidate().catch(console.error)}>Retry</button>
+  </div>;
+}
+
+// Call once beside the stable Router, outside component rendering.
+export const disconnectAuth = connectAuth(router);
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+```
+
+`Register` gives the package hooks your application's user and client types.
+Keep it in the consuming app. `useAuth()` reads the full reactive snapshot;
+`useAuth(selector)` subscribes to a selected value. `useAuthClient()` returns the
+stable client for actions.
+
+`connectAuth` initializes auth, starts expiry timers, clears inactive Router
+cache entries on guard-relevant changes, and queues Router revalidation. Call
+`disconnectAuth` during app teardown or your bundler's hot-module disposal.
+Disconnecting stops background work without signing out.
+
+### 7. Render the app
+
+`src/main.tsx`
+
+<!-- file: src/main.tsx -->
+```tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from "@tanstack/react-router";
+import { router, disconnectAuth } from "./router.js";
+
+const root = createRoot(document.getElementById("root")!);
+root.render(<StrictMode><RouterProvider router={router} /></StrictMode>);
+
+export function dispose() {
+  root.unmount();
+  disconnectAuth();
+}
+```
+
+## Profile updates and authenticated requests
+
+`updateUser` replaces the complete profile. For an asynchronous update, use its
+callback form so a response from an old session cannot overwrite a new account.
+This optional example assumes `PATCH /api/profile` returns the complete user:
+
+<!-- file: src/profile.ts -->
+```ts
+import { createAuthFetch } from "@monarcode/tanstack-auth/http";
+import { auth, userSchema } from "./auth.js";
+
+export async function updateEmail(email: string) {
+  await auth.updateUser(async () => {
+    const request = createAuthFetch(auth, `${location.origin}/api/`);
+    const response = await request("profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) throw new Error(`Profile update failed (${response.status})`);
+    return userSchema.parse(await response.json());
+  });
+}
+```
+
+Handle the returned promise in your UI. Account switching uses `signIn`, which
+creates a new session ID. A profile update keeps the current session ID.
+
+`createAuthFetch` attaches a Bearer token, restricts requests to the configured
+origin, and rejects redirects. On a 401 it attempts refresh. GET and HEAD are
+replayed at most once; mutations are never automatically replayed. A second 401
+ends only the matching session. Network or refresh errors reject the request.
+
+## Refresh and errors
+
+| Refresh callback outcome | Meaning |
+| --- | --- |
+| Return tokens | Install validated tokens; omitted refresh token or user retains the current value. |
+| Return `null` | Terminal rejection: sign out and clear persistence. |
+| Throw | Operational failure: retain recoverable credentials and expose the error. |
+
+A failed proactive refresh leaves access usable until its expiry. Expired or
+explicitly rejected access is unavailable; a later `getSession()` can retry with
+retained refresh credentials. Guards should let operational errors reach an
+error component instead of turning every failure into a login redirect.
+
+Explicit `expiresAt` takes precedence over JWT `exp`. JWT decoding supplies only
+a scheduling hint, without verifying signatures. Opaque tokens without expiry
+cannot be proactively refreshed. While connected, refresh is scheduled at the
+earlier of 60 seconds before expiry or halfway through the remaining lifetime.
+There is one proactive attempt per installed token, with no recurring retry loop.
+Validation and refresh work have a 15-second deadline.
+
+| State status | Meaning |
+| --- | --- |
+| `initializing` | Restoration has not completed. |
+| `authenticated` | Access is locally usable; `user` is available. |
+| `unauthenticated` | No session; sign-in is needed. |
+| `unavailable` | Restoration failed or current credentials cannot supply usable access. |
+
+`state.error` is an `AuthError` or `null`; user data is hidden outside the
+authenticated state. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
+`PERSISTENCE_FAILED`, `REFRESH_FAILED`, `SESSION_CHANGED`, and `UNAUTHENTICATED`.
+Validation errors can include `issues`; underlying failures can appear in `cause`.
+Application callbacks can also throw ordinary errors.
+
+A storage write failure clears the in-memory session and attempts cleanup.
+Sign-out takes effect in the current tab even if storage deletion fails; its
+promise rejects and the error remains visible. Retry `signOut()` after storage
+becomes available, because undeleted credentials can survive a reload.
+
+## Storage and limits
+
+- Tokens use the `<name>_auth` cookie; the profile uses `<name>:auth:user` in
+  localStorage. Matching session/write IDs detect incomplete writes on restoration.
+- Cookies are host-only, with `Path=/`, `SameSite=Lax`, and `Secure` on HTTPS.
+  `cookieMaxAge` is in seconds, defaults to 30 days, and renews on successful writes.
+  It does not extend backend token validity. Encoded token cookies have a 3,800
+  character budget; oversized values fail visibly.
+- Cookies and profiles are readable by same-origin JavaScript. The backend must
+  independently authenticate requests and authorize private operations. Local
+  profile fields and route guards do not establish server authorization.
+- Sign-out clears local credentials; backend revocation belongs to your app.
+- Refresh coordination is limited to one client in one tab. Shared browser storage
+  does not synchronize live state across tabs or coordinate rotating refresh tokens.
+- Query cache management belongs to your app. Scope private data to the sign-in
+  session ID, and reject late results from an old session. Router revalidation
+  does not clear a separate TanStack Query cache.
+- SSR and TanStack Start are not implemented. Import safety does not make the
+  browser client a server session adapter. Start needs a separate request-scoped
+  design. Never put tokens in route loader results or hydrated page data.
 
 ## Entry points
 
-```ts
-import { createAuth, createRefreshFn } from '@monarcode/tanstack-auth';
+| Import | Exports |
+| --- | --- |
+| `@monarcode/tanstack-auth` | `createAuth`, `createRefreshFn`, `AuthError`, public auth types |
+| `@monarcode/tanstack-auth/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types |
+| `@monarcode/tanstack-auth/http` | `createAuthFetch` |
 
-import {
-  connectAuth,
-  useAuth,
-  useAuthClient,
-} from '@monarcode/tanstack-auth/react';
-
-import { createAuthFetch } from '@monarcode/tanstack-auth/http';
-```
+Generated declarations retain schema inference and consumer Router registration.
+Declaration maps are disabled so declaration navigation targets installed `.d.ts`
+files. Do not import internal `dist` paths.
 
 ## Development
 
-Use Node.js 24 and pnpm.
+Use Node.js 24 and pnpm:
 
 ```sh
 pnpm install
 pnpm run check
 ```
 
-`check` builds the package, runs the 33 auth behavior tests, five React hook
-tests, and four package smoke tests, then checks consumer declarations under
-NodeNext and Bundler resolution. After building, use `pnpm test` to run the
-runtime tests alone.
+`check` builds the package, runs 33 auth behavior tests, five React hook tests,
+and four package smoke tests, then checks consumer declarations and every marked
+TypeScript example in this README under NodeNext and Bundler resolution. The docs
+checker supplies the generated route tree that a consumer's Router plugin owns.
+After building, `pnpm test` runs runtime tests and `pnpm run test:docs` checks
+README examples alone. The documentation checker extracts the examples into a
+temporary project; it does not execute them or contact the example backend.
 
-Behavior tests use mocked browser storage, HTTP responses, and timers, plus
-a real Router with memory history. The test command uses the `development`
-condition so the Router test can exercise client redirects with browser stubs.
-Hook tests mount React DOM components in jsdom and cover reactive updates,
-selector rerenders, client identity, and subscription cleanup with StrictMode.
-These tests do not cover a live backend or a real browser.
+Behavior tests use mocked storage, HTTP, and timers, plus a real Router with
+memory history. The `development` condition enables its client redirect test.
+Hook tests mount React DOM in jsdom, including StrictMode subscription cleanup.
+These tests do not cover a live backend or a real browser. `pnpm pack` runs the
+package checks before creating a local tarball; it does not publish to npm.
