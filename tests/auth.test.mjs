@@ -124,6 +124,172 @@ test("invalid sign-in leaves the current session usable", async () => {
 	assert.equal((await auth.getSession()).id, before.id);
 });
 
+for (const timeout of [false, true]) {
+	for (const canRefresh of [false, true]) {
+		test(`expiry during ${timeout ? "timed-out" : "failed"} sign-in ${canRefresh ? "refreshes" : "clears"} the previous session`, async (t) => {
+			t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+			const validation = deferred();
+			const refresh = deferred();
+			let refreshCalls = 0;
+			const auth = client({
+				userSchema: userSchema.refine(async (value) =>
+					value.id === "bob" ? validation.promise : true,
+				),
+				refresh: canRefresh ? async () => {
+					refreshCalls++;
+					return refresh.promise;
+				} : undefined,
+			});
+			await auth.signIn(input({ expiresAt: 1_001_000 }));
+			const previousId = auth.state.get().sessionId;
+			cleanups.push(auth.mount());
+			await flush();
+			const pending = auth.signIn(input({
+				accessToken: "bob-token", user: { ...user, id: "bob" },
+			}));
+			const checked = assert.rejects(pending, code("USER_VALIDATION_FAILED"));
+			await flush();
+			t.mock.timers.tick(1_000);
+			if (timeout) t.mock.timers.tick(14_000);
+			else validation.resolve(false);
+			await checked;
+			await flush();
+			if (canRefresh) {
+				assert.equal(refreshCalls, 1);
+				assert.equal(auth.state.get().status, "unavailable");
+				assert.equal(auth.state.get().user, null);
+				refresh.resolve({ accessToken: "access-2", expiresAt: Date.now() + 60_000 });
+				await flush();
+				assert.equal(auth.state.get().status, "authenticated");
+				assert.equal(auth.state.get().sessionId, previousId);
+				assert.equal(auth.state.get().user.id, "alice");
+			} else {
+				assert.equal(auth.state.get().status, "unauthenticated");
+				assert.equal(auth.state.get().user, null);
+				assert.equal(auth.state.get().sessionId, null);
+				assert.equal(cookies.size, 0);
+				assert.equal(values.size, 0);
+			}
+			if (timeout) {
+				// A validator that ignores cancellation must not commit its late result.
+				validation.resolve(true);
+				await flush();
+				assert.notEqual(auth.state.get().user?.id, "bob");
+			}
+		});
+	}
+}
+
+test("expiry during validation does not cancel a successful new sign-in", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const validation = deferred();
+	const auth = client({
+		userSchema: userSchema.refine(async (value) =>
+			value.id === "bob" ? validation.promise : true,
+		),
+	});
+	await auth.signIn(input({ expiresAt: 1_001_000 }));
+	const previousId = auth.state.get().sessionId;
+	cleanups.push(auth.mount());
+	await flush();
+	const pending = auth.signIn(input({
+		accessToken: "bob-token", user: { ...user, id: "bob" },
+	}));
+	await flush();
+	t.mock.timers.tick(1_000);
+	await flush();
+	validation.resolve(true);
+	await pending;
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().user.id, "bob");
+	assert.notEqual(auth.state.get().sessionId, previousId);
+});
+
+test("failed sign-in recovery retains expired credentials without a refresh retry loop", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const validation = deferred();
+	let refreshCalls = 0;
+	const auth = client({
+		userSchema: userSchema.refine(async (value) =>
+			value.id === "bob" ? validation.promise : true,
+		),
+		refresh: async () => {
+			refreshCalls++;
+			throw new Error("offline");
+		},
+	});
+	await auth.signIn(input({ expiresAt: 1_001_000 }));
+	cleanups.push(auth.mount());
+	await flush();
+	const pending = auth.signIn(input({ user: { ...user, id: "bob" } }));
+	const checked = assert.rejects(pending, code("USER_VALIDATION_FAILED"));
+	await flush();
+	t.mock.timers.tick(1_000);
+	validation.resolve(false);
+	await checked;
+	await flush();
+	assert.equal(refreshCalls, 1);
+	assert.equal(auth.state.get().status, "unavailable");
+	assert.equal(auth.state.get().error.code, "REFRESH_FAILED");
+	assert.equal(cookies.size, 1);
+	t.mock.timers.tick(60_000);
+	await flush();
+	assert.equal(refreshCalls, 1);
+});
+
+test("failed sign-in hides an expired unmounted session until demand retries refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const validation = deferred();
+	let refreshCalls = 0;
+	const auth = client({
+		userSchema: userSchema.refine(async (value) =>
+			value.id === "bob" ? validation.promise : true,
+		),
+		refresh: async () => {
+			refreshCalls++;
+			return { accessToken: "access-2", expiresAt: Date.now() + 60_000 };
+		},
+	});
+	await auth.signIn(input({ expiresAt: 1_001_000 }));
+	const pending = auth.signIn(input({ user: { ...user, id: "bob" } }));
+	const checked = assert.rejects(pending, code("USER_VALIDATION_FAILED"));
+	await flush();
+	t.mock.timers.tick(1_000);
+	validation.resolve(false);
+	await checked;
+	await flush();
+	assert.equal(auth.state.get().status, "unavailable");
+	assert.equal(auth.state.get().user, null);
+	assert.equal(refreshCalls, 0);
+	assert.equal(cookies.size, 1);
+	assert.equal((await auth.getSession()).accessToken, "access-2");
+	assert.equal(refreshCalls, 1);
+});
+
+test("a superseded sign-in cannot recover or clear the newer account", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const validation = deferred();
+	const auth = client({
+		userSchema: userSchema.refine(async (value) =>
+			value.id === "bob" ? validation.promise : true,
+		),
+	});
+	await auth.signIn(input({ expiresAt: 1_001_000 }));
+	cleanups.push(auth.mount());
+	await flush();
+	const pending = auth.signIn(input({ user: { ...user, id: "bob" } }));
+	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
+	await flush();
+	await auth.signIn(input({ accessToken: "carol-token", user: { ...user, id: "carol" } }));
+	t.mock.timers.tick(2_000);
+	validation.resolve(false);
+	await checked;
+	await flush();
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().user.id, "carol");
+	assert.equal((await auth.getSession()).accessToken, "carol-token");
+});
+
 test("cookie/profile mismatch fails closed and removes saved data", async () => {
 	await client().signIn(input());
 	const saved = JSON.parse(values.get("test:auth:user"));

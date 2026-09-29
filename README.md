@@ -469,7 +469,7 @@ pnpm install
 pnpm run check
 ```
 
-`check` builds the package, runs 33 auth behavior tests, five React hook tests,
+`check` builds the package, runs 41 auth behavior tests, five React hook tests,
 and four package smoke tests, then checks consumer declarations and every marked
 TypeScript example in this README under NodeNext and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.

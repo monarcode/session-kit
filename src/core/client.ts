@@ -268,7 +268,18 @@ export function createAuth<S extends StandardSchemaV1>(
 				cause,
 			);
 		} finally {
-			if (epoch === expected) schedule();
+			if (epoch === expected) {
+				schedule();
+				// Validation paused the previous session's timers. If it expired
+				// meanwhile, hide its profile and recover once after sign-in fails.
+				if (session && !valid()) {
+					publish(store.get().error);
+					if (mounts)
+						void getSession().catch(() => {
+							/* Recovery errors are exposed through state. */
+						});
+				}
+			}
 		}
 	}
 
