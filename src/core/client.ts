@@ -206,7 +206,17 @@ export function createAuth<S extends StandardSchemaV1>(
 					error.code === "USER_VALIDATION_FAILED"
 				) {
 					forget(error);
-					persistence.clear();
+					try {
+						persistence.clear();
+					} catch (cleanup) {
+						const failure = new AuthError(
+							"PERSISTENCE_FAILED",
+							"Could not clear the invalid saved session",
+							{ cause: new AggregateError([error, cleanup]) },
+						);
+						publish(failure);
+						throw failure;
+					}
 					return;
 				}
 				// No authenticated snapshot is exposed when storage cannot be read.

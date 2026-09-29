@@ -426,6 +426,10 @@ A storage write failure clears the in-memory session and attempts cleanup.
 Sign-out takes effect in the current tab even if storage deletion fails; its
 promise rejects and the error remains visible. Retry `signOut()` after storage
 becomes available, because undeleted credentials can survive a reload.
+If restoration rejects saved data and cleanup fails, `getSession()` rejects
+with `PERSISTENCE_FAILED` and `state.error` exposes the same error. Its `cause`
+retains both the restoration and cleanup failures. Retry `signOut()` to clear
+the remaining data after storage becomes available.
 
 ## Storage and limits
 
@@ -469,7 +473,7 @@ pnpm install
 pnpm run check
 ```
 
-`check` builds the package, runs 41 auth behavior tests, five React hook tests,
+`check` builds the package, runs 45 auth behavior tests, five React hook tests,
 and four package smoke tests, then checks consumer declarations and every marked
 TypeScript example in this README under NodeNext and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.

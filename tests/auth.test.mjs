@@ -12,7 +12,7 @@ const userSchema = z.object({
 	role: z.enum(["admin", "member"]).default("member"),
 });
 const user = { id: "alice", email: "alice@example.com", role: "member" };
-let cookies, values, blockedCookies, blockedStorage, cleanups;
+let cookies, values, blockedCookies, blockedStorage, blockedStorageDeletion, cleanups;
 let originalGlobals;
 const browserGlobals = [
 	"location", "document", "localStorage", "fetch", "self", "scrollTo", "window",
@@ -48,6 +48,7 @@ beforeEach(() => {
 	values = new Map();
 	blockedCookies = false;
 	blockedStorage = false;
+	blockedStorageDeletion = false;
 	cleanups = [];
 	originalGlobals = new Map(browserGlobals.map((name) => [
 		name, Object.getOwnPropertyDescriptor(globalThis, name),
@@ -77,7 +78,7 @@ beforeEach(() => {
 			values.set(key, value);
 		},
 		removeItem(key) {
-			if (blockedStorage) throw new Error("Blocked");
+			if (blockedStorage || blockedStorageDeletion) throw new Error("Blocked");
 			values.delete(key);
 		},
 	});
@@ -308,6 +309,50 @@ test("malformed stored user fails schema validation", async () => {
 	values.set("test:auth:user", JSON.stringify({ ...saved, user: { id: 5 } }));
 	assert.equal(await client().getSession(), null);
 });
+
+for (const invalidUser of [false, true]) {
+	for (const blockedTarget of ["cookie", "profile"]) {
+		test(`restoring ${invalidUser ? "an invalid user" : "a malformed session"} exposes blocked ${blockedTarget} cleanup and permits retry`, async () => {
+			await client().signIn(input());
+			if (invalidUser) {
+				const saved = JSON.parse(values.get("test:auth:user"));
+				values.set("test:auth:user", JSON.stringify({ ...saved, user: { id: 5 } }));
+			} else {
+				cookies.set("test_auth", "invalid-json");
+			}
+			blockedCookies = blockedTarget === "cookie";
+			blockedStorageDeletion = blockedTarget === "profile";
+			const auth = client();
+			let failure;
+			await assert.rejects(auth.getSession(), (error) => {
+				failure = error;
+				return error.code === "PERSISTENCE_FAILED";
+			});
+			assert.equal(auth.state.get().error, failure);
+			assert.equal(auth.state.get().status, "unauthenticated");
+			assert.equal(auth.state.get().user, null);
+			assert.equal(auth.state.get().sessionId, null);
+			assert.ok(failure.cause instanceof AggregateError);
+			const [restoration, cleanup] = failure.cause.errors;
+			assert.equal(restoration.code, invalidUser ? "USER_VALIDATION_FAILED" : "INVALID_SESSION");
+			if (invalidUser) assert.ok(restoration.issues.length > 0);
+			else assert.ok(restoration.cause instanceof Error);
+			assert.equal(cleanup.code, "PERSISTENCE_FAILED");
+			assert.ok(cleanup.cause instanceof AggregateError);
+			// Clearing must attempt both stores even when one deletion fails.
+			assert.equal(cookies.size, blockedTarget === "cookie" ? 1 : 0);
+			assert.equal(values.size, blockedTarget === "profile" ? 1 : 0);
+			assert.equal(await auth.getSession(), null);
+			assert.equal(auth.state.get().error, failure);
+			blockedCookies = false;
+			blockedStorageDeletion = false;
+			await auth.signOut();
+			assert.equal(auth.state.get().error, null);
+			assert.equal(cookies.size, 0);
+			assert.equal(values.size, 0);
+		});
+	}
+}
 
 test("storage read failure is operational and can be retried", async () => {
 	await client().signIn(input());
