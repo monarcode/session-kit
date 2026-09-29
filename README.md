@@ -10,12 +10,14 @@ the validated user profile is stored in localStorage.
 
 ## Installation
 
-Publication to npm has not been confirmed. To use the locally verified package,
-run `pnpm pack` in this repository, then install the resulting tarball in your app:
+Install the alpha using the `next` distribution tag:
 
 ```sh
-pnpm add /absolute/path/to/monarcode-tanstack-auth-0.1.0-alpha.0.tgz
+pnpm add @monarcode/tanstack-auth@next
 ```
+
+Pin `@monarcode/tanstack-auth@0.1.0-alpha.0` to use this exact version. Alpha
+releases may change the public API. See [release notes](./CHANGELOG.md).
 
 The declared peer ranges are React and React DOM `^19.3.0`, and TanStack React
 Router `^1.170.38`. Use matching React and React DOM versions. This example uses
@@ -489,3 +491,11 @@ package checks before creating a local tarball; it does not publish to npm.
 GitHub Actions installs from the frozen pnpm lockfile, runs the same checks, and
 creates a local tarball in the runner's temporary directory on pushes to `main`
 and pull requests. The workflow does not publish or create a release.
+
+### Try a local build
+
+Run `pnpm pack` in this repository, then install the resulting tarball in your app:
+
+```sh
+pnpm add /absolute/path/to/monarcode-tanstack-auth-0.1.0-alpha.0.tgz
+```
