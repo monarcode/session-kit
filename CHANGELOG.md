@@ -2,6 +2,10 @@
 
 ## 0.1.0-alpha.0
 
+The first release under the `@monarcode/session-kit` name is being prepared.
+This continues `@monarcode/tanstack-auth@0.1.0-alpha.0` with the same APIs and
+entry points. Additional router adapters are planned for later development.
+
 Initial alpha for React browser apps using TanStack Router. The intended npm
 distribution tag is `next`. The API may change during alpha development.
 

@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
-import { createAuth, createRefreshFn } from "@monarcode/tanstack-auth";
-import { connectAuth, useAuth } from "@monarcode/tanstack-auth/react";
-import { createAuthFetch } from "@monarcode/tanstack-auth/http";
+import { createAuth, createRefreshFn } from "@monarcode/session-kit";
+import { connectAuth, useAuth } from "@monarcode/session-kit/react";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 
 const packageRoot = new URL("../", import.meta.url);
 

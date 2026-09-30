@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { act, createElement as h, StrictMode } from "react";
 import { JSDOM } from "jsdom";
 import { z } from "zod";
-import { createAuth } from "@monarcode/tanstack-auth";
+import { createAuth } from "@monarcode/session-kit";
 
 let dom, roots, originalGlobals;
 let createRoot, RouterContextProvider, createRouter, createRootRoute;
@@ -34,7 +34,7 @@ beforeEach(async () => {
 	({ createRoot } = await import("react-dom/client"));
 	({ RouterContextProvider, createRouter, createRootRoute, createMemoryHistory } =
 		await import("@tanstack/react-router"));
-	({ useAuth, useAuthClient } = await import("@monarcode/tanstack-auth/react"));
+	({ useAuth, useAuthClient } = await import("@monarcode/session-kit/react"));
 });
 
 afterEach(async () => {

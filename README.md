@@ -1,4 +1,4 @@
-# @monarcode/tanstack-auth
+# @monarcode/session-kit
 
 Schema-driven browser authentication for React and TanStack Router.
 
@@ -10,13 +10,14 @@ the validated user profile is stored in localStorage.
 
 ## Installation
 
-Install the alpha using the `next` distribution tag:
+The first release under the `@monarcode/session-kit` name is being prepared.
+After publication, install the alpha using the `next` distribution tag:
 
 ```sh
-pnpm add @monarcode/tanstack-auth@next
+pnpm add @monarcode/session-kit@next
 ```
 
-Pin `@monarcode/tanstack-auth@0.1.0-alpha.0` to use this exact version. Alpha
+Pin `@monarcode/session-kit@0.1.0-alpha.0` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
 The declared peer ranges are React and React DOM `^19.3.0`, and TanStack React
@@ -32,6 +33,14 @@ users. The package is ESM-only, declares Node.js `>=24`, and is checked with
 TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
 have not been verified. Browser use requires modern APIs including
 `structuredClone`, `AbortController`, and `crypto.randomUUID`.
+
+### Migrating from @monarcode/tanstack-auth
+
+Replace the dependency with `@monarcode/session-kit` once it is published, and
+change import prefixes from `@monarcode/tanstack-auth` to
+`@monarcode/session-kit`. The package root, `/react`, and `/http` entry points
+keep their current APIs. TanStack Router is the supported router in this alpha;
+additional adapters are planned for later development.
 
 ## Quick start
 
@@ -73,7 +82,7 @@ to your backend's contract. If it returns `expiresIn` in seconds, convert it to
 <!-- file: src/auth.ts -->
 ```ts
 import { z } from "zod";
-import { createAuth, createRefreshFn } from "@monarcode/tanstack-auth";
+import { createAuth, createRefreshFn } from "@monarcode/session-kit";
 
 export const userSchema = z.object({
   id: z.string(),
@@ -122,7 +131,7 @@ frozen; use `updateUser` to replace it.
 <!-- file: src/routes/__root.tsx -->
 ```tsx
 import { createRootRouteWithContext, Outlet, useRouter } from "@tanstack/react-router";
-import { useAuth, useAuthClient } from "@monarcode/tanstack-auth/react";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 import type { AppAuth } from "../auth.js";
 
 export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
@@ -160,7 +169,7 @@ protected route unmounts.
 ```tsx
 import { useState, type FormEvent } from "react";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { safeReturnTo, useAuthClient } from "@monarcode/tanstack-auth/react";
+import { safeReturnTo, useAuthClient } from "@monarcode/session-kit/react";
 import { loginResponseSchema } from "../auth.js";
 
 export const Route = createFileRoute("/login")({
@@ -227,8 +236,8 @@ routes inherit the guard without adding `authenticated` to the URL.
 <!-- file: src/routes/_authenticated.tsx -->
 ```tsx
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { AuthError } from "@monarcode/tanstack-auth";
-import { useAuth } from "@monarcode/tanstack-auth/react";
+import { AuthError } from "@monarcode/session-kit";
+import { useAuth } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ context, location }) => {
@@ -271,7 +280,7 @@ the protected layout. Add other private routes beside it, such as
 <!-- file: src/routes/_authenticated/index.tsx -->
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";
-import { useAuth, useAuthClient } from "@monarcode/tanstack-auth/react";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Home,
@@ -297,7 +306,7 @@ function Home() {
 <!-- file: src/router.tsx -->
 ```tsx
 import { createRouter, useRouter } from "@tanstack/react-router";
-import { connectAuth } from "@monarcode/tanstack-auth/react";
+import { connectAuth } from "@monarcode/session-kit/react";
 import { auth } from "./auth.js";
 import { routeTree } from "./routeTree.gen.js";
 
@@ -366,7 +375,7 @@ This optional example assumes `PATCH /api/profile` returns the complete user:
 
 <!-- file: src/profile.ts -->
 ```ts
-import { createAuthFetch } from "@monarcode/tanstack-auth/http";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { auth, userSchema } from "./auth.js";
 
 export async function updateEmail(email: string) {
@@ -458,9 +467,9 @@ the remaining data after storage becomes available.
 
 | Import | Exports |
 | --- | --- |
-| `@monarcode/tanstack-auth` | `createAuth`, `createRefreshFn`, `AuthError`, public auth types |
-| `@monarcode/tanstack-auth/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types |
-| `@monarcode/tanstack-auth/http` | `createAuthFetch` |
+| `@monarcode/session-kit` | `createAuth`, `createRefreshFn`, `AuthError`, public auth types |
+| `@monarcode/session-kit/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types |
+| `@monarcode/session-kit/http` | `createAuthFetch` |
 
 Generated declarations retain schema inference and consumer Router registration.
 Declaration maps are disabled so declaration navigation targets installed `.d.ts`
@@ -497,5 +506,5 @@ and pull requests. The workflow does not publish or create a release.
 Run `pnpm pack` in this repository, then install the resulting tarball in your app:
 
 ```sh
-pnpm add /absolute/path/to/monarcode-tanstack-auth-0.1.0-alpha.0.tgz
+pnpm add /absolute/path/to/monarcode-session-kit-0.1.0-alpha.0.tgz
 ```

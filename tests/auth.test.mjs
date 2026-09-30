@@ -1,8 +1,8 @@
 import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createAuth } from "@monarcode/tanstack-auth";
-import { connectAuth, safeReturnTo } from "@monarcode/tanstack-auth/react";
-import { createAuthFetch } from "@monarcode/tanstack-auth/http";
+import { createAuth } from "@monarcode/session-kit";
+import { connectAuth, safeReturnTo } from "@monarcode/session-kit/react";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { z } from "zod";
 
 // Ported from the v3 reference suite. Exercise the package's emitted public API.

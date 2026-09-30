@@ -38,4 +38,4 @@ jobs:
         run: pnpm run check
 
       - name: Verify package tarball
-        run: pnpm --config.ignore-scripts=true pack --pack-destination "$RUNNER_TEMP/tanstack-auth-pack"
+        run: pnpm --config.ignore-scripts=true pack --pack-destination "$RUNNER_TEMP/session-kit-pack"
