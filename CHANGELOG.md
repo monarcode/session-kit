@@ -2,7 +2,6 @@
 
 ## 0.1.0-alpha.0
 
-The first release under the `@monarcode/session-kit` name is being prepared.
 This continues `@monarcode/tanstack-auth@0.1.0-alpha.0` with the same APIs and
 entry points. Additional router adapters are planned for later development.
 

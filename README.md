@@ -10,8 +10,7 @@ the validated user profile is stored in localStorage.
 
 ## Installation
 
-The first release under the `@monarcode/session-kit` name is being prepared.
-After publication, install the alpha using the `next` distribution tag:
+Install the alpha using the `next` distribution tag:
 
 ```sh
 pnpm add @monarcode/session-kit@next
@@ -36,7 +35,7 @@ have not been verified. Browser use requires modern APIs including
 
 ### Migrating from @monarcode/tanstack-auth
 
-Replace the dependency with `@monarcode/session-kit` once it is published, and
+Replace the dependency with `@monarcode/session-kit`, and
 change import prefixes from `@monarcode/tanstack-auth` to
 `@monarcode/session-kit`. The package root, `/react`, and `/http` entry points
 keep their current APIs. TanStack Router is the supported router in this alpha;
