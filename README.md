@@ -484,8 +484,9 @@ pnpm run check
 ```
 
 `check` builds the package, runs 45 auth behavior tests, five React hook tests,
-and four package smoke tests, then checks consumer declarations and every marked
-TypeScript example in this README under NodeNext and Bundler resolution. The docs
+four package smoke tests, and five release validation tests, then checks consumer
+declarations and every marked TypeScript example in this README under NodeNext
+and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.
 After building, `pnpm test` runs runtime tests and `pnpm run test:docs` checks
 README examples alone. The documentation checker extracts the examples into a
@@ -498,7 +499,9 @@ These tests do not cover a live backend or a real browser. `pnpm pack` runs the
 package checks before creating a local tarball; it does not publish to npm.
 GitHub Actions installs from the frozen pnpm lockfile, runs the same checks, and
 creates a local tarball in the runner's temporary directory on pushes to `main`
-and pull requests. The workflow does not publish or create a release.
+and pull requests. The CI workflow does not publish or create a release.
+The separate manual alpha release workflow is documented in
+[RELEASING.md](https://github.com/monarcode/session-kit/blob/main/RELEASING.md).
 
 ### Try a local build
 
