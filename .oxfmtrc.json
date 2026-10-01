@@ -1,0 +1,45 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"semi": true,
+	"trailingComma": "all",
+	"singleQuote": false,
+	"jsxSingleQuote": false,
+	"printWidth": 80,
+	"tabWidth": 3,
+	"useTabs": true,
+	"arrowParens": "always",
+	"endOfLine": "lf",
+	"bracketSpacing": true,
+	"insertFinalNewline": true,
+	"ignorePatterns": [
+		"node_modules",
+		"dist",
+		"build",
+		".netlify",
+		"routeTree.gen.ts",
+		"*.gen.ts",
+		"coverage",
+		"templates/",
+		"scripts/"
+	],
+	"sortImports": {
+		"customGroups": [
+			{
+				"groupName": "react",
+				"selector": "external",
+				"elementNamePattern": ["react", "react-*"]
+			}
+		],
+		"groups": [
+			"builtin",
+			"react",
+			"external",
+			["internal", "subpath"],
+			["parent", "sibling", "index"],
+			"style",
+			"unknown"
+		],
+		"internalPattern": ["@/"],
+		"newlinesBetween": true
+	}
+}

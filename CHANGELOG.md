@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0-alpha.1
+
+### Changed
+
+- Tokens now persist in a `<name>:auth:tokens` localStorage entry instead of a
+  cookie, so browsers no longer attach access and refresh tokens to every
+  same-origin request. The profile remains in `<name>:auth:user`.
+- **Breaking:** the `cookieMaxAge` option is renamed `maxAge`.
+- The 3,800-character token budget is removed.
+
 ## 0.1.0-alpha.0
 
 This continues `@monarcode/tanstack-auth@0.1.0-alpha.0` with the same APIs and

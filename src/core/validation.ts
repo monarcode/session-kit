@@ -1,13 +1,16 @@
-import type { StandardSchemaV1 } from '@standard-schema/spec';
-import { AuthError } from './errors.js';
-import type { Tokens, User } from './types.js';
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+
+import { AuthError } from "./errors.js";
+import type { Tokens, User } from "./types.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// Reject values that JSON would silently drop or change. Freeze the validated
-// output so callers cannot mutate auth state without notifying subscribers.
+/**
+ * Rejects values that JSON would silently drop or change, then deep-freezes the
+ * value so callers cannot mutate auth state without notifying subscribers.
+ */
 function freezeJson(value: unknown, ancestors = new Set<object>()): void {
 	if (
 		value === null ||
@@ -63,10 +66,7 @@ export async function validateUser<S extends StandardSchemaV1>(
 	input: unknown,
 ): Promise<User<S>> {
 	try {
-		// Clone first: a schema that returns its input must not freeze caller-owned data.
-		const result = await schema["~standard"].validate(
-			structuredClone(input),
-		);
+		const result = await schema["~standard"].validate(structuredClone(input));
 		if (result.issues) {
 			throw new AuthError(
 				"USER_VALIDATION_FAILED",
@@ -85,11 +85,9 @@ export async function validateUser<S extends StandardSchemaV1>(
 		return result.value;
 	} catch (cause) {
 		if (cause instanceof AuthError) throw cause;
-		throw new AuthError(
-			"USER_VALIDATION_FAILED",
-			"User validation failed",
-			{ cause },
-		);
+		throw new AuthError("USER_VALIDATION_FAILED", "User validation failed", {
+			cause,
+		});
 	}
 }
 
@@ -110,10 +108,10 @@ function jwtExpiry(token: string): number | undefined {
 		) {
 			return payload.exp * 1000;
 		}
+		return undefined;
 	} catch {
-		/* Opaque tokens have no locally readable expiry. */
+		return undefined;
 	}
-	return undefined;
 }
 
 export function validateTokens(value: unknown): Tokens {
@@ -154,7 +152,10 @@ export function validateTokens(value: unknown): Tokens {
 	};
 }
 
-// Also bounds handlers that ignore AbortSignal. Work after a timeout must never commit.
+/**
+ * Runs `work` with a signal tied to `parent` and a timeout. Rejects on abort or
+ * timeout even when `work` ignores the signal, so late results never commit.
+ */
 export function runTask<T>(
 	work: (signal: AbortSignal) => Promise<T>,
 	parent: AbortSignal,

@@ -1,11 +1,12 @@
-import { z } from "zod";
 import {
 	createRootRouteWithContext,
 	createRouter,
 } from "@tanstack/react-router";
+import { z } from "zod";
+
+import { createAuthFetch } from "../dist/http/index.js";
 import { createAuth, createRefreshFn } from "../dist/index.js";
 import { connectAuth, useAuth, useAuthClient } from "../dist/react/index.js";
-import { createAuthFetch } from "../dist/http/index.js";
 
 const auth = createAuth({
 	name: "type-test",
@@ -20,7 +21,6 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-// Compile-only: this file must not run as an application.
 connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
 

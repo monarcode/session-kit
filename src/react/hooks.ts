@@ -48,7 +48,6 @@ function useContextAuth(): AuthSource {
 }
 
 export function useAuthClient(): RegisteredAuth {
-	// The runtime shape is checked above; the app's Register supplies its full type.
 	return useContextAuth() as RegisteredAuth;
 }
 

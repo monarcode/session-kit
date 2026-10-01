@@ -1,9 +1,10 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
+import test from "node:test";
+
 import { createAuth, createRefreshFn } from "@monarcode/session-kit";
-import { connectAuth, useAuth } from "@monarcode/session-kit/react";
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { connectAuth, useAuth } from "@monarcode/session-kit/react";
 
 const packageRoot = new URL("../", import.meta.url);
 

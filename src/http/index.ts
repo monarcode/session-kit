@@ -1,5 +1,5 @@
-import { AuthError, sessionChanged } from '../core/errors.js';
-import type { AuthClient, Session } from '../core/types.js';
+import { AuthError, sessionChanged } from "../core/errors.js";
+import type { AuthClient, Session } from "../core/types.js";
 
 export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
 	const base = new URL(baseUrl);
@@ -13,12 +13,12 @@ export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
 				"Authenticated requests must stay on the configured API origin",
 			);
 		}
-    const captured = await auth.getSession();
+		const captured = await auth.getSession();
 
 		if (!captured)
 			throw new AuthError("UNAUTHENTICATED", "Sign in is required");
 		const request = new Request(url, init);
-    const canReplay = request.method === "GET" || request.method === "HEAD";
+		const canReplay = request.method === "GET" || request.method === "HEAD";
 
 		const send = async (session: Session<U>) => {
 			if (!auth.isCurrent(session)) throw sessionChanged();
@@ -29,21 +29,21 @@ export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
 			);
 			if (!auth.isCurrent(session)) throw sessionChanged();
 			return response;
-    };
+		};
 
-    const response = await send(captured);
+		const response = await send(captured);
 
-    if (response.status !== 401) return response;
+		if (response.status !== 401) return response;
 
-    const fresh = await auth.refresh(captured);
+		const fresh = await auth.refresh(captured);
 
 		if (!fresh) return response;
-    if (!canReplay) return response;
+		if (!canReplay) return response;
 
 		await response.body?.cancel();
-    const retried = await send(fresh);
+		const retried = await send(fresh);
 
-    if (retried.status === 401) await auth.rejectSession(fresh);
+		if (retried.status === 401) await auth.rejectSession(fresh);
 
 		return retried;
 	};
