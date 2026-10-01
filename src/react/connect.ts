@@ -1,6 +1,5 @@
 import type { AuthClient } from "../core/types.js";
 
-// Structural typing preserves the application's actual Router/context types.
 type AuthRouter<I, U> = {
 	options: { context: { auth: AuthClient<I, U> } };
 	invalidate: () => Promise<unknown>;
@@ -18,7 +17,6 @@ export function connectAuth<I, U>(router: AuthRouter<I, U>): () => void {
 	const subscription = auth.state.subscribe((next) => {
 		if (next.version === previous.version) return;
 		previous = next;
-		// Evict inactive/preloaded Router data whenever guard-relevant state changes.
 		router.clearCache();
 		if (queued) return;
 		queued = true;

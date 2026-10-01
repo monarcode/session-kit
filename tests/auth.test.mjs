@@ -5,14 +5,14 @@ import { connectAuth, safeReturnTo } from "@monarcode/session-kit/react";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { z } from "zod";
 
-// Ported from the v3 reference suite. Exercise the package's emitted public API.
 const userSchema = z.object({
 	id: z.string(),
 	email: z.string(),
 	role: z.enum(["admin", "member"]).default("member"),
 });
 const user = { id: "alice", email: "alice@example.com", role: "member" };
-let cookies, values, blockedCookies, blockedStorage, blockedStorageDeletion, cleanups;
+let cookies, values, blockedStorage, blockedWrites, blockedDeletes, cleanups;
+const TOKENS = "test:auth:tokens", PROFILE = "test:auth:user";
 let originalGlobals;
 const browserGlobals = [
 	"location", "document", "localStorage", "fetch", "self", "scrollTo", "window",
@@ -46,9 +46,9 @@ const code = (expected) => (error) => error.code === expected;
 beforeEach(() => {
 	cookies = new Map();
 	values = new Map();
-	blockedCookies = false;
 	blockedStorage = false;
-	blockedStorageDeletion = false;
+	blockedWrites = new Set();
+	blockedDeletes = new Set();
 	cleanups = [];
 	originalGlobals = new Map(browserGlobals.map((name) => [
 		name, Object.getOwnPropertyDescriptor(globalThis, name),
@@ -59,7 +59,6 @@ beforeEach(() => {
 			return [...cookies].map(([k, v]) => `${k}=${v}`).join("; ");
 		},
 		set cookie(text) {
-			if (blockedCookies) return;
 			const pair = text.split(";")[0];
 			const index = pair.indexOf("=");
 			const key = pair.slice(0, index),
@@ -74,18 +73,17 @@ beforeEach(() => {
 			return values.get(key) ?? null;
 		},
 		setItem(key, value) {
-			if (blockedStorage) throw new Error("Quota");
+			if (blockedStorage || blockedWrites.has(key)) throw new Error("Quota");
 			values.set(key, value);
 		},
 		removeItem(key) {
-			if (blockedStorage || blockedStorageDeletion) throw new Error("Blocked");
+			if (blockedStorage || blockedDeletes.has(key)) throw new Error("Blocked");
 			values.delete(key);
 		},
 	});
 });
 afterEach(() => {
 	try {
-		// Disconnect clients before restoring the browser environment.
 		for (const cleanup of cleanups.toReversed()) cleanup();
 	} finally {
 		for (const [name, descriptor] of originalGlobals) {
@@ -95,11 +93,13 @@ afterEach(() => {
 	}
 });
 
-test("schema defaults and custom fields survive restoration; tokens stay out of localStorage/state", async () => {
+test("schema defaults and custom fields survive restoration; tokens stay out of the profile/state", async () => {
 	const auth = client();
 	await auth.signIn(input({ user: { id: "alice", email: user.email } }));
 	assert.equal(auth.state.get().user.role, "member");
-	assert.equal(JSON.stringify([...values]).includes("access-1"), false);
+	assert.equal(values.get(PROFILE).includes("access-1"), false);
+	assert.equal(JSON.parse(values.get(TOKENS)).refreshToken, "refresh-1");
+	assert.equal(cookies.size, 0);
 	assert.equal(JSON.stringify(auth.state.get()).includes("refresh-1"), false);
 	const restored = await client().getSession();
 	assert.equal(restored.user.email, user.email);
@@ -168,11 +168,9 @@ for (const timeout of [false, true]) {
 				assert.equal(auth.state.get().status, "unauthenticated");
 				assert.equal(auth.state.get().user, null);
 				assert.equal(auth.state.get().sessionId, null);
-				assert.equal(cookies.size, 0);
 				assert.equal(values.size, 0);
 			}
 			if (timeout) {
-				// A validator that ignores cancellation must not commit its late result.
 				validation.resolve(true);
 				await flush();
 				assert.notEqual(auth.state.get().user?.id, "bob");
@@ -232,7 +230,7 @@ test("failed sign-in recovery retains expired credentials without a refresh retr
 	assert.equal(refreshCalls, 1);
 	assert.equal(auth.state.get().status, "unavailable");
 	assert.equal(auth.state.get().error.code, "REFRESH_FAILED");
-	assert.equal(cookies.size, 1);
+	assert.ok(values.has(TOKENS));
 	t.mock.timers.tick(60_000);
 	await flush();
 	assert.equal(refreshCalls, 1);
@@ -262,7 +260,7 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 	assert.equal(auth.state.get().status, "unavailable");
 	assert.equal(auth.state.get().user, null);
 	assert.equal(refreshCalls, 0);
-	assert.equal(cookies.size, 1);
+	assert.ok(values.has(TOKENS));
 	assert.equal((await auth.getSession()).accessToken, "access-2");
 	assert.equal(refreshCalls, 1);
 });
@@ -291,37 +289,35 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 	assert.equal((await auth.getSession()).accessToken, "carol-token");
 });
 
-test("cookie/profile mismatch fails closed and removes saved data", async () => {
+test("token/profile mismatch fails closed and removes saved data", async () => {
 	await client().signIn(input());
-	const saved = JSON.parse(values.get("test:auth:user"));
+	const saved = JSON.parse(values.get(PROFILE));
 	values.set(
-		"test:auth:user",
+		PROFILE,
 		JSON.stringify({ ...saved, writeId: "wrong" }),
 	);
 	assert.equal(await client().getSession(), null);
-	assert.equal(cookies.size, 0);
 	assert.equal(values.size, 0);
 });
 
 test("malformed stored user fails schema validation", async () => {
 	await client().signIn(input());
-	const saved = JSON.parse(values.get("test:auth:user"));
-	values.set("test:auth:user", JSON.stringify({ ...saved, user: { id: 5 } }));
+	const saved = JSON.parse(values.get(PROFILE));
+	values.set(PROFILE, JSON.stringify({ ...saved, user: { id: 5 } }));
 	assert.equal(await client().getSession(), null);
 });
 
 for (const invalidUser of [false, true]) {
-	for (const blockedTarget of ["cookie", "profile"]) {
+	for (const blockedTarget of ["tokens", "profile"]) {
 		test(`restoring ${invalidUser ? "an invalid user" : "a malformed session"} exposes blocked ${blockedTarget} cleanup and permits retry`, async () => {
 			await client().signIn(input());
 			if (invalidUser) {
-				const saved = JSON.parse(values.get("test:auth:user"));
-				values.set("test:auth:user", JSON.stringify({ ...saved, user: { id: 5 } }));
+				const saved = JSON.parse(values.get(PROFILE));
+				values.set(PROFILE, JSON.stringify({ ...saved, user: { id: 5 } }));
 			} else {
-				cookies.set("test_auth", "invalid-json");
+				values.set(TOKENS, "invalid-json");
 			}
-			blockedCookies = blockedTarget === "cookie";
-			blockedStorageDeletion = blockedTarget === "profile";
+			blockedDeletes.add(blockedTarget === "tokens" ? TOKENS : PROFILE);
 			const auth = client();
 			let failure;
 			await assert.rejects(auth.getSession(), (error) => {
@@ -339,16 +335,13 @@ for (const invalidUser of [false, true]) {
 			else assert.ok(restoration.cause instanceof Error);
 			assert.equal(cleanup.code, "PERSISTENCE_FAILED");
 			assert.ok(cleanup.cause instanceof AggregateError);
-			// Clearing must attempt both stores even when one deletion fails.
-			assert.equal(cookies.size, blockedTarget === "cookie" ? 1 : 0);
-			assert.equal(values.size, blockedTarget === "profile" ? 1 : 0);
+			assert.equal(values.has(TOKENS), blockedTarget === "tokens");
+			assert.equal(values.has(PROFILE), blockedTarget === "profile");
 			assert.equal(await auth.getSession(), null);
 			assert.equal(auth.state.get().error, failure);
-			blockedCookies = false;
-			blockedStorageDeletion = false;
+			blockedDeletes.clear();
 			await auth.signOut();
 			assert.equal(auth.state.get().error, null);
-			assert.equal(cookies.size, 0);
 			assert.equal(values.size, 0);
 		});
 	}
@@ -364,18 +357,18 @@ test("storage read failure is operational and can be retried", async () => {
 	assert.equal((await auth.getSession()).user.id, "alice");
 });
 
-test("cookie write failure clears runtime state and fails visibly", async () => {
+test("token write failure clears runtime state and fails visibly", async () => {
 	const auth = client();
-	blockedCookies = true;
+	blockedWrites.add(TOKENS);
 	await assert.rejects(auth.signIn(input()), code("PERSISTENCE_FAILED"));
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);
 });
 
-test("signout stays signed out when cookie deletion fails", async () => {
+test("signout stays signed out when token deletion fails", async () => {
 	const auth = client();
 	await auth.signIn(input());
-	blockedCookies = true;
+	blockedDeletes.add(TOKENS);
 	await assert.rejects(auth.signOut(), code("PERSISTENCE_FAILED"));
 	assert.equal(await auth.getSession(), null);
 	assert.equal(auth.state.get().user, null);
@@ -400,7 +393,7 @@ test("concurrent refresh requests share one backend operation", async () => {
 	assert.equal((await a).accessToken, "access-2");
 	assert.equal((await b).accessToken, "access-2");
 	assert.equal(
-		JSON.parse(decodeURIComponent(cookies.get("test_auth"))).refreshToken,
+		JSON.parse(values.get(TOKENS)).refreshToken,
 		"refresh-1",
 	);
 });
@@ -417,7 +410,7 @@ test("late refresh success cannot restore a signed-out session", async () => {
 	await checked;
 	await flush();
 	assert.equal(await auth.getSession(), null);
-	assert.equal(cookies.size, 0);
+	assert.equal(values.size, 0);
 });
 
 test("late refresh failure cannot clear a new account", async () => {
@@ -490,7 +483,7 @@ test("refresh null ends the session; thrown network errors retain credentials", 
 		code("REFRESH_FAILED"),
 	);
 	assert.equal(retry.state.get().status, "unavailable");
-	assert.equal(cookies.size, 1);
+	assert.ok(values.has(TOKENS));
 });
 
 test("a rejected access token cannot be returned as fresh", async () => {
@@ -718,7 +711,7 @@ test("invalid optional refresh user cannot partially replace tokens", async () =
 		auth.refresh(await auth.getSession()),
 		code("USER_VALIDATION_FAILED"),
 	);
-	const saved = JSON.parse(decodeURIComponent(cookies.get("test_auth")));
+	const saved = JSON.parse(values.get(TOKENS));
 	assert.equal(saved.accessToken, "access-1");
 });
 
@@ -790,7 +783,6 @@ test("real Router guards rerun after logout and produce a login redirect", async
 		history: createMemoryHistory({ initialEntries: ["/private"] }),
 		isServer: false,
 	});
-	// Simulate React acknowledging the committed transition.
 	router.startTransition = async (fn) => {
 		fn();
 		return true;

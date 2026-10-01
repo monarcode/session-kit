@@ -10,8 +10,6 @@ const examples = [...readme.matchAll(
 	/<!-- file: (src\/[\w/-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
 )];
 if (!examples.length) throw new Error("No README TypeScript examples found");
-// A separate program prevents the consumer fixture's Register from merging
-// with the README's Router. Staying inside the repo resolves package self-imports.
 const directory = await mkdtemp(join(root, "tests", ".readme-"));
 const require = createRequire(import.meta.url);
 const compiler = require.resolve("typescript/bin/tsc");
@@ -31,9 +29,6 @@ try {
 		"src/routes/_authenticated/index.tsx",
 	];
 	if (fileRoutePaths.every((path) => paths.has(path))) {
-		// In an application, the Router plugin generates this file. The docs check
-		// creates the smallest equivalent tree so route modules retain real context
-		// and Register inference without asking contributors to edit generated code.
 		await writeFile(join(directory, "src/routeTree.gen.ts"), `
 import { Route as rootRoute } from "./routes/__root.js";
 import { Route as loginRouteImport } from "./routes/login.js";

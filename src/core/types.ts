@@ -39,7 +39,7 @@ export type Session<U> = Readonly<{
   user: U;
 }>;
 
-// Tokens are intentionally absent from the reactive snapshot.
+/** Reactive auth snapshot. Tokens are intentionally excluded. */
 export type AuthState<U> = Readonly<{
   status:
     | 'initializing'
@@ -72,6 +72,6 @@ export type AuthOptions<S extends StandardSchemaV1> = {
   name: string;
   userSchema: S;
   refresh?: RefreshFn<NoInfer<UserInput<S>>>;
-  /** Cookie lifetime in seconds, renewed on successful writes. Default: 30 days. */
-  cookieMaxAge?: number;
+  /** Saved-session lifetime in seconds, renewed on successful writes. Default: 30 days. */
+  maxAge?: number;
 };

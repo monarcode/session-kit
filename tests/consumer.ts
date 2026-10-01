@@ -20,7 +20,6 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-// Compile-only: this file must not run as an application.
 connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
 

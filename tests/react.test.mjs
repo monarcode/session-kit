@@ -30,7 +30,6 @@ beforeEach(async () => {
 			configurable: true, writable: true, value,
 		});
 	}
-	// Load DOM-aware modules after installing the browser environment.
 	({ createRoot } = await import("react-dom/client"));
 	({ RouterContextProvider, createRouter, createRootRoute, createMemoryHistory } =
 		await import("@tanstack/react-router"));
@@ -170,7 +169,6 @@ for (const strict of [false, true]) {
 		const mounted = await mount(router, Profile, { strict });
 		assert.equal(subscriptions - unsubscriptions, 1);
 		if (strict) {
-			// Verify StrictMode actually exercised effect cleanup and remount.
 			assert.ok(subscriptions >= 2);
 			assert.ok(unsubscriptions >= 1);
 		}

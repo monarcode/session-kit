@@ -5,8 +5,8 @@ Schema-driven browser authentication for React and TanStack Router.
 **Version: 0.1.0-alpha.0. Early development; not ready for production.**
 
 One auth client lives in Router context. TanStack Store makes its state reactive,
-with no separate AuthProvider. Tokens are stored in JavaScript-readable cookies;
-the validated user profile is stored in localStorage.
+with no separate AuthProvider. Tokens and the validated user profile are stored
+in localStorage as separate entries.
 
 ## Installation
 
@@ -443,13 +443,14 @@ the remaining data after storage becomes available.
 
 ## Storage and limits
 
-- Tokens use the `<name>_auth` cookie; the profile uses `<name>:auth:user` in
-  localStorage. Matching session/write IDs detect incomplete writes on restoration.
-- Cookies are host-only, with `Path=/`, `SameSite=Lax`, and `Secure` on HTTPS.
-  `cookieMaxAge` is in seconds, defaults to 30 days, and renews on successful writes.
-  It does not extend backend token validity. Encoded token cookies have a 3,800
-  character budget; oversized values fail visibly.
-- Cookies and profiles are readable by same-origin JavaScript. The backend must
+- Tokens use the `<name>:auth:tokens` localStorage entry; the profile uses
+  `<name>:auth:user`. Matching session/write IDs detect incomplete writes on
+  restoration. Tokens are never placed in cookies, so the browser does not send
+  them automatically; `createAuthFetch` attaches the access token explicitly.
+- `maxAge` is in seconds, defaults to 30 days, and renews on successful writes.
+  Expired entries are removed on the next restoration. It does not extend backend
+  token validity. A full storage quota fails visibly with `PERSISTENCE_FAILED`.
+- Tokens and profiles are readable by same-origin JavaScript. The backend must
   independently authenticate requests and authorize private operations. Local
   profile fields and route guards do not establish server authorization.
 - Sign-out clears local credentials; backend revocation belongs to your app.

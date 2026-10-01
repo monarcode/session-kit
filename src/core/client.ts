@@ -15,12 +15,17 @@ import { isRecord, runTask, validateTokens, validateUser } from "./validation.js
 
 type InternalSession<U> = Tokens & { id: string; user: U };
 
+/** Starts work nobody awaits. Failures are already published to `state.error`. */
+function inBackground(work: Promise<unknown>) {
+	work.catch(() => {});
+}
+
 export function createAuth<S extends StandardSchemaV1>(
 	options: AuthOptions<S>,
 ): AuthClient<UserInput<S>, User<S>> {
 	type U = User<S>;
 	type I = UserInput<S>;
-	const persistence = createPersistence(options.name, options.cookieMaxAge);
+	const persistence = createPersistence(options.name, options.maxAge);
 	const store = new Store<AuthState<U>>({
 		status: "initializing",
 		user: null,
@@ -89,7 +94,6 @@ export function createAuth<S extends StandardSchemaV1>(
 		clearTimeout(expiryTimer);
 	}
 
-	// Long delays are rechecked instead of overflowing the browser's timer limit.
 	function schedule() {
 		stopTimers();
 		if (!mounts || !session || session.expiresAt === undefined) return;
@@ -102,9 +106,7 @@ export function createAuth<S extends StandardSchemaV1>(
 					return;
 				}
 				publish(store.get().error);
-				void getSession().catch(() => {
-					/* Error is available in state. */
-				});
+				inBackground(getSession());
 			},
 			Math.min(remaining, 2_147_483_647),
 		);
@@ -116,9 +118,7 @@ export function createAuth<S extends StandardSchemaV1>(
 						schedule();
 						return;
 					}
-					void refreshSession(snapshot(), false).catch(() => {
-						/* Keep valid access until expiry. */
-					});
+					inBackground(refreshSession(snapshot(), false));
 				},
 				Math.min(delay, 2_147_483_647),
 			);
@@ -219,7 +219,6 @@ export function createAuth<S extends StandardSchemaV1>(
 					}
 					return;
 				}
-				// No authenticated snapshot is exposed when storage cannot be read.
 				store.setState((previous) => ({
 					...previous,
 					status: "unavailable",
@@ -238,7 +237,6 @@ export function createAuth<S extends StandardSchemaV1>(
 	}
 
 	async function signIn(input: Tokens & { user: I }) {
-		// Last sign-in attempt wins. Invalid input leaves the previous session intact.
 		advanceEpoch();
 		const expected = epoch;
 		try {
@@ -280,14 +278,10 @@ export function createAuth<S extends StandardSchemaV1>(
 		} finally {
 			if (epoch === expected) {
 				schedule();
-				// Validation paused the previous session's timers. If it expired
-				// meanwhile, hide its profile and recover once after sign-in fails.
 				if (session && !valid()) {
 					publish(store.get().error);
 					if (mounts)
-						void getSession().catch(() => {
-							/* Recovery errors are exposed through state. */
-						});
+						inBackground(getSession());
 				}
 			}
 		}
@@ -399,7 +393,6 @@ export function createAuth<S extends StandardSchemaV1>(
 						"Refresh returned the rejected access token",
 					);
 				}
-				// A newer explicit profile update takes precedence over refresh's profile.
 				const user =
 					profile === profileVersion
 						? (result.user ?? session!.user)
@@ -444,7 +437,6 @@ export function createAuth<S extends StandardSchemaV1>(
 	async function getSession(): Promise<Session<U> | null> {
 		const expected = epoch;
 		await initialize();
-		// Invalid saved data can deliberately advance the epoch and clear the session.
 		if (epoch !== expected && session) throw sessionChanged();
 		if (!session) return null;
 		if (valid()) return snapshot();
@@ -454,9 +446,7 @@ export function createAuth<S extends StandardSchemaV1>(
 
 	function mount() {
 		mounts++;
-		void getSession().catch(() => {
-			/* Errors are exposed through state and guards. */
-		});
+		inBackground(getSession());
 		schedule();
 		let active = true;
 		return () => {
@@ -464,7 +454,6 @@ export function createAuth<S extends StandardSchemaV1>(
 			active = false;
 			if (--mounts === 0) {
 				stopTimers();
-				// Lifecycle cleanup cancels validation/network work without deleting storage.
 				advanceEpoch();
 			}
 		};
