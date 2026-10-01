@@ -11,13 +11,13 @@ Push `.github/workflows/release.yml` to `main` before configuring npm.
 In the npm settings for `@monarcode/session-kit`, add a GitHub Actions trusted
 publisher with these values:
 
-| Field | Value |
-| --- | --- |
-| Organization or user | `monarcode` |
-| Repository | `session-kit` |
-| Workflow filename | `release.yml` |
-| Environment | Leave blank |
-| Allowed action | Enable **Allow npm publish** |
+| Field                | Value                        |
+| -------------------- | ---------------------------- |
+| Organization or user | `monarcode`                  |
+| Repository           | `session-kit`                |
+| Workflow filename    | `release.yml`                |
+| Environment          | Leave blank                  |
+| Allowed action       | Enable **Allow npm publish** |
 
 The workflow uses direct publishing. npm's newer default allowing staged
 publishing alone is insufficient. No npm token secret is required.

@@ -1,6 +1,7 @@
-import type { StandardSchemaV1 } from '@standard-schema/spec';
-import { AuthError } from './errors.js';
-import type { Tokens, User } from './types.js';
+import type { StandardSchemaV1 } from "@standard-schema/spec";
+
+import { AuthError } from "./errors.js";
+import type { Tokens, User } from "./types.js";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -65,9 +66,7 @@ export async function validateUser<S extends StandardSchemaV1>(
 	input: unknown,
 ): Promise<User<S>> {
 	try {
-		const result = await schema["~standard"].validate(
-			structuredClone(input),
-		);
+		const result = await schema["~standard"].validate(structuredClone(input));
 		if (result.issues) {
 			throw new AuthError(
 				"USER_VALIDATION_FAILED",
@@ -86,11 +85,9 @@ export async function validateUser<S extends StandardSchemaV1>(
 		return result.value;
 	} catch (cause) {
 		if (cause instanceof AuthError) throw cause;
-		throw new AuthError(
-			"USER_VALIDATION_FAILED",
-			"User validation failed",
-			{ cause },
-		);
+		throw new AuthError("USER_VALIDATION_FAILED", "User validation failed", {
+			cause,
+		});
 	}
 }
 

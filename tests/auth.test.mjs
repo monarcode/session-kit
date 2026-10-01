@@ -1,8 +1,9 @@
-import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { test, beforeEach, afterEach } from "node:test";
+
 import { createAuth } from "@monarcode/session-kit";
-import { connectAuth, safeReturnTo } from "@monarcode/session-kit/react";
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { connectAuth, safeReturnTo } from "@monarcode/session-kit/react";
 import { z } from "zod";
 
 const userSchema = z.object({
@@ -12,16 +13,24 @@ const userSchema = z.object({
 });
 const user = { id: "alice", email: "alice@example.com", role: "member" };
 let cookies, values, blockedStorage, blockedWrites, blockedDeletes, cleanups;
-const TOKENS = "test:auth:tokens", PROFILE = "test:auth:user";
+const TOKENS = "test:auth:tokens",
+	PROFILE = "test:auth:user";
 let originalGlobals;
 const browserGlobals = [
-	"location", "document", "localStorage", "fetch", "self", "scrollTo", "window",
+	"location",
+	"document",
+	"localStorage",
+	"fetch",
+	"self",
+	"scrollTo",
+	"window",
 ];
-const setGlobal = (name, value) => Object.defineProperty(globalThis, name, {
-	configurable: true,
-	writable: true,
-	value,
-});
+const setGlobal = (name, value) =>
+	Object.defineProperty(globalThis, name, {
+		configurable: true,
+		writable: true,
+		value,
+	});
 const deferred = () => {
 	let resolve, reject;
 	const promise = new Promise((a, b) => {
@@ -50,9 +59,12 @@ beforeEach(() => {
 	blockedWrites = new Set();
 	blockedDeletes = new Set();
 	cleanups = [];
-	originalGlobals = new Map(browserGlobals.map((name) => [
-		name, Object.getOwnPropertyDescriptor(globalThis, name),
-	]));
+	originalGlobals = new Map(
+		browserGlobals.map((name) => [
+			name,
+			Object.getOwnPropertyDescriptor(globalThis, name),
+		]),
+	);
 	setGlobal("location", { protocol: "https:" });
 	setGlobal("document", {
 		get cookie() {
@@ -77,7 +89,8 @@ beforeEach(() => {
 			values.set(key, value);
 		},
 		removeItem(key) {
-			if (blockedStorage || blockedDeletes.has(key)) throw new Error("Blocked");
+			if (blockedStorage || blockedDeletes.has(key))
+				throw new Error("Blocked");
 			values.delete(key);
 		},
 	});
@@ -128,7 +141,10 @@ test("invalid sign-in leaves the current session usable", async () => {
 for (const timeout of [false, true]) {
 	for (const canRefresh of [false, true]) {
 		test(`expiry during ${timeout ? "timed-out" : "failed"} sign-in ${canRefresh ? "refreshes" : "clears"} the previous session`, async (t) => {
-			t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+			t.mock.timers.enable({
+				apis: ["Date", "setTimeout"],
+				now: 1_000_000,
+			});
 			const validation = deferred();
 			const refresh = deferred();
 			let refreshCalls = 0;
@@ -136,19 +152,27 @@ for (const timeout of [false, true]) {
 				userSchema: userSchema.refine(async (value) =>
 					value.id === "bob" ? validation.promise : true,
 				),
-				refresh: canRefresh ? async () => {
-					refreshCalls++;
-					return refresh.promise;
-				} : undefined,
+				refresh: canRefresh
+					? async () => {
+							refreshCalls++;
+							return refresh.promise;
+						}
+					: undefined,
 			});
 			await auth.signIn(input({ expiresAt: 1_001_000 }));
 			const previousId = auth.state.get().sessionId;
 			cleanups.push(auth.mount());
 			await flush();
-			const pending = auth.signIn(input({
-				accessToken: "bob-token", user: { ...user, id: "bob" },
-			}));
-			const checked = assert.rejects(pending, code("USER_VALIDATION_FAILED"));
+			const pending = auth.signIn(
+				input({
+					accessToken: "bob-token",
+					user: { ...user, id: "bob" },
+				}),
+			);
+			const checked = assert.rejects(
+				pending,
+				code("USER_VALIDATION_FAILED"),
+			);
 			await flush();
 			t.mock.timers.tick(1_000);
 			if (timeout) t.mock.timers.tick(14_000);
@@ -159,7 +183,10 @@ for (const timeout of [false, true]) {
 				assert.equal(refreshCalls, 1);
 				assert.equal(auth.state.get().status, "unavailable");
 				assert.equal(auth.state.get().user, null);
-				refresh.resolve({ accessToken: "access-2", expiresAt: Date.now() + 60_000 });
+				refresh.resolve({
+					accessToken: "access-2",
+					expiresAt: Date.now() + 60_000,
+				});
 				await flush();
 				assert.equal(auth.state.get().status, "authenticated");
 				assert.equal(auth.state.get().sessionId, previousId);
@@ -191,9 +218,12 @@ test("expiry during validation does not cancel a successful new sign-in", async 
 	const previousId = auth.state.get().sessionId;
 	cleanups.push(auth.mount());
 	await flush();
-	const pending = auth.signIn(input({
-		accessToken: "bob-token", user: { ...user, id: "bob" },
-	}));
+	const pending = auth.signIn(
+		input({
+			accessToken: "bob-token",
+			user: { ...user, id: "bob" },
+		}),
+	);
 	await flush();
 	t.mock.timers.tick(1_000);
 	await flush();
@@ -279,7 +309,9 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 	const pending = auth.signIn(input({ user: { ...user, id: "bob" } }));
 	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
 	await flush();
-	await auth.signIn(input({ accessToken: "carol-token", user: { ...user, id: "carol" } }));
+	await auth.signIn(
+		input({ accessToken: "carol-token", user: { ...user, id: "carol" } }),
+	);
 	t.mock.timers.tick(2_000);
 	validation.resolve(false);
 	await checked;
@@ -292,10 +324,7 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 test("token/profile mismatch fails closed and removes saved data", async () => {
 	await client().signIn(input());
 	const saved = JSON.parse(values.get(PROFILE));
-	values.set(
-		PROFILE,
-		JSON.stringify({ ...saved, writeId: "wrong" }),
-	);
+	values.set(PROFILE, JSON.stringify({ ...saved, writeId: "wrong" }));
 	assert.equal(await client().getSession(), null);
 	assert.equal(values.size, 0);
 });
@@ -330,7 +359,10 @@ for (const invalidUser of [false, true]) {
 			assert.equal(auth.state.get().sessionId, null);
 			assert.ok(failure.cause instanceof AggregateError);
 			const [restoration, cleanup] = failure.cause.errors;
-			assert.equal(restoration.code, invalidUser ? "USER_VALIDATION_FAILED" : "INVALID_SESSION");
+			assert.equal(
+				restoration.code,
+				invalidUser ? "USER_VALIDATION_FAILED" : "INVALID_SESSION",
+			);
 			if (invalidUser) assert.ok(restoration.issues.length > 0);
 			else assert.ok(restoration.cause instanceof Error);
 			assert.equal(cleanup.code, "PERSISTENCE_FAILED");
@@ -392,10 +424,7 @@ test("concurrent refresh requests share one backend operation", async () => {
 	gate.resolve({ accessToken: "access-2" });
 	assert.equal((await a).accessToken, "access-2");
 	assert.equal((await b).accessToken, "access-2");
-	assert.equal(
-		JSON.parse(values.get(TOKENS)).refreshToken,
-		"refresh-1",
-	);
+	assert.equal(JSON.parse(values.get(TOKENS)).refreshToken, "refresh-1");
 });
 
 test("late refresh success cannot restore a signed-out session", async () => {
@@ -430,9 +459,7 @@ test("late refresh failure cannot clear a new account", async () => {
 
 test("async validation cannot commit after logout", async () => {
 	const gate = deferred();
-	const schema = z
-		.object({ id: z.string() })
-		.refine(async () => gate.promise);
+	const schema = z.object({ id: z.string() }).refine(async () => gate.promise);
 	const auth = client({ userSchema: schema });
 	const pending = auth.signIn(input({ user: { id: "a" } }));
 	const checked = assert.rejects(pending, code("SESSION_CHANGED"));

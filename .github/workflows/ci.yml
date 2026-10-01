@@ -1,41 +1,44 @@
 name: CI
 
+env:
+   HUSKY: 0
+
 on:
-  push:
-    branches: [main]
-  pull_request:
+   push:
+      branches: [main]
+   pull_request:
 
 permissions:
-  contents: read
+   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+   group: ci-${{ github.workflow }}-${{ github.ref }}
+   cancel-in-progress: true
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
+   check:
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.12.1
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
 
-      - name: Build and test
-        run: pnpm run check
+         - name: Build and test
+           run: pnpm run check
 
-      - name: Verify package tarball
-        run: pnpm --config.ignore-scripts=true pack --pack-destination "$RUNNER_TEMP/session-kit-pack"
+         - name: Verify package tarball
+           run: pnpm --config.ignore-scripts=true pack --pack-destination "$RUNNER_TEMP/session-kit-pack"

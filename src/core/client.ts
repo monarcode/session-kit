@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { Store } from "@tanstack/store";
+
 import { AuthError, authError, sessionChanged } from "./errors.js";
 import { createPersistence } from "./persistence.js";
 import type {
@@ -11,7 +12,12 @@ import type {
 	User,
 	UserInput,
 } from "./types.js";
-import { isRecord, runTask, validateTokens, validateUser } from "./validation.js";
+import {
+	isRecord,
+	runTask,
+	validateTokens,
+	validateUser,
+} from "./validation.js";
 
 type InternalSession<U> = Tokens & { id: string; user: U };
 
@@ -241,10 +247,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		const expected = epoch;
 		try {
 			const tokens = validateTokens(input);
-			if (
-				tokens.expiresAt !== undefined &&
-				tokens.expiresAt <= Date.now()
-			) {
+			if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now()) {
 				throw new AuthError(
 					"INVALID_SESSION",
 					"Cannot sign in with an expired access token",
@@ -255,10 +258,7 @@ export function createAuth<S extends StandardSchemaV1>(
 				controller.signal,
 			);
 			assertEpoch(expected);
-			if (
-				tokens.expiresAt !== undefined &&
-				tokens.expiresAt <= Date.now()
-			) {
+			if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now()) {
 				throw new AuthError(
 					"INVALID_SESSION",
 					"Access token expired during validation",
@@ -280,8 +280,7 @@ export function createAuth<S extends StandardSchemaV1>(
 				schedule();
 				if (session && !valid()) {
 					publish(store.get().error);
-					if (mounts)
-						inBackground(getSession());
+					if (mounts) inBackground(getSession());
 				}
 			}
 		}
@@ -403,8 +402,7 @@ export function createAuth<S extends StandardSchemaV1>(
 					...result.tokens,
 					id: current.id,
 					user,
-					refreshToken:
-						result.tokens.refreshToken ?? current.refreshToken,
+					refreshToken: result.tokens.refreshToken ?? current.refreshToken,
 				});
 				return snapshot();
 			} catch (cause) {

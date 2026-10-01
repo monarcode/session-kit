@@ -1,9 +1,11 @@
-import { test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import { test, beforeEach, afterEach } from "node:test";
+
 import { act, createElement as h, StrictMode } from "react";
+
+import { createAuth } from "@monarcode/session-kit";
 import { JSDOM } from "jsdom";
 import { z } from "zod";
-import { createAuth } from "@monarcode/session-kit";
 
 let dom, roots, originalGlobals;
 let createRoot, RouterContextProvider, createRouter, createRootRoute;
@@ -22,17 +24,26 @@ beforeEach(async () => {
 		localStorage: dom.window.localStorage,
 		IS_REACT_ACT_ENVIRONMENT: true,
 	};
-	originalGlobals = new Map(Object.keys(globals).map((name) => [
-		name, Object.getOwnPropertyDescriptor(globalThis, name),
-	]));
+	originalGlobals = new Map(
+		Object.keys(globals).map((name) => [
+			name,
+			Object.getOwnPropertyDescriptor(globalThis, name),
+		]),
+	);
 	for (const [name, value] of Object.entries(globals)) {
 		Object.defineProperty(globalThis, name, {
-			configurable: true, writable: true, value,
+			configurable: true,
+			writable: true,
+			value,
 		});
 	}
 	({ createRoot } = await import("react-dom/client"));
-	({ RouterContextProvider, createRouter, createRootRoute, createMemoryHistory } =
-		await import("@tanstack/react-router"));
+	({
+		RouterContextProvider,
+		createRouter,
+		createRootRoute,
+		createMemoryHistory,
+	} = await import("@tanstack/react-router"));
 	({ useAuth, useAuthClient } = await import("@monarcode/session-kit/react"));
 });
 
@@ -73,7 +84,9 @@ async function mount(router, Component, { strict = false } = {}) {
 	const root = createRoot(container);
 	roots.add(root);
 	const tree = h(RouterContextProvider, { router }, h(Component));
-	await act(async () => root.render(strict ? h(StrictMode, null, tree) : tree));
+	await act(async () =>
+		root.render(strict ? h(StrictMode, null, tree) : tree),
+	);
 	return {
 		container,
 		async unmount() {
@@ -88,13 +101,19 @@ test("useAuth renders sign-in, profile updates, and sign-out", async () => {
 	const { auth, router } = await fixture();
 	function Profile() {
 		const state = useAuth();
-		return h("output", null, `${state.status}:${state.user?.email ?? "none"}`);
+		return h(
+			"output",
+			null,
+			`${state.status}:${state.user?.email ?? "none"}`,
+		);
 	}
 	const { container } = await mount(router, Profile);
 	assert.equal(container.textContent, "unauthenticated:none");
 	await act(async () => signIn(auth));
 	assert.equal(container.textContent, "authenticated:alice@example.com");
-	await act(async () => auth.updateUser({ ...user, email: "updated@example.com" }));
+	await act(async () =>
+		auth.updateUser({ ...user, email: "updated@example.com" }),
+	);
 	assert.equal(container.textContent, "authenticated:updated@example.com");
 	await act(async () => auth.signOut());
 	assert.equal(container.textContent, "unauthenticated:none");
@@ -111,13 +130,18 @@ test("useAuth selector skips unrelated updates and renders changed selections", 
 	}
 	const { container } = await mount(router, Identity);
 	const before = renders;
-	await act(async () => auth.updateUser({ ...user, email: "updated@example.com" }));
+	await act(async () =>
+		auth.updateUser({ ...user, email: "updated@example.com" }),
+	);
 	assert.equal(auth.state.get().user.email, "updated@example.com");
 	assert.equal(renders, before);
 	assert.equal(container.textContent, "alice");
-	await act(async () => auth.signIn({
-		accessToken: "bob-token", user: { id: "bob", email: "bob@example.com" },
-	}));
+	await act(async () =>
+		auth.signIn({
+			accessToken: "bob-token",
+			user: { id: "bob", email: "bob@example.com" },
+		}),
+	);
 	assert.ok(renders > before);
 	assert.equal(container.textContent, "bob");
 	await act(async () => auth.signOut());
@@ -150,17 +174,21 @@ for (const strict of [false, true]) {
 	test(`useAuth cleans up subscriptions${strict ? " under StrictMode" : ""}`, async () => {
 		const { auth, router } = await fixture();
 		const subscribe = auth.state.subscribe;
-		let subscriptions = 0, unsubscriptions = 0, notifications = 0;
+		let subscriptions = 0,
+			unsubscriptions = 0,
+			notifications = 0;
 		auth.state.subscribe = (listener) => {
 			subscriptions++;
 			const subscription = subscribe((value) => {
 				notifications++;
 				listener(value);
 			});
-			return { unsubscribe() {
-				unsubscriptions++;
-				subscription.unsubscribe();
-			} };
+			return {
+				unsubscribe() {
+					unsubscriptions++;
+					subscription.unsubscribe();
+				},
+			};
 		};
 		function Profile() {
 			const state = useAuth();

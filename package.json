@@ -1,14 +1,38 @@
 {
 	"name": "@monarcode/session-kit",
 	"version": "0.1.0-alpha.0",
-	"packageManager": "pnpm@10.12.1",
 	"description": "Schema-driven browser sessions for React and TanStack Router",
-	"type": "module",
+	"keywords": [
+		"auth",
+		"react",
+		"router",
+		"standard-schema",
+		"tanstack"
+	],
+	"homepage": "https://github.com/monarcode/session-kit#readme",
+	"bugs": {
+		"url": "https://github.com/monarcode/session-kit/issues"
+	},
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/monarcode/session-kit.git"
+	},
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	],
+	"type": "module",
+	"sideEffects": false,
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
 	"exports": {
-		".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
 		"./react": {
 			"types": "./dist/react/index.d.ts",
 			"import": "./dist/react/index.js"
@@ -19,23 +43,16 @@
 		},
 		"./package.json": "./package.json"
 	},
-	"files": ["dist", "README.md", "LICENSE", "CHANGELOG.md"],
-	"sideEffects": false,
 	"publishConfig": {
 		"access": "public",
 		"registry": "https://registry.npmjs.org/"
 	},
-	"repository": {
-		"type": "git",
-		"url": "git+https://github.com/monarcode/session-kit.git"
-	},
-	"homepage": "https://github.com/monarcode/session-kit#readme",
-	"bugs": {
-		"url": "https://github.com/monarcode/session-kit/issues"
-	},
-	"keywords": ["tanstack", "router", "auth", "react", "standard-schema"],
-	"engines": { "node": ">=24" },
 	"scripts": {
+		"prepare": "husky",
+		"lint": "oxlint .",
+		"lint:fix": "oxlint --fix .",
+		"format": "oxfmt --write .",
+		"format:check": "oxfmt --check .",
 		"clean": "node scripts/clean.mjs",
 		"build": "pnpm run clean && tsc -p tsconfig.json",
 		"dev": "tsc -p tsconfig.json --watch",
@@ -43,28 +60,35 @@
 		"test": "node --conditions=development --test tests/*.test.mjs",
 		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
 		"test:docs": "node scripts/check-readme.mjs",
-		"check": "pnpm run build && pnpm test && pnpm run test:types",
+		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"
 	},
 	"dependencies": {
 		"@standard-schema/spec": "^1.1.0",
-		"@tanstack/store": "^0.11.1",
-		"@tanstack/react-store": "^0.11.1"
-	},
-	"peerDependencies": {
-		"react": "^19.3.0",
-		"react-dom": "^19.3.0",
-		"@tanstack/react-router": "^1.170.38"
+		"@tanstack/react-store": "^0.11.1",
+		"@tanstack/store": "^0.11.1"
 	},
 	"devDependencies": {
-		"jsdom": "26.1.0",
-		"typescript": "6.0.3",
+		"@tanstack/react-router": "1.170.38",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
+		"husky": "9.1.7",
+		"jsdom": "26.1.0",
+		"oxfmt": "0.71.0",
+		"oxlint": "1.86.0",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",
-		"@tanstack/react-router": "1.170.38",
+		"typescript": "6.0.3",
 		"zod": "4.4.3"
-	}
+	},
+	"peerDependencies": {
+		"@tanstack/react-router": "^1.170.38",
+		"react": "^19.3.0",
+		"react-dom": "^19.3.0"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"packageManager": "pnpm@10.12.1"
 }

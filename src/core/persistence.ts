@@ -1,6 +1,6 @@
-import { AuthError } from './errors.js';
-import type { Tokens } from './types.js';
-import { isRecord, validateTokens } from './validation.js';
+import { AuthError } from "./errors.js";
+import type { Tokens } from "./types.js";
+import { isRecord, validateTokens } from "./validation.js";
 
 export type StoredSession = Tokens & { id: string; user: unknown };
 
@@ -25,7 +25,9 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 			throw new AuthError(
 				"PERSISTENCE_FAILED",
 				"Auth storage is unavailable",
-				{ cause },
+				{
+					cause,
+				},
 			);
 		}
 	}
@@ -41,10 +43,7 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 				}
 			}
 			if (failures.length)
-				throw new AggregateError(
-					failures,
-					"Could not clear auth storage",
-				);
+				throw new AggregateError(failures, "Could not clear auth storage");
 		});
 	}
 
@@ -73,9 +72,7 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 					!Number.isFinite(tokens.persistUntil) ||
 					tokens.persistUntil <= Date.now()
 				) {
-					throw new Error(
-						"Missing, expired, or mismatched auth data",
-					);
+					throw new Error("Missing, expired, or mismatched auth data");
 				}
 				if (localStorage.getItem(tokensKey) !== tokensText)
 					throw new Error("Auth storage changed while reading");
