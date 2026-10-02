@@ -48,6 +48,7 @@ export function createAuth<S extends StandardSchemaV1>(
 	let initialized = false;
 	let rejectedToken: string | undefined;
 	let flight: Promise<Session<U> | null> | undefined;
+	let failure: AuthError | undefined;
 	let mounts = 0;
 	let proactiveTimer: ReturnType<typeof setTimeout> | undefined;
 	let expiryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -76,12 +77,19 @@ export function createAuth<S extends StandardSchemaV1>(
 				? "unauthenticated"
 				: valid()
 					? "authenticated"
-					: "unavailable";
-		const user = status === "authenticated" ? session!.user : null;
+					: flight
+						? "refreshing"
+						: "unavailable";
+		const user =
+			status === "authenticated" || status === "refreshing"
+				? session!.user
+				: null;
 		const sessionId = session?.id ?? null;
 		const previous = store.get();
+		const guardStatus = (value: AuthState<U>["status"]) =>
+			value === "refreshing" ? "authenticated" : value;
 		const changed =
-			previous.status !== status ||
+			guardStatus(previous.status) !== guardStatus(status) ||
 			previous.user !== user ||
 			previous.sessionId !== sessionId;
 		store.setState(() =>
@@ -111,7 +119,6 @@ export function createAuth<S extends StandardSchemaV1>(
 					schedule();
 					return;
 				}
-				publish(store.get().error);
 				inBackground(getSession());
 			},
 			Math.min(remaining, 2_147_483_647),
@@ -149,6 +156,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		session = null;
 		initialized = true;
 		rejectedToken = undefined;
+		failure = undefined;
 		publish(error);
 	}
 
@@ -177,6 +185,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		}
 		session = next;
 		initialized = true;
+		failure = undefined;
 		publish();
 		schedule();
 	}
@@ -198,7 +207,7 @@ export function createAuth<S extends StandardSchemaV1>(
 				}
 				assertEpoch(expected);
 				initialized = true;
-				publish();
+				if (!session || valid()) publish();
 				schedule();
 			} catch (cause) {
 				assertEpoch(expected);
@@ -279,8 +288,8 @@ export function createAuth<S extends StandardSchemaV1>(
 			if (epoch === expected) {
 				schedule();
 				if (session && !valid()) {
-					publish(store.get().error);
 					if (mounts) inBackground(getSession());
+					else publish(store.get().error);
 				}
 			}
 		}
@@ -333,11 +342,11 @@ export function createAuth<S extends StandardSchemaV1>(
 		if (!session) return null;
 		if (session.id !== captured.id) throw sessionChanged();
 		if (session.accessToken !== captured.accessToken) return getSession();
-		if (rejected) {
-			rejectedToken = captured.accessToken;
-			publish();
+		if (rejected) rejectedToken = captured.accessToken;
+		if (flight) {
+			if (!valid()) publish(store.get().error);
+			return flight;
 		}
-		if (flight) return flight;
 		if (!options.refresh || !session.refreshToken) {
 			await signOut();
 			return null;
@@ -348,6 +357,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		const refreshHandler = options.refresh;
 		const refreshToken = current.refreshToken!;
 		refreshAttempted = true;
+		failure = undefined;
 		const promise = (async () => {
 			try {
 				const result = await runTask(async (signal) => {
@@ -414,11 +424,16 @@ export function createAuth<S extends StandardSchemaV1>(
 						throw cause;
 					throw sessionChanged();
 				}
+				// Clear before publishing so the failure reads as `unavailable`.
+				flight = undefined;
 				const error = authError(
 					"REFRESH_FAILED",
 					"Could not refresh the session",
 					cause,
 				);
+				// getSession() rethrows this until retry(), so the guard re-run
+				// that this failure triggers cannot start another refresh.
+				if (!valid()) failure = error;
 				publish(error);
 				schedule();
 				throw error;
@@ -429,17 +444,22 @@ export function createAuth<S extends StandardSchemaV1>(
 			if (flight === promise) flight = undefined;
 		};
 		void promise.then(clearFlight, clearFlight);
+		if (!valid()) publish(store.get().error);
 		return promise;
 	}
 
-	async function getSession(): Promise<Session<U> | null> {
+	async function resume(retry: boolean): Promise<Session<U> | null> {
 		const expected = epoch;
 		await initialize();
 		if (epoch !== expected && session) throw sessionChanged();
 		if (!session) return null;
 		if (valid()) return snapshot();
-		publish(store.get().error);
+		if (failure && !retry) throw failure;
 		return refreshSession(snapshot(), false);
+	}
+
+	function getSession() {
+		return resume(false);
 	}
 
 	function mount() {
@@ -453,6 +473,7 @@ export function createAuth<S extends StandardSchemaV1>(
 			if (--mounts === 0) {
 				stopTimers();
 				advanceEpoch();
+				if (session && !valid()) publish(store.get().error);
 			}
 		};
 	}
@@ -463,6 +484,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		signOut,
 		updateUser,
 		getSession,
+		retry: () => resume(true),
 		mount,
 		refresh: (captured) => refreshSession(captured, true),
 		isCurrent: (captured) => session?.id === captured.id,

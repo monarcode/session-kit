@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** `AuthState.status` adds `"refreshing"`. Exhaustive `switch`
+  statements over `status` need a case for it.
+- While a refresh replaces expired or rejected access (after a 401, at expiry,
+  or when restoring an expired saved session), `status` is `"refreshing"` and
+  `user` stays visible. Previously the state passed through `"unavailable"` with
+  `user: null`, so the UI briefly looked signed out.
+- A refresh that only replaces the token no longer changes `version`, so
+  `connectAuth` no longer invalidates the router twice per 401. A failed refresh,
+  a terminal rejection, or a changed user still changes `version` once.
+- **Breaking:** after a failed refresh, `getSession()` rethrows that
+  `REFRESH_FAILED` error instead of starting another refresh. It keeps doing so
+  until `auth.retry()`, a sign-in, or a sign-out. This prevents a loop where each
+  failure re-ran Router guards and each guard started a new refresh.
+
+### Added
+
+- `auth.retry()` tries a failed refresh again. The README's protected layout
+  example uses it in a Retry button.
+- The README shows how to treat every refresh failure as a sign-out by returning
+  `null` from the refresh callback.
+
 ## 0.1.0-alpha.1
 
 ### Changed

@@ -279,9 +279,14 @@ routes inherit the guard without adding `authenticated` to the URL.
 <!-- file: src/routes/_authenticated.tsx -->
 
 ```tsx
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	Outlet,
+	redirect,
+	type ErrorComponentProps,
+} from "@tanstack/react-router";
 import { AuthError } from "@monarcode/session-kit";
-import { useAuth } from "@monarcode/session-kit/react";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated")({
 	beforeLoad: async ({ context, location }) => {
@@ -303,14 +308,38 @@ export const Route = createFileRoute("/_authenticated")({
 			authVersion: context.auth.state.get().version,
 		};
 	},
+	errorComponent: SessionError,
 	component: ProtectedLayout,
 });
+
+function SessionError({ error }: ErrorComponentProps) {
+	const auth = useAuthClient();
+	const retrying = useAuth((state) => state.status === "refreshing");
+	if (!(error instanceof AuthError) || error.code !== "REFRESH_FAILED") {
+		return <p role="alert">Something went wrong.</p>;
+	}
+	return (
+		<div role="alert">
+			<p>We couldn't reach the sign-in service.</p>
+			<button
+				disabled={retrying}
+				onClick={() => {
+					// A repeated failure is also published to state.error.
+					void auth.retry().catch(() => {});
+				}}
+			>
+				{retrying ? "Retrying…" : "Retry"}
+			</button>
+		</div>
+	);
+}
 
 function ProtectedLayout() {
 	const { authVersion } = Route.useRouteContext();
 	const status = useAuth((state) => state.status);
 	const version = useAuth((state) => state.version);
-	if (status !== "authenticated" || version !== authVersion) {
+	const usable = status === "authenticated" || status === "refreshing";
+	if (!usable || version !== authVersion) {
 		return <p>Checking session…</p>;
 	}
 	return <Outlet key={authVersion} />;
@@ -482,9 +511,29 @@ ends only the matching session. Network or refresh errors reject the request.
 | Throw                    | Operational failure: retain recoverable credentials and expose the error.          |
 
 A failed proactive refresh leaves access usable until its expiry. Expired or
-explicitly rejected access is unavailable; a later `getSession()` can retry with
-retained refresh credentials. Guards should let operational errors reach an
-error component instead of turning every failure into a login redirect.
+explicitly rejected access is `refreshing` while a refresh runs: `user` stays
+visible and guards wait for the outcome without re-running. A token-only refresh
+does not change `version`.
+
+If the refresh fails, access becomes `unavailable` and guards run once more.
+Until `auth.retry()`, a sign-in, or a sign-out, `getSession()` rethrows that
+`REFRESH_FAILED` error without contacting the backend, so the guard re-run cannot
+start another refresh. Guards should let the error reach an error component
+instead of turning it into a login redirect; the protected layout example offers
+a Retry button that calls `auth.retry()`.
+
+To treat every refresh failure as a sign-out instead, return `null` from the
+refresh callback rather than throwing:
+
+```ts
+refresh: createRefreshFn(async ({ refreshToken, signal }) => {
+	try {
+		return await requestRefresh(refreshToken, signal);
+	} catch {
+		return null;
+	}
+}),
+```
 
 Explicit `expiresAt` takes precedence over JWT `exp`. JWT decoding supplies only
 a scheduling hint, without verifying signatures. Opaque tokens without expiry
@@ -493,15 +542,16 @@ earlier of 60 seconds before expiry or halfway through the remaining lifetime.
 There is one proactive attempt per installed token, with no recurring retry loop.
 Validation and refresh work have a 15-second deadline.
 
-| State status      | Meaning                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `initializing`    | Restoration has not completed.                                         |
-| `authenticated`   | Access is locally usable; `user` is available.                         |
-| `unauthenticated` | No session; sign-in is needed.                                         |
-| `unavailable`     | Restoration failed or current credentials cannot supply usable access. |
+| State status      | Meaning                                                                 |
+| ----------------- | ----------------------------------------------------------------------- |
+| `initializing`    | Restoration has not completed.                                          |
+| `authenticated`   | Access is locally usable; `user` is available.                          |
+| `refreshing`      | A refresh is replacing expired or rejected access; `user` is available. |
+| `unauthenticated` | No session; sign-in is needed.                                          |
+| `unavailable`     | Restoration failed or current credentials cannot supply usable access.  |
 
 `state.error` is an `AuthError` or `null`; user data is hidden outside the
-authenticated state. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
+`authenticated` and `refreshing` states. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
 `PERSISTENCE_FAILED`, `REFRESH_FAILED`, `SESSION_CHANGED`, and `UNAUTHENTICATED`.
 Validation errors can include `issues`; underlying failures can appear in `cause`.
 Application callbacks can also throw ordinary errors.

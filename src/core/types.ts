@@ -39,7 +39,13 @@ export type Session<U> = Readonly<{
 
 /** Reactive auth snapshot. Tokens are intentionally excluded. */
 export type AuthState<U> = Readonly<{
-	status: "initializing" | "authenticated" | "unauthenticated" | "unavailable";
+	/** `refreshing`: a refresh is replacing expired or rejected access; `user` stays visible. */
+	status:
+		| "initializing"
+		| "authenticated"
+		| "refreshing"
+		| "unauthenticated"
+		| "unavailable";
 	user: U | null;
 	sessionId: string | null;
 	/** Changes when guards must run again. */
@@ -52,7 +58,10 @@ export type AuthClient<I, U> = {
 	signIn: (input: SignInInput<I>) => Promise<void>;
 	signOut: () => Promise<void>;
 	updateUser: (input: I | (() => Promise<I>)) => Promise<void>;
+	/** After a failed refresh, rethrows that failure until `retry()`, sign-in, or sign-out. */
 	getSession: () => Promise<Session<U> | null>;
+	/** Like `getSession()`, but tries a failed refresh again. */
+	retry: () => Promise<Session<U> | null>;
 	/** Recover from rejection of this particular access token. */
 	refresh: (session: Session<U>) => Promise<Session<U> | null>;
 	/** End only the session that produced this rejected token. */

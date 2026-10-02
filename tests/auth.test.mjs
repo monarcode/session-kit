@@ -181,8 +181,8 @@ for (const timeout of [false, true]) {
 			await flush();
 			if (canRefresh) {
 				assert.equal(refreshCalls, 1);
-				assert.equal(auth.state.get().status, "unavailable");
-				assert.equal(auth.state.get().user, null);
+				assert.equal(auth.state.get().status, "refreshing");
+				assert.equal(auth.state.get().user.id, "alice");
 				refresh.resolve({
 					accessToken: "access-2",
 					expiresAt: Date.now() + 60_000,
@@ -664,6 +664,106 @@ test("Router connection is idempotent and token-only proactive refresh does not 
 	t.mock.timers.reset();
 });
 
+const connectCounting = (auth) => {
+	const router = {
+		invalidations: 0,
+		options: { context: { auth } },
+		clearCache() {},
+		async invalidate() {
+			router.invalidations++;
+		},
+	};
+	cleanups.push(connectAuth(router));
+	return router;
+};
+const recordStates = (auth) => {
+	const states = [];
+	const subscription = auth.state.subscribe((state) => states.push(state));
+	cleanups.push(() => subscription.unsubscribe());
+	return states;
+};
+
+test("401-triggered token-only refresh keeps the user and does not invalidate", async () => {
+	const gate = deferred();
+	const auth = client({ refresh: async () => gate.promise });
+	const router = connectCounting(auth);
+	await flush();
+	await auth.signIn(input());
+	await flush();
+	const before = { ...auth.state.get(), invalidations: router.invalidations };
+	const states = recordStates(auth);
+	const pending = auth.refresh(await auth.getSession());
+	await flush();
+	assert.equal(auth.state.get().status, "refreshing");
+	assert.equal(auth.state.get().user.id, "alice");
+	gate.resolve({ accessToken: "access-2" });
+	assert.equal((await pending).accessToken, "access-2");
+	await flush();
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().version, before.version);
+	assert.equal(router.invalidations, before.invalidations);
+	assert.ok(states.every((state) => state.user?.id === "alice"));
+});
+
+test("refresh failure after rejection becomes unavailable and invalidates once", async () => {
+	const gate = deferred();
+	const auth = client({ refresh: async () => gate.promise });
+	const router = connectCounting(auth);
+	await flush();
+	await auth.signIn(input());
+	await flush();
+	const before = router.invalidations;
+	const states = recordStates(auth);
+	const pending = auth.refresh(await auth.getSession());
+	const checked = assert.rejects(pending, code("REFRESH_FAILED"));
+	await flush();
+	assert.equal(auth.state.get().status, "refreshing");
+	gate.reject(new Error("offline"));
+	await checked;
+	await flush();
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["refreshing", "unavailable"],
+	);
+	assert.equal(auth.state.get().user, null);
+	assert.equal(auth.state.get().error.code, "REFRESH_FAILED");
+	assert.equal(router.invalidations, before + 1);
+});
+
+test("terminal refresh rejection signs out with one invalidation", async () => {
+	const auth = client({ refresh: async () => null });
+	const router = connectCounting(auth);
+	await flush();
+	await auth.signIn(input());
+	await flush();
+	const before = router.invalidations;
+	assert.equal(await auth.refresh(await auth.getSession()), null);
+	await flush();
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(router.invalidations, before + 1);
+});
+
+test("expired saved session restores through refreshing", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	await client().signIn(input({ expiresAt: 1_010_000 }));
+	t.mock.timers.tick(20_000);
+	const gate = deferred();
+	const auth = client({ refresh: async () => gate.promise });
+	const states = recordStates(auth);
+	cleanups.push(auth.mount());
+	await flush();
+	assert.equal(auth.state.get().status, "refreshing");
+	assert.equal(auth.state.get().user.id, "alice");
+	gate.resolve({ accessToken: "access-2", expiresAt: 1_100_000 });
+	await flush();
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["refreshing", "authenticated"],
+	);
+	cleanups.pop()();
+	t.mock.timers.reset();
+});
+
 test("GET retries once; bearer tokens stay on the configured origin", async () => {
 	const auth = client({ refresh: async () => ({ accessToken: "access-2" }) });
 	await auth.signIn(input());
@@ -775,7 +875,7 @@ test("remount while initial validation is pending starts a fresh restoration", a
 	assert.ok(calls >= 2);
 });
 
-test("real Router guards rerun after logout and produce a login redirect", async () => {
+const realRouter = async (auth) => {
 	global.self = global;
 	global.scrollTo = () => {};
 	global.window = {
@@ -790,16 +890,13 @@ test("real Router guards rerun after logout and produce a login redirect", async
 		createMemoryHistory,
 		redirect,
 	} = await import("@tanstack/react-router");
-	const auth = client();
-	await auth.signIn(input());
 	const root = createRootRouteWithContext()({});
 	const login = createRoute({ getParentRoute: () => root, path: "/login" });
-	let guardCalls = 0;
 	const privateRoute = createRoute({
 		getParentRoute: () => root,
 		path: "/private",
 		beforeLoad: async ({ context }) => {
-			guardCalls++;
+			router.guardCalls++;
 			if (!(await context.auth.getSession()))
 				throw redirect({ to: "/login" });
 		},
@@ -810,16 +907,90 @@ test("real Router guards rerun after logout and produce a login redirect", async
 		history: createMemoryHistory({ initialEntries: ["/private"] }),
 		isServer: false,
 	});
+	router.guardCalls = 0;
+	router.invalidations = 0;
 	router.startTransition = async (fn) => {
 		fn();
 		return true;
 	};
-	const off = connectAuth(router);
-	cleanups.push(off);
+	const invalidate = router.invalidate.bind(router);
+	router.invalidate = (...args) => {
+		router.invalidations++;
+		return invalidate(...args);
+	};
+	cleanups.push(connectAuth(router));
 	await router.load();
+	return router;
+};
+const settle = async () => {
+	for (let i = 0; i < 20; i++) await new Promise(setImmediate);
+};
+const privateMatch = (router) =>
+	router.state.matches.find((match) => match.routeId === "/private");
+
+test("real Router guards rerun after logout and produce a login redirect", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const router = await realRouter(auth);
 	assert.equal(router.state.location.pathname, "/private");
 	await auth.signOut();
 	await new Promise(setImmediate);
-	assert.ok(guardCalls >= 2);
+	assert.ok(router.guardCalls >= 2);
 	assert.equal(router.state.location.pathname, "/login");
+});
+
+test("a failed refresh reruns real Router guards once without retrying until retry()", async () => {
+	let refreshes = 0;
+	let offline = true;
+	const auth = client({
+		refresh: async () => {
+			refreshes++;
+			await new Promise(setImmediate);
+			if (offline) throw new Error("offline");
+			return { accessToken: "access-2" };
+		},
+	});
+	await auth.signIn(input());
+	const router = await realRouter(auth);
+	const guardCalls = router.guardCalls;
+	await assert.rejects(
+		auth.refresh(await auth.getSession()),
+		code("REFRESH_FAILED"),
+	);
+	await settle();
+	assert.equal(refreshes, 1);
+	assert.equal(router.invalidations, 1);
+	assert.equal(router.guardCalls, guardCalls + 1);
+	assert.equal(auth.state.get().status, "unavailable");
+	assert.equal(privateMatch(router).error?.code, "REFRESH_FAILED");
+	await assert.rejects(auth.getSession(), code("REFRESH_FAILED"));
+	assert.equal(refreshes, 1);
+
+	offline = false;
+	assert.equal((await auth.retry()).accessToken, "access-2");
+	await settle();
+	assert.equal(refreshes, 2);
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(privateMatch(router).status, "success");
+});
+
+test("sign-in clears a stored refresh failure", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	let refreshes = 0;
+	const auth = client({
+		refresh: async () => {
+			refreshes++;
+			throw new Error("offline");
+		},
+	});
+	await auth.signIn(input());
+	await assert.rejects(
+		auth.refresh(await auth.getSession()),
+		code("REFRESH_FAILED"),
+	);
+	await auth.signIn(input({ accessToken: "access-2", expiresAt: 1_010_000 }));
+	t.mock.timers.tick(20_000);
+	await assert.rejects(auth.getSession(), code("REFRESH_FAILED"));
+	assert.equal(refreshes, 2);
+	t.mock.timers.reset();
 });
