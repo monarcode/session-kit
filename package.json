@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.1",
+	"version": "0.1.0-alpha.2",
 	"description": "Schema-driven browser sessions for React and TanStack Router",
 	"keywords": [
 		"auth",
@@ -83,12 +83,16 @@
 		"zod": "4.4.3"
 	},
 	"peerDependencies": {
-		"@tanstack/react-router": "^1.170.38",
-		"react": "^19.3.0",
-		"react-dom": "^19.3.0"
+		"@tanstack/react-router": "^1.127.0",
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0"
 	},
-	"engines": {
-		"node": ">=24"
+	"devEngines": {
+		"runtime": {
+			"name": "node",
+			"version": ">=24",
+			"onFail": "error"
+		}
 	},
 	"packageManager": "pnpm@10.12.1"
 }

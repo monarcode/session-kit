@@ -1,8 +1,7 @@
 import { AuthError } from "./errors.js";
-import type { Tokens } from "./types.js";
-import { isRecord, validateTokens } from "./validation.js";
+import { isRecord, validateTokens, type SessionTokens } from "./validation.js";
 
-export type StoredSession = Tokens & { id: string; user: unknown };
+export type StoredSession = SessionTokens & { id: string; user: unknown };
 
 export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 	if (
@@ -14,8 +13,9 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 			"Use a simple auth name and a positive maxAge in seconds",
 		);
 	}
-	const tokensKey = `${name}:auth:tokens`;
-	const userKey = `${name}:auth:user`;
+	const key = `${name}:auth:session`;
+	const legacyKeys = [`${name}:auth:tokens`, `${name}:auth:user`];
+	const lockName = `${name}:auth:refresh`;
 
 	function storageOperation<T>(work: () => T): T {
 		try {
@@ -35,9 +35,9 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 	function clear() {
 		storageOperation(() => {
 			const failures: unknown[] = [];
-			for (const key of [tokensKey, userKey]) {
+			for (const entry of [key, ...legacyKeys]) {
 				try {
-					localStorage.removeItem(key);
+					localStorage.removeItem(entry);
 				} catch (error) {
 					failures.push(error);
 				}
@@ -49,37 +49,29 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 
 	function read(): StoredSession | null {
 		return storageOperation(() => {
-			const tokensText = localStorage.getItem(tokensKey);
-			if (!tokensText) {
-				localStorage.removeItem(userKey);
+			const text = localStorage.getItem(key);
+			if (!text) {
+				for (const entry of legacyKeys) localStorage.removeItem(entry);
 				return null;
 			}
-			const userText = localStorage.getItem(userKey);
 			try {
-				const tokens: unknown = JSON.parse(tokensText);
-				const profile: unknown = userText ? JSON.parse(userText) : null;
+				const saved: unknown = JSON.parse(text);
 				if (
-					!isRecord(tokens) ||
-					!isRecord(profile) ||
-					tokens.v !== 2 ||
-					profile.v !== 2 ||
-					typeof tokens.id !== "string" ||
-					!tokens.id ||
-					typeof tokens.writeId !== "string" ||
-					tokens.id !== profile.id ||
-					tokens.writeId !== profile.writeId ||
-					typeof tokens.persistUntil !== "number" ||
-					!Number.isFinite(tokens.persistUntil) ||
-					tokens.persistUntil <= Date.now()
+					!isRecord(saved) ||
+					saved.v !== 3 ||
+					typeof saved.id !== "string" ||
+					!saved.id ||
+					!("user" in saved) ||
+					typeof saved.persistUntil !== "number" ||
+					!Number.isFinite(saved.persistUntil) ||
+					saved.persistUntil <= Date.now()
 				) {
-					throw new Error("Missing, expired, or mismatched auth data");
+					throw new Error("Missing, expired, or malformed auth data");
 				}
-				if (localStorage.getItem(tokensKey) !== tokensText)
-					throw new Error("Auth storage changed while reading");
 				return {
-					...validateTokens(tokens),
-					id: tokens.id,
-					user: profile.user,
+					...validateTokens(saved),
+					id: saved.id,
+					user: saved.user,
 				};
 			} catch (cause) {
 				throw new AuthError(
@@ -93,22 +85,46 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 
 	function write(session: StoredSession) {
 		storageOperation(() => {
-			const { user, ...tokens } = session;
-			const writeId = crypto.randomUUID();
 			localStorage.setItem(
-				userKey,
-				JSON.stringify({ v: 2, id: session.id, writeId, user }),
-			);
-			localStorage.setItem(
-				tokensKey,
+				key,
 				JSON.stringify({
-					v: 2,
-					...tokens,
-					writeId,
+					v: 3,
+					...session,
 					persistUntil: Date.now() + maxAge * 1000,
 				}),
 			);
 		});
 	}
-	return { read, write, clear };
+
+	/**
+	 * Runs `work` while holding this auth name's lock, shared by every tab, so
+	 * only one tab at a time spends a refresh token. Without Web Locks it runs
+	 * directly. Aborting `signal` stops waiting for the lock. Once granted, the
+	 * lock is held until `work` settles, so `work` must bound its own duration.
+	 */
+	function exclusive<T>(
+		signal: AbortSignal,
+		work: () => Promise<T>,
+	): Promise<T> {
+		const locks = globalThis.navigator?.locks;
+		if (!locks) return work();
+		return locks.request(lockName, { signal }, work);
+	}
+
+	/**
+	 * Calls `listener` when another tab saves or clears the session. Browsers
+	 * fire `storage` events only in other tabs, never in the tab that wrote.
+	 * Returns a function that stops listening.
+	 */
+	function watch(listener: () => void): () => void {
+		if (typeof globalThis.addEventListener !== "function") return () => {};
+		const onStorage = (event: Event) => {
+			const changed = (event as StorageEvent).key;
+			if (changed === key || changed === null) listener();
+		};
+		globalThis.addEventListener("storage", onStorage);
+		return () => globalThis.removeEventListener("storage", onStorage);
+	}
+
+	return { read, write, clear, exclusive, watch };
 }

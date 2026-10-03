@@ -6,7 +6,7 @@ Schema-driven browser authentication for React and TanStack Router.
 
 One auth client lives in Router context. TanStack Store makes its state reactive,
 with no separate AuthProvider. Tokens and the validated user profile are stored
-in localStorage as separate entries.
+together in one localStorage entry.
 
 ## Installation
 
@@ -19,16 +19,17 @@ pnpm add @monarcode/session-kit@next
 Pin `@monarcode/session-kit@0.1.0-alpha.0` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
-The declared peer ranges are React and React DOM `^19.3.0`, and TanStack React
-Router `^1.170.38`. Use matching React and React DOM versions. This example uses
-Zod for its Standard Schema implementation:
+The declared peer ranges are React and React DOM `^19.0.0`, and TanStack React
+Router `^1.127.0`. CI checks both the oldest and the newest versions in those
+ranges. Use matching React and React DOM versions. This example uses Zod for its
+Standard Schema implementation:
 
 ```sh
 pnpm add react@19.3.0 react-dom@19.3.0 @tanstack/react-router@1.170.38 zod@4.4.3
 ```
 
 Zod is optional: any compatible Standard Schema V1 implementation can describe
-users. The package is ESM-only, declares Node.js `>=24`, and is checked with
+users. The package is ESM-only, sets no Node.js engine requirement, and is checked with
 TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
 have not been verified. Browser use requires modern APIs including
 `structuredClone`, `AbortController`, and `crypto.randomUUID`.
@@ -69,13 +70,13 @@ application; the package does not implement a login server:
 
 | Endpoint                 | Request                    | Successful response                                 |
 | ------------------------ | -------------------------- | --------------------------------------------------- |
-| `POST /api/auth/login`   | JSON `{ email, password }` | `{ accessToken, refreshToken?, expiresAt?, user }`  |
-| `POST /api/auth/refresh` | JSON `{ refreshToken }`    | `{ accessToken, refreshToken?, expiresAt?, user? }` |
+| `POST /api/auth/login`   | JSON `{ email, password }` | `{ accessToken, refreshToken?, expiresIn?, user }`  |
+| `POST /api/auth/refresh` | JSON `{ refreshToken }`    | `{ accessToken, refreshToken?, expiresIn?, user? }` |
 
-`expiresAt` is positive Unix time in **milliseconds**. In this example, a refresh
-401 means terminal rejection; other failures are operational. Adapt that mapping
-to your backend's contract. If it returns `expiresIn` in seconds, convert it to
-`Date.now() + expiresIn * 1000` before passing tokens to auth.
+`expiresIn` is the access token lifetime in **seconds**, as in OAuth
+`expires_in`. In this example, a refresh 401 means terminal rejection; other
+failures are operational. Adapt that mapping to your backend's contract. See
+[Refresh and errors](#refresh-and-errors) for other ways to supply expiry.
 
 ### 1. Define the user and client
 
@@ -95,7 +96,7 @@ export const userSchema = z.object({
 const tokensSchema = z.object({
 	accessToken: z.string().min(1),
 	refreshToken: z.string().min(1).optional(),
-	expiresAt: z.number().positive().optional(),
+	expiresIn: z.number().positive().optional(),
 });
 export const loginResponseSchema = tokensSchema.extend({ user: userSchema });
 const refreshResponseSchema = tokensSchema.extend({
@@ -269,6 +270,11 @@ function Login() {
 }
 ```
 
+`safeReturnTo` accepts only same-origin paths and returns `/` for anything else,
+including the sign-in page itself, so a stale `redirectTo` cannot loop. It
+treats `/login`, `/login/`, and `/LOGIN` alike. If sign-in lives elsewhere, pass
+its path, or several: `safeReturnTo(value, { loginPath: ["/sign-in", "/signup"] })`.
+
 ### 4. Add a pathless protected layout
 
 The leading underscore makes `_authenticated.tsx` a pathless layout. Its child
@@ -279,9 +285,14 @@ routes inherit the guard without adding `authenticated` to the URL.
 <!-- file: src/routes/_authenticated.tsx -->
 
 ```tsx
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	Outlet,
+	redirect,
+	type ErrorComponentProps,
+} from "@tanstack/react-router";
 import { AuthError } from "@monarcode/session-kit";
-import { useAuth } from "@monarcode/session-kit/react";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated")({
 	beforeLoad: async ({ context, location }) => {
@@ -303,14 +314,38 @@ export const Route = createFileRoute("/_authenticated")({
 			authVersion: context.auth.state.get().version,
 		};
 	},
+	errorComponent: SessionError,
 	component: ProtectedLayout,
 });
+
+function SessionError({ error }: ErrorComponentProps) {
+	const auth = useAuthClient();
+	const retrying = useAuth((state) => state.status === "refreshing");
+	if (!(error instanceof AuthError) || error.code !== "REFRESH_FAILED") {
+		return <p role="alert">Something went wrong.</p>;
+	}
+	return (
+		<div role="alert">
+			<p>We couldn't reach the sign-in service.</p>
+			<button
+				disabled={retrying}
+				onClick={() => {
+					// A repeated failure is also published to state.error.
+					void auth.retry().catch(() => {});
+				}}
+			>
+				{retrying ? "Retrying…" : "Retry"}
+			</button>
+		</div>
+	);
+}
 
 function ProtectedLayout() {
 	const { authVersion } = Route.useRouteContext();
 	const status = useAuth((state) => state.status);
 	const version = useAuth((state) => state.version);
-	if (status !== "authenticated" || version !== authVersion) {
+	const usable = status === "authenticated" || status === "refreshing";
+	if (!usable || version !== authVersion) {
 		return <p>Checking session…</p>;
 	}
 	return <Outlet key={authVersion} />;
@@ -471,7 +506,10 @@ creates a new session ID. A profile update keeps the current session ID.
 `createAuthFetch` attaches a Bearer token, restricts requests to the configured
 origin, and rejects redirects. On a 401 it attempts refresh. GET and HEAD are
 replayed at most once; mutations are never automatically replayed. A second 401
-ends only the matching session. Network or refresh errors reject the request.
+ends only the matching session. If some endpoints answer 401 for reasons other
+than a rejected token, pass `{ signOutOnRepeated401: false }` as the third
+argument so they return the 401 without signing out. Network or refresh errors
+reject the request.
 
 ## Refresh and errors
 
@@ -482,26 +520,58 @@ ends only the matching session. Network or refresh errors reject the request.
 | Throw                    | Operational failure: retain recoverable credentials and expose the error.          |
 
 A failed proactive refresh leaves access usable until its expiry. Expired or
-explicitly rejected access is unavailable; a later `getSession()` can retry with
-retained refresh credentials. Guards should let operational errors reach an
-error component instead of turning every failure into a login redirect.
+explicitly rejected access is `refreshing` while a refresh runs: `user` stays
+visible and guards wait for the outcome without re-running. A token-only refresh
+does not change `version`.
 
-Explicit `expiresAt` takes precedence over JWT `exp`. JWT decoding supplies only
+If the refresh fails, access becomes `unavailable` and guards run once more.
+Until `auth.retry()`, a sign-in, or a sign-out, `getSession()` rethrows that
+`REFRESH_FAILED` error without contacting the backend, so the guard re-run cannot
+start another refresh. Guards should let the error reach an error component
+instead of turning it into a login redirect; the protected layout example offers
+a Retry button that calls `auth.retry()`.
+
+To treat every refresh failure as a sign-out instead, return `null` from the
+refresh callback rather than throwing:
+
+```ts
+refresh: createRefreshFn(async ({ refreshToken, signal }) => {
+	try {
+		return await requestRefresh(refreshToken, signal);
+	} catch {
+		return null;
+	}
+}),
+```
+
+Expiry comes from the first of these that the tokens provide:
+
+1. `expiresAt`: Unix time in milliseconds, compared with the browser clock.
+2. `expiresIn`: lifetime in seconds, counted from when auth receives the tokens.
+3. A JWT's `exp - iat` lifetime, counted from receipt.
+4. A JWT's `exp` alone, compared with the browser clock.
+
+Browser clocks can be minutes off. Options 2 and 3 are unaffected; with 1 and 4,
+a fast clock can make fresh tokens look expired and block sign-in. Options 2 and
+3 assume newly issued tokens. `Session.expiresAt` is always on the browser
+clock, and restored sessions keep their saved expiry. JWT decoding supplies only
 a scheduling hint, without verifying signatures. Opaque tokens without expiry
 cannot be proactively refreshed. While connected, refresh is scheduled at the
 earlier of 60 seconds before expiry or halfway through the remaining lifetime.
 There is one proactive attempt per installed token, with no recurring retry loop.
+An attempt cancelled by unmounting or by a new sign-in does not count.
 Validation and refresh work have a 15-second deadline.
 
-| State status      | Meaning                                                                |
-| ----------------- | ---------------------------------------------------------------------- |
-| `initializing`    | Restoration has not completed.                                         |
-| `authenticated`   | Access is locally usable; `user` is available.                         |
-| `unauthenticated` | No session; sign-in is needed.                                         |
-| `unavailable`     | Restoration failed or current credentials cannot supply usable access. |
+| State status      | Meaning                                                                 |
+| ----------------- | ----------------------------------------------------------------------- |
+| `initializing`    | Restoration has not completed.                                          |
+| `authenticated`   | Access is locally usable; `user` is available.                          |
+| `refreshing`      | A refresh is replacing expired or rejected access; `user` is available. |
+| `unauthenticated` | No session; sign-in is needed.                                          |
+| `unavailable`     | Restoration failed or current credentials cannot supply usable access.  |
 
 `state.error` is an `AuthError` or `null`; user data is hidden outside the
-authenticated state. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
+`authenticated` and `refreshing` states. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
 `PERSISTENCE_FAILED`, `REFRESH_FAILED`, `SESSION_CHANGED`, and `UNAUTHENTICATED`.
 Validation errors can include `issues`; underlying failures can appear in `cause`.
 Application callbacks can also throw ordinary errors.
@@ -517,9 +587,10 @@ the remaining data after storage becomes available.
 
 ## Storage and limits
 
-- Tokens use the `<name>:auth:tokens` localStorage entry; the profile uses
-  `<name>:auth:user`. Matching session/write IDs detect incomplete writes on
-  restoration. Tokens are never placed in cookies, so the browser does not send
+- Tokens and the profile share the `<name>:auth:session` localStorage entry, so
+  every save is a single write that other tabs see whole. Entries from
+  0.1.0-alpha.1 (`<name>:auth:tokens`, `<name>:auth:user`) are
+  removed, not restored; users sign in once after upgrading. Tokens are never placed in cookies, so the browser does not send
   them automatically; `createAuthFetch` attaches the access token explicitly.
 - `maxAge` is in seconds, defaults to 30 days, and renews on successful writes.
   Expired entries are removed on the next restoration. It does not extend backend
@@ -528,8 +599,25 @@ the remaining data after storage becomes available.
   independently authenticate requests and authorize private operations. Local
   profile fields and route guards do not establish server authorization.
 - Sign-out clears local credentials; backend revocation belongs to your app.
-- Refresh coordination is limited to one client in one tab. Shared browser storage
-  does not synchronize live state across tabs or coordinate rotating refresh tokens.
+- Tabs coordinate refresh through the `<name>:auth:refresh` Web Lock: one tab at
+  a time spends the refresh token, and a tab that needs a refresh first uses
+  tokens another tab already saved. Rotating refresh tokens therefore work with
+  several tabs open. Profile updates keep tokens another tab refreshed, and a
+  refresh or rejection never overwrites or clears an account another tab signed
+  in; this tab switches to whatever storage holds instead.
+- Browsers without Web Locks still check storage before refreshing and before
+  signing out, but two tabs refreshing at the same instant can both spend the
+  token. A short refresh-token reuse window on the backend covers that case and
+  a refresh response lost to a timeout.
+- While connected through `connectAuth`, tabs update each other live through
+  `storage` events. A sign-out in one tab signs out the others, a sign-in or
+  account switch switches them (with a new `sessionId`), and profile updates
+  appear everywhere. Each of these changes `version` once, so guards rerun.
+  A refresh elsewhere replaces this tab's tokens without changing `version`,
+  and clears a refresh failure this tab was showing. An account change cancels
+  this tab's pending auth work with `SESSION_CHANGED`. Scope private Query data
+  to `sessionId`, so another tab's account switch cannot show the old account's
+  data.
 - Query cache management belongs to your app. Scope private data to the sign-in
   session ID, and reject late results from an old session. Router revalidation
   does not clear a separate TanStack Query cache.
@@ -551,7 +639,8 @@ files. Do not import internal `dist` paths.
 
 ## Development
 
-Use Node.js 24 and pnpm:
+Use Node.js 24 or newer and pnpm. `devEngines` enforces the Node.js version for
+contributors only; it does not affect installing the package:
 
 ```sh
 pnpm install
