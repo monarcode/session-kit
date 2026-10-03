@@ -19,16 +19,17 @@ pnpm add @monarcode/session-kit@next
 Pin `@monarcode/session-kit@0.1.0-alpha.0` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
-The declared peer ranges are React and React DOM `^19.3.0`, and TanStack React
-Router `^1.170.38`. Use matching React and React DOM versions. This example uses
-Zod for its Standard Schema implementation:
+The declared peer ranges are React and React DOM `^19.0.0`, and TanStack React
+Router `^1.127.0`. CI checks both the oldest and the newest versions in those
+ranges. Use matching React and React DOM versions. This example uses Zod for its
+Standard Schema implementation:
 
 ```sh
 pnpm add react@19.3.0 react-dom@19.3.0 @tanstack/react-router@1.170.38 zod@4.4.3
 ```
 
 Zod is optional: any compatible Standard Schema V1 implementation can describe
-users. The package is ESM-only, declares Node.js `>=24`, and is checked with
+users. The package is ESM-only, sets no Node.js engine requirement, and is checked with
 TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
 have not been verified. Browser use requires modern APIs including
 `structuredClone`, `AbortController`, and `crypto.randomUUID`.
@@ -629,7 +630,8 @@ files. Do not import internal `dist` paths.
 
 ## Development
 
-Use Node.js 24 and pnpm:
+Use Node.js 24 or newer and pnpm. `devEngines` enforces the Node.js version for
+contributors only; it does not affect installing the package:
 
 ```sh
 pnpm install

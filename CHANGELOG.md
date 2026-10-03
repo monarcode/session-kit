@@ -45,6 +45,13 @@
   `REFRESH_FAILED` state, without changing `version`. Previously other tabs kept
   working with the old session until reload.
 
+- Peer ranges are wider: React and React DOM `^19.0.0` (was `^19.3.0`), and
+  TanStack React Router `^1.127.0` (was `^1.170.38`). CI tests the oldest
+  versions in each range.
+- The published package no longer declares `engines.node`. Installing it with
+  `engine-strict` on Node.js 22 or older no longer fails. Node.js 24 is still
+  required to develop the package, through `devEngines`.
+
 ### Added
 
 - Tokens accept `expiresIn` (seconds, as in OAuth `expires_in`), counted from

@@ -42,3 +42,36 @@ jobs:
 
          - name: Verify package tarball
            run: pnpm --config.ignore-scripts=true pack --pack-destination "$RUNNER_TEMP/session-kit-pack"
+
+   minimum-peers:
+      name: check (oldest supported peers)
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
+
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
+
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
+
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
+
+         # Keep these at the lower bounds of peerDependencies in package.json.
+         - name: Install oldest supported peers
+           run: >-
+              pnpm add --save-dev --save-exact
+              react@19.0.0 react-dom@19.0.0
+              @types/react@19.0.0 @types/react-dom@19.0.0
+              @tanstack/react-router@1.127.0
+
+         - name: Build and test
+           run: pnpm run build && pnpm test && pnpm run test:types
