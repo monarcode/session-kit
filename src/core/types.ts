@@ -1,5 +1,4 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import type { Store } from "@tanstack/store";
 
 import type { AuthError } from "./errors.js";
 
@@ -123,8 +122,17 @@ export type AuthState<U> = Readonly<{
 }>;
 
 export type AuthClient<I, U> = {
-	/** Reactive `AuthState`. Read it in React with `useAuth`. */
-	state: Pick<Store<AuthState<U>>, "get" | "subscribe">;
+	/**
+	 * Reactive `AuthState`. Read it in React with `useAuth`. `subscribe` reports
+	 * later changes, not the current value. A listener that throws does not
+	 * interrupt auth; its error is rethrown asynchronously.
+	 */
+	state: {
+		get: () => AuthState<U>;
+		subscribe: (listener: (state: AuthState<U>) => void) => {
+			unsubscribe: () => void;
+		};
+	};
 	/**
 	 * Validates and saves a new session, replacing any current one. The latest
 	 * call wins. Rejects expired tokens; invalid input keeps the previous session.

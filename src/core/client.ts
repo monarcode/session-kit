@@ -1,5 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { Store } from "@tanstack/store";
+import { atom } from "nanostores";
 
 import { AuthError, authError, sessionChanged } from "./errors.js";
 import { createPersistence, type StoredSession } from "./persistence.js";
@@ -67,7 +67,7 @@ export function createAuth<S extends StandardSchemaV1>(
 	type U = User<S>;
 	type I = UserInput<S>;
 	const persistence = createPersistence(options.name, options.maxAge);
-	const store = new Store<AuthState<U>>({
+	const store = atom<AuthState<U>>({
 		status: "initializing",
 		user: null,
 		sessionId: null,
@@ -150,7 +150,7 @@ export function createAuth<S extends StandardSchemaV1>(
 			guardStatus(previous.status) !== guardStatus(status) ||
 			previous.user !== user ||
 			previous.sessionId !== sessionId;
-		store.setState(() =>
+		store.set(
 			Object.freeze({
 				status,
 				user,
@@ -383,12 +383,13 @@ export function createAuth<S extends StandardSchemaV1>(
 					}
 					return;
 				}
-				store.setState((previous) => ({
+				const previous = store.get();
+				store.set({
 					...previous,
 					status: "unavailable",
 					error,
 					version: previous.version + 1,
-				}));
+				});
 				throw error;
 			}
 		})();
@@ -670,7 +671,23 @@ export function createAuth<S extends StandardSchemaV1>(
 	}
 
 	return {
-		state: { get: store.get, subscribe: store.subscribe },
+		state: {
+			get: store.get,
+			// `listen`, not `subscribe`: nanostores' `subscribe` also calls the
+			// listener immediately with the current value.
+			subscribe: (listener) => ({
+				unsubscribe: store.listen((value) => {
+					try {
+						listener(value);
+					} catch (error) {
+						// A failing listener must not interrupt the auth operation that notified it.
+						queueMicrotask(() => {
+							throw error;
+						});
+					}
+				}),
+			}),
+		},
 		signIn,
 		signOut,
 		updateUser,

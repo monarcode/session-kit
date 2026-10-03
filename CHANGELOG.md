@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.0-alpha.3
+
+### Changed
+
+- Reactive state uses Nano Stores instead of TanStack Store. Apps on Router
+  versions that depend on an older TanStack Store no longer bundle two copies.
+- **Breaking:** `AuthClient.state` is typed by this package rather than
+  `@tanstack/store`. `state.subscribe` takes a listener function; observer
+  objects (`{ next, error, complete }`) are no longer accepted.
+
+### Fixed
+
+- A `state.subscribe` listener that throws no longer makes `signIn` (or another
+  operation) reject after it succeeded, or stops later listeners, including
+  `useAuth` and `connectAuth`, from seeing the change. The error is rethrown
+  asynchronously instead.
+
 ## 0.1.0-alpha.2
 
 ### Changed

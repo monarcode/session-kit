@@ -148,6 +148,20 @@ test("useAuth selector skips unrelated updates and renders changed selections", 
 	assert.equal(container.textContent, "none");
 });
 
+test("useAuth accepts inline selectors that return new objects", async () => {
+	const { auth, router } = await fixture();
+	function Status() {
+		const { status } = useAuth((state) => ({ status: state.status }));
+		return h("output", null, status);
+	}
+	const { container } = await mount(router, Status, { strict: true });
+	assert.equal(container.textContent, "unauthenticated");
+	await act(async () => signIn(auth));
+	assert.equal(container.textContent, "authenticated");
+	await act(async () => auth.signOut());
+	assert.equal(container.textContent, "unauthenticated");
+});
+
 test("useAuthClient retains the Router client across reactive renders", async () => {
 	const { auth, router } = await fixture();
 	const clients = [];

@@ -12,3 +12,6 @@ max_line_length = 80
 
 [*.md]
 trim_trailing_whitespace = false
+# GitHub and npm render tabs 8 columns wide, so code examples use spaces.
+indent_style = space
+indent_size = 2

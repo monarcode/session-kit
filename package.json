@@ -65,14 +65,15 @@
 	},
 	"dependencies": {
 		"@standard-schema/spec": "^1.1.0",
-		"@tanstack/react-store": "^0.11.1",
-		"@tanstack/store": "^0.11.1"
+		"nanostores": "^1.5.4",
+		"use-sync-external-store": "^1.6.0"
 	},
 	"devDependencies": {
 		"@tanstack/react-router": "1.170.38",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
+		"@types/use-sync-external-store": "1.7.0",
 		"husky": "9.1.7",
 		"jsdom": "26.1.0",
 		"oxfmt": "0.71.0",

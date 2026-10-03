@@ -811,6 +811,31 @@ const recordStates = (auth) => {
 	return states;
 };
 
+test("a throwing subscriber is reported without interrupting auth or other subscribers", async (t) => {
+	const auth = client();
+	await auth.getSession();
+	const reported = [];
+	t.mock.method(globalThis, "queueMicrotask", (callback) => {
+		try {
+			callback();
+		} catch (error) {
+			reported.push(error.message);
+		}
+	});
+	const failing = auth.state.subscribe((state) => {
+		if (state.status === "authenticated") throw new Error("consumer bug");
+	});
+	cleanups.push(() => failing.unsubscribe());
+	const states = recordStates(auth);
+	await auth.signIn(input());
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["authenticated"],
+	);
+	assert.deepEqual(reported, ["consumer bug"]);
+});
+
 test("401-triggered token-only refresh keeps the user and does not invalidate", async () => {
 	const gate = deferred();
 	const auth = client({ refresh: async () => gate.promise });

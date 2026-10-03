@@ -1,5 +1,7 @@
+import { useCallback } from "react";
+
 import { useRouter, type Register } from "@tanstack/react-router";
-import { useSelector } from "@tanstack/react-store";
+import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 
 export type RegisteredAuth = Register extends {
 	router: { options: { context: { auth: infer Client } } };
@@ -55,8 +57,18 @@ export function useAuth(): RegisteredAuthState;
 export function useAuth<T>(selector: (state: RegisteredAuthState) => T): T;
 export function useAuth<T>(selector?: (state: RegisteredAuthState) => T) {
 	const auth = useContextAuth();
-	return useSelector(auth.state, (value) => {
-		const state = value as RegisteredAuthState;
-		return selector ? selector(state) : state;
-	});
+	const subscribe = useCallback(
+		(onChange: () => void) => auth.state.subscribe(onChange).unsubscribe,
+		[auth],
+	);
+	const getSnapshot = useCallback(() => auth.state.get(), [auth]);
+	return useSyncExternalStoreWithSelector(
+		subscribe,
+		getSnapshot,
+		getSnapshot,
+		(value) => {
+			const state = value as RegisteredAuthState;
+			return selector ? selector(state) : state;
+		},
+	);
 }
