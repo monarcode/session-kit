@@ -2,7 +2,7 @@
 
 The `Release alpha` workflow is manually triggered. It releases an alpha version
 already committed to `main`; it does not change versions or commit files.
-It checks and packs with pnpm, publishes the verified tarball to npm using `next`,
+It checks and packs with pnpm, publishes the verified tarball to npm using `latest`,
 then creates a Git tag and GitHub prerelease at the workflow's commit.
 
 ## One-time npm setup
@@ -32,7 +32,7 @@ For this public repository/package, trusted publishing also generates provenance
 2. Run `pnpm run check`, then commit and push those changes to `main`.
 3. Open GitHub Actions → **Release alpha** → **Run workflow**. Choose `main`
    and enter the exact package version, without a `v` prefix.
-4. Verify the run succeeds, npm exposes the version through `next`, and the
+4. Verify the run succeeds, npm exposes the version through `latest`, and the
    matching GitHub prerelease exists.
 
 The workflow rejects a different branch, invalid or mismatched versions, missing
