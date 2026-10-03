@@ -6,7 +6,7 @@ Schema-driven browser authentication for React and TanStack Router.
 
 One auth client lives in Router context. TanStack Store makes its state reactive,
 with no separate AuthProvider. Tokens and the validated user profile are stored
-in localStorage as separate entries.
+together in one localStorage entry.
 
 ## Installation
 
@@ -577,9 +577,10 @@ the remaining data after storage becomes available.
 
 ## Storage and limits
 
-- Tokens use the `<name>:auth:tokens` localStorage entry; the profile uses
-  `<name>:auth:user`. Matching session/write IDs detect incomplete writes on
-  restoration. Tokens are never placed in cookies, so the browser does not send
+- Tokens and the profile share the `<name>:auth:session` localStorage entry, so
+  every save is a single write that other tabs see whole. Entries from
+  0.1.0-alpha.1 (`<name>:auth:tokens`, `<name>:auth:user`) are
+  removed, not restored; users sign in once after upgrading. Tokens are never placed in cookies, so the browser does not send
   them automatically; `createAuthFetch` attaches the access token explicitly.
 - `maxAge` is in seconds, defaults to 30 days, and renews on successful writes.
   Expired entries are removed on the next restoration. It does not extend backend
@@ -588,8 +589,25 @@ the remaining data after storage becomes available.
   independently authenticate requests and authorize private operations. Local
   profile fields and route guards do not establish server authorization.
 - Sign-out clears local credentials; backend revocation belongs to your app.
-- Refresh coordination is limited to one client in one tab. Shared browser storage
-  does not synchronize live state across tabs or coordinate rotating refresh tokens.
+- Tabs coordinate refresh through the `<name>:auth:refresh` Web Lock: one tab at
+  a time spends the refresh token, and a tab that needs a refresh first uses
+  tokens another tab already saved. Rotating refresh tokens therefore work with
+  several tabs open. Profile updates keep tokens another tab refreshed, and a
+  refresh or rejection never overwrites or clears an account another tab signed
+  in; this tab switches to whatever storage holds instead.
+- Browsers without Web Locks still check storage before refreshing and before
+  signing out, but two tabs refreshing at the same instant can both spend the
+  token. A short refresh-token reuse window on the backend covers that case and
+  a refresh response lost to a timeout.
+- While connected through `connectAuth`, tabs update each other live through
+  `storage` events. A sign-out in one tab signs out the others, a sign-in or
+  account switch switches them (with a new `sessionId`), and profile updates
+  appear everywhere. Each of these changes `version` once, so guards rerun.
+  A refresh elsewhere replaces this tab's tokens without changing `version`,
+  and clears a refresh failure this tab was showing. An account change cancels
+  this tab's pending auth work with `SESSION_CHANGED`. Scope private Query data
+  to `sessionId`, so another tab's account switch cannot show the old account's
+  data.
 - Query cache management belongs to your app. Scope private data to the sign-in
   session ID, and reject late results from an old session. Router revalidation
   does not clear a separate TanStack Query cache.

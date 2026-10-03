@@ -165,7 +165,8 @@ export type AuthClient<I, U> = {
 export type AuthOptions<S extends StandardSchemaV1> = {
 	/**
 	 * Storage namespace: letters, digits, `_` or `-`, up to 64 characters. Uses
-	 * the localStorage keys `<name>:auth:tokens` and `<name>:auth:user`.
+	 * the localStorage key `<name>:auth:session` and the Web Lock
+	 * `<name>:auth:refresh`.
 	 */
 	name: string;
 	/**

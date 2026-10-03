@@ -13,8 +13,7 @@ const userSchema = z.object({
 });
 const user = { id: "alice", email: "alice@example.com", role: "member" };
 let cookies, values, blockedStorage, blockedWrites, blockedDeletes, cleanups;
-const TOKENS = "test:auth:tokens",
-	PROFILE = "test:auth:user";
+const SESSION = "test:auth:session";
 let originalGlobals;
 const browserGlobals = [
 	"location",
@@ -24,6 +23,9 @@ const browserGlobals = [
 	"self",
 	"scrollTo",
 	"window",
+	"navigator",
+	"addEventListener",
+	"removeEventListener",
 ];
 const setGlobal = (name, value) =>
 	Object.defineProperty(globalThis, name, {
@@ -51,6 +53,28 @@ const input = (overrides = {}) => ({
 const client = (options = {}) =>
 	createAuth({ name: "test", userSchema, ...options });
 const code = (expected) => (error) => error.code === expected;
+const createLocks = () => {
+	const queues = new Map();
+	const aborted = (signal) =>
+		new Promise((_, reject) => {
+			if (signal?.aborted) reject(signal.reason);
+			signal?.addEventListener("abort", () => reject(signal.reason), {
+				once: true,
+			});
+		});
+	return {
+		request(name, { signal } = {}, callback) {
+			const previous = queues.get(name) ?? Promise.resolve();
+			const run = (async () => {
+				await Promise.race([previous, aborted(signal)]);
+				return callback({ name });
+			})();
+			queues.set(name, Promise.allSettled([previous, run]));
+			return run;
+		},
+	};
+};
+let locks, storageEvents;
 
 beforeEach(() => {
 	cookies = new Map();
@@ -59,6 +83,8 @@ beforeEach(() => {
 	blockedWrites = new Set();
 	blockedDeletes = new Set();
 	cleanups = [];
+	locks = createLocks();
+	storageEvents = new EventTarget();
 	originalGlobals = new Map(
 		browserGlobals.map((name) => [
 			name,
@@ -66,6 +92,13 @@ beforeEach(() => {
 		]),
 	);
 	setGlobal("location", { protocol: "https:" });
+	setGlobal("navigator", { locks });
+	setGlobal("addEventListener", (...args) =>
+		storageEvents.addEventListener(...args),
+	);
+	setGlobal("removeEventListener", (...args) =>
+		storageEvents.removeEventListener(...args),
+	);
 	setGlobal("document", {
 		get cookie() {
 			return [...cookies].map(([k, v]) => `${k}=${v}`).join("; ");
@@ -110,8 +143,7 @@ test("schema defaults and custom fields survive restoration; tokens stay out of 
 	const auth = client();
 	await auth.signIn(input({ user: { id: "alice", email: user.email } }));
 	assert.equal(auth.state.get().user.role, "member");
-	assert.equal(values.get(PROFILE).includes("access-1"), false);
-	assert.equal(JSON.parse(values.get(TOKENS)).refreshToken, "refresh-1");
+	assert.equal(JSON.parse(values.get(SESSION)).refreshToken, "refresh-1");
 	assert.equal(cookies.size, 0);
 	assert.equal(JSON.stringify(auth.state.get()).includes("refresh-1"), false);
 	const restored = await client().getSession();
@@ -260,7 +292,7 @@ test("failed sign-in recovery retains expired credentials without a refresh retr
 	assert.equal(refreshCalls, 1);
 	assert.equal(auth.state.get().status, "unavailable");
 	assert.equal(auth.state.get().error.code, "REFRESH_FAILED");
-	assert.ok(values.has(TOKENS));
+	assert.ok(values.has(SESSION));
 	t.mock.timers.tick(60_000);
 	await flush();
 	assert.equal(refreshCalls, 1);
@@ -290,7 +322,7 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 	assert.equal(auth.state.get().status, "unavailable");
 	assert.equal(auth.state.get().user, null);
 	assert.equal(refreshCalls, 0);
-	assert.ok(values.has(TOKENS));
+	assert.ok(values.has(SESSION));
 	assert.equal((await auth.getSession()).accessToken, "access-2");
 	assert.equal(refreshCalls, 1);
 });
@@ -321,62 +353,66 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 	assert.equal((await auth.getSession()).accessToken, "carol-token");
 });
 
-test("token/profile mismatch fails closed and removes saved data", async () => {
+test("malformed saved session fails closed and removes saved data", async () => {
 	await client().signIn(input());
-	const saved = JSON.parse(values.get(PROFILE));
-	values.set(PROFILE, JSON.stringify({ ...saved, writeId: "wrong" }));
+	const saved = JSON.parse(values.get(SESSION));
+	values.set(SESSION, JSON.stringify({ ...saved, id: "" }));
+	assert.equal(await client().getSession(), null);
+	assert.equal(values.size, 0);
+});
+
+test("entries from the two-key format are removed, not restored", async () => {
+	values.set("test:auth:tokens", JSON.stringify({ v: 2, accessToken: "old" }));
+	values.set("test:auth:user", JSON.stringify({ v: 2, user }));
 	assert.equal(await client().getSession(), null);
 	assert.equal(values.size, 0);
 });
 
 test("malformed stored user fails schema validation", async () => {
 	await client().signIn(input());
-	const saved = JSON.parse(values.get(PROFILE));
-	values.set(PROFILE, JSON.stringify({ ...saved, user: { id: 5 } }));
+	const saved = JSON.parse(values.get(SESSION));
+	values.set(SESSION, JSON.stringify({ ...saved, user: { id: 5 } }));
 	assert.equal(await client().getSession(), null);
 });
 
 for (const invalidUser of [false, true]) {
-	for (const blockedTarget of ["tokens", "profile"]) {
-		test(`restoring ${invalidUser ? "an invalid user" : "a malformed session"} exposes blocked ${blockedTarget} cleanup and permits retry`, async () => {
-			await client().signIn(input());
-			if (invalidUser) {
-				const saved = JSON.parse(values.get(PROFILE));
-				values.set(PROFILE, JSON.stringify({ ...saved, user: { id: 5 } }));
-			} else {
-				values.set(TOKENS, "invalid-json");
-			}
-			blockedDeletes.add(blockedTarget === "tokens" ? TOKENS : PROFILE);
-			const auth = client();
-			let failure;
-			await assert.rejects(auth.getSession(), (error) => {
-				failure = error;
-				return error.code === "PERSISTENCE_FAILED";
-			});
-			assert.equal(auth.state.get().error, failure);
-			assert.equal(auth.state.get().status, "unauthenticated");
-			assert.equal(auth.state.get().user, null);
-			assert.equal(auth.state.get().sessionId, null);
-			assert.ok(failure.cause instanceof AggregateError);
-			const [restoration, cleanup] = failure.cause.errors;
-			assert.equal(
-				restoration.code,
-				invalidUser ? "USER_VALIDATION_FAILED" : "INVALID_SESSION",
-			);
-			if (invalidUser) assert.ok(restoration.issues.length > 0);
-			else assert.ok(restoration.cause instanceof Error);
-			assert.equal(cleanup.code, "PERSISTENCE_FAILED");
-			assert.ok(cleanup.cause instanceof AggregateError);
-			assert.equal(values.has(TOKENS), blockedTarget === "tokens");
-			assert.equal(values.has(PROFILE), blockedTarget === "profile");
-			assert.equal(await auth.getSession(), null);
-			assert.equal(auth.state.get().error, failure);
-			blockedDeletes.clear();
-			await auth.signOut();
-			assert.equal(auth.state.get().error, null);
-			assert.equal(values.size, 0);
+	test(`restoring ${invalidUser ? "an invalid user" : "a malformed session"} exposes blocked cleanup and permits retry`, async () => {
+		await client().signIn(input());
+		if (invalidUser) {
+			const saved = JSON.parse(values.get(SESSION));
+			values.set(SESSION, JSON.stringify({ ...saved, user: { id: 5 } }));
+		} else {
+			values.set(SESSION, "invalid-json");
+		}
+		blockedDeletes.add(SESSION);
+		const auth = client();
+		let failure;
+		await assert.rejects(auth.getSession(), (error) => {
+			failure = error;
+			return error.code === "PERSISTENCE_FAILED";
 		});
-	}
+		assert.equal(auth.state.get().error, failure);
+		assert.equal(auth.state.get().status, "unauthenticated");
+		assert.equal(auth.state.get().user, null);
+		assert.equal(auth.state.get().sessionId, null);
+		assert.ok(failure.cause instanceof AggregateError);
+		const [restoration, cleanup] = failure.cause.errors;
+		assert.equal(
+			restoration.code,
+			invalidUser ? "USER_VALIDATION_FAILED" : "INVALID_SESSION",
+		);
+		if (invalidUser) assert.ok(restoration.issues.length > 0);
+		else assert.ok(restoration.cause instanceof Error);
+		assert.equal(cleanup.code, "PERSISTENCE_FAILED");
+		assert.ok(cleanup.cause instanceof AggregateError);
+		assert.ok(values.has(SESSION));
+		assert.equal(await auth.getSession(), null);
+		assert.equal(auth.state.get().error, failure);
+		blockedDeletes.clear();
+		await auth.signOut();
+		assert.equal(auth.state.get().error, null);
+		assert.equal(values.size, 0);
+	});
 }
 
 test("storage read failure is operational and can be retried", async () => {
@@ -391,7 +427,7 @@ test("storage read failure is operational and can be retried", async () => {
 
 test("token write failure clears runtime state and fails visibly", async () => {
 	const auth = client();
-	blockedWrites.add(TOKENS);
+	blockedWrites.add(SESSION);
 	await assert.rejects(auth.signIn(input()), code("PERSISTENCE_FAILED"));
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);
@@ -400,7 +436,7 @@ test("token write failure clears runtime state and fails visibly", async () => {
 test("signout stays signed out when token deletion fails", async () => {
 	const auth = client();
 	await auth.signIn(input());
-	blockedDeletes.add(TOKENS);
+	blockedDeletes.add(SESSION);
 	await assert.rejects(auth.signOut(), code("PERSISTENCE_FAILED"));
 	assert.equal(await auth.getSession(), null);
 	assert.equal(auth.state.get().user, null);
@@ -424,7 +460,7 @@ test("concurrent refresh requests share one backend operation", async () => {
 	gate.resolve({ accessToken: "access-2" });
 	assert.equal((await a).accessToken, "access-2");
 	assert.equal((await b).accessToken, "access-2");
-	assert.equal(JSON.parse(values.get(TOKENS)).refreshToken, "refresh-1");
+	assert.equal(JSON.parse(values.get(SESSION)).refreshToken, "refresh-1");
 });
 
 test("late refresh success cannot restore a signed-out session", async () => {
@@ -510,7 +546,7 @@ test("refresh null ends the session; thrown network errors retain credentials", 
 		code("REFRESH_FAILED"),
 	);
 	assert.equal(retry.state.get().status, "unavailable");
-	assert.ok(values.has(TOKENS));
+	assert.ok(values.has(SESSION));
 });
 
 test("a rejected access token cannot be returned as fresh", async () => {
@@ -634,7 +670,6 @@ const jwt = (claims) =>
 	`e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.x`;
 
 test("JWT lifetime is measured from receipt when the browser clock runs fast", async (t) => {
-	// Browser clock is 10 minutes ahead of the server that issued a 5-minute token.
 	const serverNow = 1_000_000;
 	t.mock.timers.enable({
 		apis: ["Date", "setTimeout"],
@@ -904,7 +939,7 @@ test("invalid optional refresh user cannot partially replace tokens", async () =
 		auth.refresh(await auth.getSession()),
 		code("USER_VALIDATION_FAILED"),
 	);
-	const saved = JSON.parse(values.get(TOKENS));
+	const saved = JSON.parse(values.get(SESSION));
 	assert.equal(saved.accessToken, "access-1");
 });
 
@@ -1059,4 +1094,260 @@ test("sign-in clears a stored refresh failure", async (t) => {
 	await assert.rejects(auth.getSession(), code("REFRESH_FAILED"));
 	assert.equal(refreshes, 2);
 	t.mock.timers.reset();
+});
+
+const rotatingServer = ({ gates = [] } = {}) => {
+	let issued = 1;
+	const live = new Set(["refresh-1"]);
+	const server = {
+		calls: 0,
+		async refresh({ refreshToken }) {
+			await gates[server.calls++];
+			if (!live.delete(refreshToken)) return null;
+			issued++;
+			live.add(`refresh-${issued}`);
+			return {
+				accessToken: `access-${issued}`,
+				refreshToken: `refresh-${issued}`,
+			};
+		},
+	};
+	return server;
+};
+const twoTabs = async (server) => {
+	const a = client({ refresh: server.refresh });
+	await a.signIn(input());
+	const b = client({ refresh: server.refresh });
+	assert.equal((await b.getSession()).accessToken, "access-1");
+	return { a, b };
+};
+const saved = () => JSON.parse(values.get(SESSION));
+
+test("a tab refreshing after another tab rotated the token adopts the saved tokens", async () => {
+	const server = rotatingServer();
+	const { a, b } = await twoTabs(server);
+	const stale = await b.getSession();
+	assert.equal(
+		(await a.refresh(await a.getSession())).accessToken,
+		"access-2",
+	);
+	assert.equal((await b.refresh(stale)).accessToken, "access-2");
+	assert.equal(server.calls, 1);
+	assert.equal(b.state.get().status, "authenticated");
+	assert.equal(saved().refreshToken, "refresh-2");
+	assert.equal(
+		(await b.refresh(await b.getSession())).accessToken,
+		"access-3",
+	);
+	assert.equal(saved().refreshToken, "refresh-3");
+});
+
+test("tabs refreshing at once spend the refresh token once", async () => {
+	const server = rotatingServer();
+	const { a, b } = await twoTabs(server);
+	const [fromA, fromB] = await Promise.all([
+		a.refresh(await a.getSession()),
+		b.refresh(await b.getSession()),
+	]);
+	assert.equal(server.calls, 1);
+	assert.equal(fromA.accessToken, "access-2");
+	assert.equal(fromB.accessToken, "access-2");
+	assert.equal(saved().refreshToken, "refresh-2");
+});
+
+test("without Web Locks, a rejected refresh adopts newer saved tokens instead of signing out", async () => {
+	setGlobal("navigator", undefined);
+	const gates = [deferred(), deferred()];
+	const server = rotatingServer({ gates: gates.map((gate) => gate.promise) });
+	const { a, b } = await twoTabs(server);
+	const fromA = a.refresh(await a.getSession());
+	const fromB = b.refresh(await b.getSession());
+	await flush();
+	assert.equal(server.calls, 2);
+	gates[0].resolve();
+	assert.equal((await fromA).accessToken, "access-2");
+	gates[1].resolve();
+	assert.equal((await fromB).accessToken, "access-2");
+	assert.equal(b.state.get().status, "authenticated");
+	assert.equal(saved().refreshToken, "refresh-2");
+});
+
+test("a stale tab's profile update keeps tokens another tab refreshed", async () => {
+	const server = rotatingServer();
+	const { a, b } = await twoTabs(server);
+	await a.refresh(await a.getSession());
+	await b.updateUser({ ...user, email: "b@example.com" });
+	assert.equal(saved().refreshToken, "refresh-2");
+	assert.equal(saved().user.email, "b@example.com");
+	assert.equal((await b.getSession()).accessToken, "access-2");
+});
+
+test("a refresh cannot overwrite an account another tab signed in", async () => {
+	const server = rotatingServer();
+	const { a, b } = await twoTabs(server);
+	await a.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	await assert.rejects(
+		b.refresh(await b.getSession()),
+		code("SESSION_CHANGED"),
+	);
+	assert.equal(server.calls, 0);
+	assert.equal(saved().accessToken, "bob-token");
+	assert.equal(b.state.get().user.id, "bob");
+});
+
+test("a refresh after another tab signed out ends this tab's session too", async () => {
+	const server = rotatingServer();
+	const { a, b } = await twoTabs(server);
+	await a.signOut();
+	assert.equal(await b.refresh(await b.getSession()), null);
+	assert.equal(server.calls, 0);
+	assert.equal(b.state.get().status, "unauthenticated");
+	assert.equal(values.size, 0);
+});
+
+test("a second 401 does not clear an account another tab signed in", async () => {
+	const { a, b } = await twoTabs(rotatingServer());
+	const stale = await b.getSession();
+	await a.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	await assert.rejects(b.rejectSession(stale), code("SESSION_CHANGED"));
+	assert.equal(saved().accessToken, "bob-token");
+});
+
+const broadcast = async (key = SESSION) => {
+	const event = new Event("storage");
+	event.key = key;
+	storageEvents.dispatchEvent(event);
+	await flush();
+};
+const mountedTabs = async (server = rotatingServer()) => {
+	const tabs = await twoTabs(server);
+	cleanups.push(tabs.a.mount(), tabs.b.mount());
+	await flush();
+	return tabs;
+};
+
+test("signing out in one tab signs out the others", async () => {
+	const { a, b } = await mountedTabs();
+	const router = connectCounting(b);
+	await flush();
+	const before = router.invalidations;
+	await a.signOut();
+	await broadcast();
+	assert.equal(b.state.get().status, "unauthenticated");
+	assert.equal(await b.getSession(), null);
+	assert.equal(router.invalidations, before + 1);
+});
+
+test("signing in in one tab signs in a signed-out tab", async () => {
+	const b = client();
+	cleanups.push(b.mount());
+	await flush();
+	assert.equal(b.state.get().status, "unauthenticated");
+	await client().signIn(input());
+	await broadcast();
+	assert.equal(b.state.get().status, "authenticated");
+	assert.equal(b.state.get().user.id, "alice");
+});
+
+test("switching accounts in one tab switches the others and cancels their work", async () => {
+	const gate = deferred();
+	const { a, b } = await mountedTabs({ refresh: async () => gate.promise });
+	const aliceId = b.state.get().sessionId;
+	const pending = b.refresh(await b.getSession());
+	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
+	await flush();
+	await a.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	await broadcast();
+	await checked;
+	assert.equal(b.state.get().user.id, "bob");
+	assert.notEqual(b.state.get().sessionId, aliceId);
+	assert.equal((await b.getSession()).accessToken, "bob-token");
+	gate.resolve({ accessToken: "late" });
+	await flush();
+	assert.equal(saved().accessToken, "bob-token");
+});
+
+test("a refresh in one tab reaches the others without a version change", async () => {
+	const server = rotatingServer();
+	const { a, b } = await mountedTabs(server);
+	const before = b.state.get();
+	await a.refresh(await a.getSession());
+	await broadcast();
+	assert.equal(b.state.get().version, before.version);
+	assert.equal(b.state.get().user, before.user);
+	assert.equal((await b.getSession()).accessToken, "access-2");
+	assert.equal(server.calls, 1);
+});
+
+test("a profile update in one tab reaches the others", async () => {
+	const { a, b } = await mountedTabs();
+	const before = b.state.get().version;
+	await a.updateUser({ ...user, email: "new@example.com" });
+	await broadcast();
+	assert.equal(b.state.get().user.email, "new@example.com");
+	assert.equal(b.state.get().version, before + 1);
+	assert.equal((await b.getSession()).accessToken, "access-1");
+});
+
+test("another tab's successful refresh clears this tab's refresh failure", async () => {
+	const server = rotatingServer();
+	const a = client({ refresh: server.refresh });
+	await a.signIn(input());
+	const b = client({
+		refresh: async () => {
+			throw new Error("offline");
+		},
+	});
+	cleanups.push(b.mount());
+	await flush();
+	await assert.rejects(
+		b.refresh(await b.getSession()),
+		code("REFRESH_FAILED"),
+	);
+	await assert.rejects(b.getSession(), code("REFRESH_FAILED"));
+	await a.refresh(await a.getSession());
+	await broadcast();
+	assert.equal(b.state.get().status, "authenticated");
+	assert.equal(b.state.get().error, null);
+	assert.equal((await b.getSession()).accessToken, "access-2");
+});
+
+test("a refresh in flight cannot overwrite an account signed in meanwhile", async () => {
+	const gate = deferred();
+	const { a, b } = await twoTabs({ refresh: async () => gate.promise });
+	const pending = b.refresh(await b.getSession());
+	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
+	await flush();
+	await a.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	gate.resolve({ accessToken: "alice-refreshed" });
+	await checked;
+	assert.equal(saved().accessToken, "bob-token");
+	assert.equal(b.state.get().user.id, "bob");
+});
+
+test("unmounted tabs and unrelated keys ignore storage events", async () => {
+	const { a, b } = await twoTabs(rotatingServer());
+	const off = b.mount();
+	await flush();
+	await a.signOut();
+	await broadcast("unrelated");
+	assert.equal(b.state.get().status, "authenticated");
+	off();
+	await broadcast();
+	assert.equal(b.state.get().status, "authenticated");
+});
+
+test("invalid saved data from another tab leaves this tab's session alone", async () => {
+	const { b } = await mountedTabs();
+	values.set(SESSION, "invalid-json");
+	await broadcast();
+	assert.equal(b.state.get().status, "authenticated");
 });

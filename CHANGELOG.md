@@ -23,6 +23,28 @@
   `exp`. A browser clock that runs ahead of the server no longer makes fresh
   tokens look expired and block sign-in. A JWT without `iat` still uses `exp`.
 
+- **Breaking:** tokens and profile are saved together in one
+  `<name>:auth:session` localStorage entry, so another tab can never read half a
+  save. Entries written by 0.1.0-alpha.1 are removed, not restored,
+  so users sign in once after upgrading.
+- Tabs no longer sign each other out when the backend rotates refresh tokens.
+  Refresh runs under a `<name>:auth:refresh` Web Lock, so one tab at a time
+  spends the refresh token, and a tab first uses tokens another tab already
+  saved. Previously a tab refreshing with a token another tab had already spent
+  got `null`, signed out, and cleared storage for every tab.
+- A profile update keeps tokens another tab refreshed instead of overwriting
+  them with this tab's older ones.
+- A refresh, a terminal rejection, or a second 401 never overwrites or clears an
+  account another tab signed in, or signs it out. This tab switches to what
+  storage holds; the pending call rejects with `SESSION_CHANGED`.
+- While connected, tabs follow each other live through `storage` events. Signing
+  out in one tab signs out every tab, so guards redirect to sign-in. Signing in
+  or switching accounts in one tab switches the others, with a new `sessionId`.
+  Profile updates appear in every tab. Each of these changes `version` once. A
+  refresh elsewhere quietly replaces tokens and clears this tab's
+  `REFRESH_FAILED` state, without changing `version`. Previously other tabs kept
+  working with the old session until reload.
+
 ### Added
 
 - Tokens accept `expiresIn` (seconds, as in OAuth `expires_in`), counted from
