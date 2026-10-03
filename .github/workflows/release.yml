@@ -87,7 +87,7 @@ jobs:
          - name: Publish alpha to npm
            env:
               RELEASE_VERSION: ${{ inputs.version }}
-           run: npm publish "$RUNNER_TEMP/release/monarcode-session-kit-$RELEASE_VERSION.tgz" --tag next --access public --ignore-scripts
+           run: npm publish "$RUNNER_TEMP/release/monarcode-session-kit-$RELEASE_VERSION.tgz" --tag latest --access public --ignore-scripts
          - name: Create GitHub prerelease and tag
            env:
               GH_TOKEN: ${{ github.token }}
