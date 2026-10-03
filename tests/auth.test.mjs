@@ -634,6 +634,33 @@ test("proactive failure keeps unexpired access but expiry hides the user", async
 	t.mock.timers.reset();
 });
 
+test("a proactive refresh cancelled by unmount is attempted again after remount", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	let calls = 0;
+	const auth = client({
+		refresh: async () => {
+			calls++;
+			return new Promise(() => {});
+		},
+	});
+	await auth.signIn(input({ expiresAt: 1_020_000 }));
+	const unmount = auth.mount();
+	await flush();
+	t.mock.timers.tick(10_000);
+	await flush();
+	assert.equal(calls, 1);
+	unmount();
+	await flush();
+	cleanups.push(auth.mount());
+	await flush();
+	t.mock.timers.tick(5_000);
+	await flush();
+	assert.equal(calls, 2);
+	assert.equal(auth.state.get().status, "authenticated");
+	cleanups.pop()();
+	t.mock.timers.reset();
+});
+
 test("a handler that ignores abort still times out", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const auth = client({ refresh: async () => new Promise(() => {}) });
@@ -905,6 +932,54 @@ test("second 401 ends only the matching session", async () => {
 	assert.equal(await auth.getSession(), null);
 });
 
+const trackedBody = () => {
+	const body = { cancelled: false };
+	body.stream = new ReadableStream({
+		cancel() {
+			body.cancelled = true;
+		},
+	});
+	return body;
+};
+
+test("a repeated 401 can keep the session when configured", async () => {
+	const auth = client({ refresh: async () => ({ accessToken: "access-2" }) });
+	await auth.signIn(input());
+	global.fetch = async () => new Response(null, { status: 401 });
+	const request = createAuthFetch(auth, "https://api.example.com/", {
+		signOutOnRepeated401: false,
+	});
+	assert.equal((await request("/me")).status, 401);
+	assert.equal((await auth.getSession()).accessToken, "access-2");
+});
+
+test("a failed refresh after a 401 releases the 401 response body", async () => {
+	const auth = client({
+		refresh: async () => {
+			throw new Error("offline");
+		},
+	});
+	await auth.signIn(input());
+	const body = trackedBody();
+	global.fetch = async () => new Response(body.stream, { status: 401 });
+	const request = createAuthFetch(auth, "https://api.example.com/");
+	await assert.rejects(request("/me"), code("REFRESH_FAILED"));
+	assert.equal(body.cancelled, true);
+});
+
+test("a session change during a request releases its response body", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const body = trackedBody();
+	global.fetch = async () => {
+		await auth.signOut();
+		return new Response(body.stream);
+	};
+	const request = createAuthFetch(auth, "https://api.example.com/");
+	await assert.rejects(request("/me"), code("SESSION_CHANGED"));
+	assert.equal(body.cancelled, true);
+});
+
 test("return URL rejects external origins, backslashes, controls, and login loops", () => {
 	for (const value of [
 		"//evil.com",
@@ -919,6 +994,28 @@ test("return URL rejects external origins, backslashes, controls, and login loop
 		safeReturnTo("/dashboard?tab=one#title"),
 		"/dashboard?tab=one#title",
 	);
+});
+
+test("return URL treats login path variants and custom login paths as loops", () => {
+	for (const value of [
+		"/login/",
+		"/LOGIN",
+		"/Login?next=1",
+		"/log%69n",
+		"/%E0",
+	])
+		assert.equal(safeReturnTo(value), "/");
+	assert.equal(safeReturnTo("/login/callback"), "/login/callback");
+	const options = { loginPath: ["/sign-in", "/auth/Register/"] };
+	for (const value of [
+		"/sign-in",
+		"/Sign-In/",
+		"/auth/register",
+		"/auth/register/",
+	])
+		assert.equal(safeReturnTo(value, options), "/");
+	assert.equal(safeReturnTo("/login", options), "/login");
+	assert.throws(() => safeReturnTo("/", { loginPath: "sign-in" }));
 });
 
 test("schemas that return non-JSON output are rejected", async () => {

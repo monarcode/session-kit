@@ -1,8 +1,27 @@
 import { AuthError, sessionChanged } from "../core/errors.js";
 import type { AuthClient, Session } from "../core/types.js";
 
-export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
+export type AuthFetchOptions = {
+	/**
+	 * Whether a 401 on the replayed request, after a successful refresh, ends the
+	 * session. Default: `true`. Set `false` when some endpoints answer 401 for
+	 * reasons other than a rejected token, so one of them cannot sign users out.
+	 */
+	signOutOnRepeated401?: boolean;
+};
+
+/** Releases a response the caller will never see. */
+async function discard(response: Response) {
+	await response.body?.cancel().catch(() => {});
+}
+
+export function createAuthFetch<I, U>(
+	auth: AuthClient<I, U>,
+	baseUrl: string,
+	options: AuthFetchOptions = {},
+) {
 	const base = new URL(baseUrl);
+	const signOutOnRepeated401 = options.signOutOnRepeated401 ?? true;
 	return async function authFetch(
 		path: string,
 		init: RequestInit = {},
@@ -27,7 +46,10 @@ export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
 			const response = await fetch(
 				new Request(request, { headers, redirect: "error" }),
 			);
-			if (!auth.isCurrent(session)) throw sessionChanged();
+			if (!auth.isCurrent(session)) {
+				await discard(response);
+				throw sessionChanged();
+			}
 			return response;
 		};
 
@@ -35,15 +57,22 @@ export function createAuthFetch<I, U>(auth: AuthClient<I, U>, baseUrl: string) {
 
 		if (response.status !== 401) return response;
 
-		const fresh = await auth.refresh(captured);
+		let fresh: Session<U> | null;
+		try {
+			fresh = await auth.refresh(captured);
+		} catch (error) {
+			await discard(response);
+			throw error;
+		}
 
 		if (!fresh) return response;
 		if (!canReplay) return response;
 
-		await response.body?.cancel();
+		await discard(response);
 		const retried = await send(fresh);
 
-		if (retried.status === 401) await auth.rejectSession(fresh);
+		if (retried.status === 401 && signOutOnRepeated401)
+			await auth.rejectSession(fresh);
 
 		return retried;
 	};

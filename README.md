@@ -270,6 +270,11 @@ function Login() {
 }
 ```
 
+`safeReturnTo` accepts only same-origin paths and returns `/` for anything else,
+including the sign-in page itself, so a stale `redirectTo` cannot loop. It
+treats `/login`, `/login/`, and `/LOGIN` alike. If sign-in lives elsewhere, pass
+its path, or several: `safeReturnTo(value, { loginPath: ["/sign-in", "/signup"] })`.
+
 ### 4. Add a pathless protected layout
 
 The leading underscore makes `_authenticated.tsx` a pathless layout. Its child
@@ -501,7 +506,10 @@ creates a new session ID. A profile update keeps the current session ID.
 `createAuthFetch` attaches a Bearer token, restricts requests to the configured
 origin, and rejects redirects. On a 401 it attempts refresh. GET and HEAD are
 replayed at most once; mutations are never automatically replayed. A second 401
-ends only the matching session. Network or refresh errors reject the request.
+ends only the matching session. If some endpoints answer 401 for reasons other
+than a rejected token, pass `{ signOutOnRepeated401: false }` as the third
+argument so they return the 401 without signing out. Network or refresh errors
+reject the request.
 
 ## Refresh and errors
 
@@ -551,6 +559,7 @@ a scheduling hint, without verifying signatures. Opaque tokens without expiry
 cannot be proactively refreshed. While connected, refresh is scheduled at the
 earlier of 60 seconds before expiry or halfway through the remaining lifetime.
 There is one proactive attempt per installed token, with no recurring retry loop.
+An attempt cancelled by unmounting or by a new sign-in does not count.
 Validation and refresh work have a 15-second deadline.
 
 | State status      | Meaning                                                                 |

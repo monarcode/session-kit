@@ -60,6 +60,21 @@
   example uses it in a Retry button.
 - The README shows how to treat every refresh failure as a sign-out by returning
   `null` from the refresh callback.
+- `createAuthFetch` accepts `{ signOutOnRepeated401: false }`, so an endpoint
+  that answers 401 for reasons other than a rejected token cannot sign users out.
+- `safeReturnTo` accepts `{ loginPath }`, one path or several, for apps whose
+  sign-in page is not `/login`.
+
+### Fixed
+
+- `safeReturnTo` treats `/login/`, `/LOGIN`, and percent-encoded spellings of
+  the login path as redirect loops. Previously only the exact `/login` was
+  caught.
+- `createAuthFetch` releases the first 401 response body when the refresh
+  throws, and releases a response that arrives after the session changed.
+- A proactive refresh cancelled by unmounting, or by a new sign-in, no longer
+  counts as that token's one proactive attempt. Previously, after a remount, the
+  token waited until expiry to refresh.
 
 ## 0.1.0-alpha.1
 

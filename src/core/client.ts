@@ -201,6 +201,8 @@ export function createAuth<S extends StandardSchemaV1>(
 	}
 
 	function advanceEpoch() {
+		// A cancelled refresh never finished, so it does not use up the token's attempt.
+		if (flight) refreshAttempted = false;
 		epoch++;
 		controller.abort(sessionChanged());
 		controller = new AbortController();
