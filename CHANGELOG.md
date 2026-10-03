@@ -18,8 +18,15 @@
   until `auth.retry()`, a sign-in, or a sign-out. This prevents a loop where each
   failure re-ran Router guards and each guard started a new refresh.
 
+- **Breaking:** a JWT with both `iat` and `exp`, and no explicit expiry, now
+  expires `exp - iat` seconds after auth receives it, instead of at absolute
+  `exp`. A browser clock that runs ahead of the server no longer makes fresh
+  tokens look expired and block sign-in. A JWT without `iat` still uses `exp`.
+
 ### Added
 
+- Tokens accept `expiresIn` (seconds, as in OAuth `expires_in`), counted from
+  receipt. Passing both `expiresIn` and `expiresAt` is rejected.
 - `auth.retry()` tries a failed refresh again. The README's protected layout
   example uses it in a Retry button.
 - The README shows how to treat every refresh failure as a sign-out by returning

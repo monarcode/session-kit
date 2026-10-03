@@ -8,24 +8,51 @@ import type {
 	AuthOptions,
 	AuthState,
 	Session,
-	Tokens,
+	SignInInput,
 	User,
 	UserInput,
 } from "./types.js";
 import {
 	isRecord,
+	receiveTokens,
 	runTask,
-	validateTokens,
 	validateUser,
+	type SessionTokens,
 } from "./validation.js";
 
-type InternalSession<U> = Tokens & { id: string; user: U };
+type InternalSession<U> = SessionTokens & { id: string; user: U };
 
 /** Starts work nobody awaits. Failures are already published to `state.error`. */
 function inBackground(work: Promise<unknown>) {
 	work.catch(() => {});
 }
 
+/**
+ * Creates the auth client. Put one in Router context per auth `name` per tab.
+ *
+ * Token expiry comes from `expiresAt`, `expiresIn`, or JWT claims; see `Tokens`.
+ * Prefer `expiresIn` so a wrong browser clock cannot expire tokens early.
+ *
+ * @example
+ * const auth = createAuth({
+ * 	name: "my-app",
+ * 	userSchema: z.object({ id: z.string(), email: z.string() }),
+ * 	refresh: createRefreshFn(async ({ refreshToken, signal }) => {
+ * 		const response = await fetch("/api/auth/refresh", {
+ * 			method: "POST",
+ * 			signal,
+ * 			headers: { "Content-Type": "application/json" },
+ * 			body: JSON.stringify({ refreshToken }),
+ * 		});
+ * 		if (response.status === 401) return null; // rejected: sign out
+ * 		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+ * 		const body = await response.json();
+ * 		return { accessToken: body.access_token, expiresIn: body.expires_in };
+ * 	}),
+ * });
+ *
+ * await auth.signIn({ accessToken, refreshToken, expiresIn: 900, user });
+ */
 export function createAuth<S extends StandardSchemaV1>(
 	options: AuthOptions<S>,
 ): AuthClient<UserInput<S>, User<S>> {
@@ -251,11 +278,11 @@ export function createAuth<S extends StandardSchemaV1>(
 		return promise;
 	}
 
-	async function signIn(input: Tokens & { user: I }) {
+	async function signIn(input: SignInInput<I>) {
 		advanceEpoch();
 		const expected = epoch;
 		try {
-			const tokens = validateTokens(input);
+			const tokens = receiveTokens(input);
 			if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now()) {
 				throw new AuthError(
 					"INVALID_SESSION",
@@ -366,7 +393,7 @@ export function createAuth<S extends StandardSchemaV1>(
 						signal,
 					});
 					if (value === null) return null;
-					const tokens = validateTokens(value);
+					const tokens = receiveTokens(value);
 					if (
 						tokens.expiresAt !== undefined &&
 						tokens.expiresAt < Date.now() + 5_000

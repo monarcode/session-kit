@@ -1,8 +1,7 @@
 import { AuthError } from "./errors.js";
-import type { Tokens } from "./types.js";
-import { isRecord, validateTokens } from "./validation.js";
+import { isRecord, validateTokens, type SessionTokens } from "./validation.js";
 
-export type StoredSession = Tokens & { id: string; user: unknown };
+export type StoredSession = SessionTokens & { id: string; user: unknown };
 
 export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 	if (

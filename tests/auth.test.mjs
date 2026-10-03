@@ -630,6 +630,72 @@ test("opaque tokens work and explicit expiry wins over JWT exp", async () => {
 	assert.ok((await auth.getSession()).expiresAt > Date.now());
 });
 
+const jwt = (claims) =>
+	`e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.x`;
+
+test("JWT lifetime is measured from receipt when the browser clock runs fast", async (t) => {
+	// Browser clock is 10 minutes ahead of the server that issued a 5-minute token.
+	const serverNow = 1_000_000;
+	t.mock.timers.enable({
+		apis: ["Date", "setTimeout"],
+		now: (serverNow + 600) * 1000,
+	});
+	const auth = client();
+	await auth.signIn(
+		input({ accessToken: jwt({ iat: serverNow, exp: serverNow + 300 }) }),
+	);
+	assert.equal((await auth.getSession()).expiresAt, Date.now() + 300_000);
+	t.mock.timers.reset();
+});
+
+test("JWT exp without iat stays absolute", async () => {
+	const auth = client();
+	const exp = Math.floor(Date.now() / 1000) + 300;
+	await auth.signIn(input({ accessToken: jwt({ exp }) }));
+	assert.equal((await auth.getSession()).expiresAt, exp * 1000);
+	await assert.rejects(
+		auth.signIn(input({ accessToken: jwt({ exp: 1 }) })),
+		code("INVALID_SESSION"),
+	);
+});
+
+test("expiresIn seconds are measured from receipt for sign-in and refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const auth = client({
+		refresh: async () => ({ accessToken: "access-2", expiresIn: 120 }),
+	});
+	await auth.signIn(input({ expiresIn: 60 }));
+	assert.equal((await auth.getSession()).expiresAt, 1_060_000);
+	t.mock.timers.tick(10_000);
+	const refreshed = await auth.refresh(await auth.getSession());
+	assert.equal(refreshed.expiresAt, 1_130_000);
+	t.mock.timers.reset();
+});
+
+test("expiresIn rejects invalid values and conflicts with expiresAt", async () => {
+	const auth = client();
+	for (const overrides of [
+		{ expiresIn: 0 },
+		{ expiresIn: "60" },
+		{ expiresIn: 60, expiresAt: Date.now() + 60_000 },
+	]) {
+		await assert.rejects(
+			auth.signIn(input(overrides)),
+			code("INVALID_SESSION"),
+		);
+	}
+});
+
+test("restoration keeps the saved expiry instead of re-deriving JWT lifetime", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000_000 });
+	const iat = 1_000_000;
+	await client().signIn(input({ accessToken: jwt({ iat, exp: iat + 300 }) }));
+	t.mock.timers.tick(200_000);
+	const restored = await client().getSession();
+	assert.equal(restored.expiresAt, 1_000_300_000);
+	t.mock.timers.reset();
+});
+
 test("Router connection is idempotent and token-only proactive refresh does not invalidate", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const auth = client({

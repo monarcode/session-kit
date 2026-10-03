@@ -11,7 +11,10 @@ import { connectAuth, useAuth, useAuthClient } from "../dist/react/index.js";
 const auth = createAuth({
 	name: "type-test",
 	userSchema: z.object({ id: z.string(), email: z.string() }),
-	refresh: createRefreshFn(async () => ({ accessToken: "new-token" })),
+	refresh: createRefreshFn(async () => ({
+		accessToken: "new-token",
+		expiresIn: 3600,
+	})),
 });
 const root = createRootRouteWithContext<{ auth: typeof auth }>()({});
 const router = createRouter({ routeTree: root, context: { auth } });

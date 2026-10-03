@@ -69,13 +69,13 @@ application; the package does not implement a login server:
 
 | Endpoint                 | Request                    | Successful response                                 |
 | ------------------------ | -------------------------- | --------------------------------------------------- |
-| `POST /api/auth/login`   | JSON `{ email, password }` | `{ accessToken, refreshToken?, expiresAt?, user }`  |
-| `POST /api/auth/refresh` | JSON `{ refreshToken }`    | `{ accessToken, refreshToken?, expiresAt?, user? }` |
+| `POST /api/auth/login`   | JSON `{ email, password }` | `{ accessToken, refreshToken?, expiresIn?, user }`  |
+| `POST /api/auth/refresh` | JSON `{ refreshToken }`    | `{ accessToken, refreshToken?, expiresIn?, user? }` |
 
-`expiresAt` is positive Unix time in **milliseconds**. In this example, a refresh
-401 means terminal rejection; other failures are operational. Adapt that mapping
-to your backend's contract. If it returns `expiresIn` in seconds, convert it to
-`Date.now() + expiresIn * 1000` before passing tokens to auth.
+`expiresIn` is the access token lifetime in **seconds**, as in OAuth
+`expires_in`. In this example, a refresh 401 means terminal rejection; other
+failures are operational. Adapt that mapping to your backend's contract. See
+[Refresh and errors](#refresh-and-errors) for other ways to supply expiry.
 
 ### 1. Define the user and client
 
@@ -95,7 +95,7 @@ export const userSchema = z.object({
 const tokensSchema = z.object({
 	accessToken: z.string().min(1),
 	refreshToken: z.string().min(1).optional(),
-	expiresAt: z.number().positive().optional(),
+	expiresIn: z.number().positive().optional(),
 });
 export const loginResponseSchema = tokensSchema.extend({ user: userSchema });
 const refreshResponseSchema = tokensSchema.extend({
@@ -535,7 +535,17 @@ refresh: createRefreshFn(async ({ refreshToken, signal }) => {
 }),
 ```
 
-Explicit `expiresAt` takes precedence over JWT `exp`. JWT decoding supplies only
+Expiry comes from the first of these that the tokens provide:
+
+1. `expiresAt`: Unix time in milliseconds, compared with the browser clock.
+2. `expiresIn`: lifetime in seconds, counted from when auth receives the tokens.
+3. A JWT's `exp - iat` lifetime, counted from receipt.
+4. A JWT's `exp` alone, compared with the browser clock.
+
+Browser clocks can be minutes off. Options 2 and 3 are unaffected; with 1 and 4,
+a fast clock can make fresh tokens look expired and block sign-in. Options 2 and
+3 assume newly issued tokens. `Session.expiresAt` is always on the browser
+clock, and restored sessions keep their saved expiry. JWT decoding supplies only
 a scheduling hint, without verifying signatures. Opaque tokens without expiry
 cannot be proactively refreshed. While connected, refresh is scheduled at the
 earlier of 60 seconds before expiry or halfway through the remaining lifetime.
