@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.1",
+	"version": "0.1.0-alpha.2",
 	"description": "Schema-driven browser sessions for React and TanStack Router",
 	"keywords": [
 		"auth",
