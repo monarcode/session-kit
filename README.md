@@ -594,6 +594,12 @@ the remaining data after storage becomes available.
   0.1.0-alpha.1 (`<name>:auth:tokens`, `<name>:auth:user`) are
   removed, not restored; users sign in once after upgrading. Tokens are never placed in cookies, so the browser does not send
   them automatically; `createAuthFetch` attaches the access token explicitly.
+- The `storage` option chooses where that entry lives. The default,
+  `webStorage()`, uses `localStorage`; `webStorage({ area: "session" })` keeps
+  a separate session per tab in `sessionStorage`, ending with the tab; and
+  `memoryStorage()` never persists it. Any object implementing `AuthStorage`
+  works, including storage whose operations return promises: auth applies
+  them one at a time, in the order it issued them.
 - `maxAge` is in seconds, defaults to 30 days, and renews on successful writes.
   Expired entries are removed on the next restoration. It does not extend backend
   token validity. A full storage quota fails visibly with `PERSISTENCE_FAILED`.
@@ -631,11 +637,11 @@ the remaining data after storage becomes available.
 
 ## Entry points
 
-| Import                         | Exports                                                                          |
-| ------------------------------ | -------------------------------------------------------------------------------- |
-| `@monarcode/session-kit`       | `createAuth`, `createRefreshFn`, `AuthError`, public auth types                  |
-| `@monarcode/session-kit/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types |
-| `@monarcode/session-kit/http`  | `createAuthFetch`                                                                |
+| Import                         | Exports                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `@monarcode/session-kit`       | `createAuth`, `createRefreshFn`, `webStorage`, `memoryStorage`, `AuthError`, public auth types |
+| `@monarcode/session-kit/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types               |
+| `@monarcode/session-kit/http`  | `createAuthFetch`                                                                              |
 
 Generated declarations retain schema inference and consumer Router registration.
 Declaration maps are disabled so declaration navigation targets installed `.d.ts`
@@ -656,7 +662,9 @@ React hook, package smoke, and release validation tests, then type-checks the
 tests, consumer declarations, and every marked TypeScript example in this README
 under NodeNext and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.
-After building, `pnpm test` runs runtime tests and `pnpm run test:docs` checks
+After building, `pnpm test` runs the runtime tests twice: `test:sync` with the
+default storage, and `test:async` with storage that settles every operation
+late, removals last. `pnpm run test:docs` checks
 README examples alone. The documentation checker extracts the examples into a
 temporary project; it does not execute them or contact the example backend.
 
@@ -670,8 +678,8 @@ CI and release workflows disable Husky and enforce these checks through
 `pnpm run check`.
 
 Tests are TypeScript files that Node runs directly, without a build step. Behavior
-tests are split by area (sessions, refresh, expiry, Router, HTTP, return URLs,
-and tabs) and share the browser mocks in `tests/helpers.ts`. They use mocked
+tests are split by area (sessions, storage, refresh, expiry, Router, HTTP,
+return URLs, and tabs) and share the browser mocks in `tests/helpers.ts`. They use mocked
 storage, HTTP, and timers, plus a real Router with memory history. The
 `development` condition enables its client redirect test.
 Hook tests mount React DOM in jsdom, including StrictMode subscription cleanup.

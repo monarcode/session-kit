@@ -5,7 +5,13 @@ import {
 import { z } from "zod";
 
 import { createAuthFetch } from "../dist/http/index.js";
-import { createAuth, createRefreshFn } from "../dist/index.js";
+import {
+	createAuth,
+	createRefreshFn,
+	memoryStorage,
+	webStorage,
+	type AuthStorage,
+} from "../dist/index.js";
 import { connectAuth, useAuth, useAuthClient } from "../dist/react/index.js";
 
 const auth = createAuth({
@@ -56,3 +62,24 @@ createAuth({
 	// @ts-expect-error Refresh results must match the schema input.
 	refresh: wrongRefresh,
 });
+
+// Storage may be synchronous or asynchronous.
+const asyncStorage: AuthStorage = {
+	get: async () => null,
+	set: async () => {},
+	remove: async () => {},
+};
+for (const storage of [
+	asyncStorage,
+	memoryStorage(),
+	webStorage({ area: "session" }),
+]) {
+	createAuth({
+		name: "stored",
+		userSchema: z.object({ id: z.string() }),
+		storage,
+	});
+}
+// @ts-expect-error Storage values are strings.
+const numericStorage: AuthStorage = { get: () => 1, set() {}, remove() {} };
+void numericStorage;

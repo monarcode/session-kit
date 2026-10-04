@@ -1,5 +1,6 @@
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
+import type { AuthStorage } from "./storage.js";
 import { validateTokens, type SessionTokens } from "./tokens.js";
 
 export type StoredSession = SessionTokens & { id: string; user: unknown };
@@ -9,7 +10,17 @@ const STORAGE_VERSION = 3;
 /** Thirty days. */
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
+/** Reports a storage failure, keeping auth's own errors as they are. */
+function storageError(cause: unknown): AuthError {
+	return cause instanceof AuthError
+		? cause
+		: new AuthError("PERSISTENCE_FAILED", "Auth storage is unavailable", {
+				cause,
+			});
+}
+
 export function createPersistence(
+	storage: AuthStorage,
 	name: string,
 	maxAge = DEFAULT_MAX_AGE_SECONDS,
 ) {
@@ -26,27 +37,24 @@ export function createPersistence(
 	const legacyKeys = [`${name}:auth:tokens`, `${name}:auth:user`];
 	const lockName = `${name}:auth:refresh`;
 
-	function storageOperation<T>(work: () => T): T {
-		try {
-			return work();
-		} catch (cause) {
-			if (cause instanceof AuthError) throw cause;
-			throw new AuthError(
-				"PERSISTENCE_FAILED",
-				"Auth storage is unavailable",
-				{
-					cause,
-				},
-			);
-		}
+	// Operations run one at a time, in the order requested. Storage that settles
+	// out of order still ends up holding the latest write, and a read sees every
+	// write requested before it.
+	let queue: Promise<unknown> = Promise.resolve();
+	function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+		const result = queue.then(operation).catch((cause: unknown) => {
+			throw storageError(cause);
+		});
+		queue = result.catch(() => {});
+		return result;
 	}
 
-	function clear() {
-		storageOperation(() => {
+	function clear(): Promise<void> {
+		return enqueue(async () => {
 			const failures: unknown[] = [];
 			for (const entry of [key, ...legacyKeys]) {
 				try {
-					localStorage.removeItem(entry);
+					await storage.remove(entry);
 				} catch (error) {
 					failures.push(error);
 				}
@@ -56,11 +64,11 @@ export function createPersistence(
 		});
 	}
 
-	function read(): StoredSession | null {
-		return storageOperation(() => {
-			const text = localStorage.getItem(key);
+	function read(): Promise<StoredSession | null> {
+		return enqueue(async () => {
+			const text = await storage.get(key);
 			if (!text) {
-				for (const entry of legacyKeys) localStorage.removeItem(entry);
+				for (const entry of legacyKeys) await storage.remove(entry);
 				return null;
 			}
 			try {
@@ -92,47 +100,37 @@ export function createPersistence(
 		});
 	}
 
-	function write(session: StoredSession) {
-		storageOperation(() => {
-			localStorage.setItem(
+	function write(session: StoredSession): Promise<void> {
+		return enqueue(async () => {
+			const persistUntil = Date.now() + maxAge * 1000;
+			await storage.set(
 				key,
-				JSON.stringify({
-					v: STORAGE_VERSION,
-					...session,
-					persistUntil: Date.now() + maxAge * 1000,
-				}),
+				JSON.stringify({ v: STORAGE_VERSION, ...session, persistUntil }),
+				{ expiresAt: persistUntil },
 			);
 		});
 	}
 
 	/**
-	 * Runs `work` while holding this auth name's lock, shared by every tab, so
-	 * only one tab at a time spends a refresh token. Without Web Locks it runs
-	 * directly. Aborting `signal` stops waiting for the lock. Once granted, the
-	 * lock is held until `work` settles, so `work` must bound its own duration.
+	 * Runs `work` while holding this auth name's lock, shared by every context
+	 * using the storage, so only one at a time spends a refresh token. Without a
+	 * lock it runs directly. Aborting `signal` stops waiting for the lock. Once
+	 * granted, the lock is held until `work` settles, so `work` must bound its
+	 * own duration.
 	 */
 	function exclusive<T>(
 		signal: AbortSignal,
 		work: () => Promise<T>,
 	): Promise<T> {
-		const locks = globalThis.navigator?.locks;
-		if (!locks) return work();
-		return locks.request(lockName, { signal }, work);
+		return storage.lock ? storage.lock(lockName, signal, work) : work();
 	}
 
 	/**
-	 * Calls `listener` when another tab saves or clears the session. Browsers
-	 * fire `storage` events only in other tabs, never in the tab that wrote.
-	 * Returns a function that stops listening.
+	 * Calls `listener` when another context saves or clears the session, and
+	 * returns a function that stops listening.
 	 */
 	function watch(listener: () => void): () => void {
-		if (typeof globalThis.addEventListener !== "function") return () => {};
-		const onStorage = (event: Event) => {
-			const changed = (event as StorageEvent).key;
-			if (changed === key || changed === null) listener();
-		};
-		globalThis.addEventListener("storage", onStorage);
-		return () => globalThis.removeEventListener("storage", onStorage);
+		return storage.subscribe?.(key, listener) ?? (() => {});
 	}
 
 	return { read, write, clear, exclusive, watch };

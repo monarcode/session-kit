@@ -1,6 +1,7 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import type { AuthError } from "./errors.js";
+import type { AuthStorage } from "./storage.js";
 
 /** What the user schema accepts: the shape passed to `signIn` and `updateUser`. */
 export type UserInput<S extends StandardSchemaV1> =
@@ -169,10 +170,14 @@ export type AuthClient<I, U> = {
 export type AuthOptions<S extends StandardSchemaV1> = {
 	/**
 	 * Storage namespace: letters, digits, `_` or `-`, up to 64 characters. Uses
-	 * the localStorage key `<name>:auth:session` and the Web Lock
-	 * `<name>:auth:refresh`.
+	 * the storage key `<name>:auth:session` and the lock `<name>:auth:refresh`.
 	 */
 	name: string;
+	/**
+	 * Where the session is saved. Default: `webStorage()`, which uses
+	 * `localStorage`. See `AuthStorage` to save it elsewhere.
+	 */
+	storage?: AuthStorage;
 	/**
 	 * Standard Schema V1 schema for the user. Its output must be a plain JSON
 	 * object and must validate again when restored from storage.

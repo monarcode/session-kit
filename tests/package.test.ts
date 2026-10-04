@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-import { createAuth, createRefreshFn } from "@monarcode/session-kit";
+import {
+	createAuth,
+	createRefreshFn,
+	memoryStorage,
+	webStorage,
+} from "@monarcode/session-kit";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { connectAuth, useAuth } from "@monarcode/session-kit/react";
 
@@ -12,6 +17,8 @@ test("all public entry points import without browser globals", () => {
 	for (const fn of [
 		createAuth,
 		createRefreshFn,
+		memoryStorage,
+		webStorage,
 		connectAuth,
 		useAuth,
 		createAuthFetch,

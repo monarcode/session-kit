@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-alpha.4
+
+### Added
+
+- `createAuth` accepts a `storage` option. `webStorage()`, the default, saves
+  the session in `localStorage`; `webStorage({ area: "session" })` uses
+  `sessionStorage`, so each tab has its own session that ends with the tab.
+  `memoryStorage()` keeps the session in memory only. Custom storage implements
+  the new `AuthStorage` type, and its operations may return promises.
+- Auth applies storage operations one at a time, in the order it issued them,
+  and re-checks its own session after every read. Storage that settles late or
+  out of order cannot erase a newer sign-in, and a profile update cannot
+  restore tokens this tab refreshed meanwhile.
+
 ## 0.1.0-alpha.3
 
 ### Added
