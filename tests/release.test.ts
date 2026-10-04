@@ -84,23 +84,18 @@ test("release requires unique, nonempty notes for the version", () => {
 	}
 });
 
+/** A fetch stand-in answering with only what `checkRegistry` reads. */
+const registry = (status: number, ok: boolean) =>
+	(async () => ({ status, ok })) as unknown as typeof fetch;
+
 test("registry preflight allows only an unpublished version and propagates failures", async () => {
-	await checkRegistry(manifest.version, async () => ({
-		status: 404,
-		ok: false,
-	}));
+	await checkRegistry(manifest.version, registry(404, false));
 	await assert.rejects(
-		checkRegistry(manifest.version, async () => ({
-			status: 200,
-			ok: true,
-		})),
+		checkRegistry(manifest.version, registry(200, true)),
 		/already published/,
 	);
 	await assert.rejects(
-		checkRegistry(manifest.version, async () => ({
-			status: 503,
-			ok: false,
-		})),
+		checkRegistry(manifest.version, registry(503, false)),
 		/HTTP 503/,
 	);
 	await assert.rejects(

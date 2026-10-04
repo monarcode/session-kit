@@ -21,9 +21,9 @@ test("all public entry points import without browser globals", () => {
 });
 
 test("each entry exports readable JavaScript and declarations", async () => {
-	const manifest = JSON.parse(
-		await readFile(new URL("package.json", packageRoot), "utf8"),
-	);
+	const manifest: {
+		exports: Record<string, { types: string; import: string }>;
+	} = JSON.parse(await readFile(new URL("package.json", packageRoot), "utf8"));
 	for (const [name, entry] of Object.entries(manifest.exports)) {
 		if (name === "./package.json") continue;
 		assert.equal(Object.keys(entry)[0], "types");
