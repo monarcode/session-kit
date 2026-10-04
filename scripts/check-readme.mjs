@@ -1,14 +1,16 @@
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile, mkdir, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const readme = await readFile(join(root, "README.md"), "utf8");
-const examples = [...readme.matchAll(
-	/<!-- file: (src\/[\w/-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
-)];
+const examples = [
+	...readme.matchAll(
+		/<!-- file: (src\/[\w/-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+	),
+];
 if (!examples.length) throw new Error("No README TypeScript examples found");
 const directory = await mkdtemp(join(root, "tests", ".readme-"));
 const require = createRequire(import.meta.url);
@@ -29,7 +31,9 @@ try {
 		"src/routes/_authenticated/index.tsx",
 	];
 	if (fileRoutePaths.every((path) => paths.has(path))) {
-		await writeFile(join(directory, "src/routeTree.gen.ts"), `
+		await writeFile(
+			join(directory, "src/routeTree.gen.ts"),
+			`
 import { Route as rootRoute } from "./routes/__root.js";
 import { Route as loginRouteImport } from "./routes/login.js";
 import { Route as authenticatedRouteImport } from "./routes/_authenticated.js";
@@ -80,26 +84,41 @@ declare module "@tanstack/react-router" {
     };
   }
 }
-`);
+`,
+		);
 	}
 	for (const [module, moduleResolution] of [
-		["NodeNext", "NodeNext"], ["ESNext", "Bundler"],
+		["NodeNext", "NodeNext"],
+		["ESNext", "Bundler"],
 	]) {
 		const config = join(directory, "tsconfig.json");
-		await writeFile(config, JSON.stringify({
-			compilerOptions: {
-				target: "ES2022", lib: ["ES2022", "DOM", "DOM.Iterable"],
-				module, moduleResolution, jsx: "react-jsx", strict: true,
-				noEmit: true, skipLibCheck: true, types: [],
-			},
-			include: ["src/**/*.ts", "src/**/*.tsx"],
-		}));
+		await writeFile(
+			config,
+			JSON.stringify({
+				compilerOptions: {
+					target: "ES2022",
+					lib: ["ES2022", "DOM", "DOM.Iterable"],
+					module,
+					moduleResolution,
+					jsx: "react-jsx",
+					strict: true,
+					noEmit: true,
+					skipLibCheck: true,
+					types: [],
+				},
+				include: ["src/**/*.ts", "src/**/*.tsx"],
+			}),
+		);
 		const result = spawnSync(process.execPath, [compiler, "-p", config], {
-			cwd: root, stdio: "inherit",
+			cwd: root,
+			stdio: "inherit",
 		});
 		if (result.error) throw result.error;
-		if (result.status !== 0) throw new Error(`README ${moduleResolution} check failed`);
-		console.log(`README: ${examples.length} examples passed (${moduleResolution})`);
+		if (result.status !== 0)
+			throw new Error(`README ${moduleResolution} check failed`);
+		console.log(
+			`README: ${examples.length} examples passed (${moduleResolution})`,
+		);
 	}
 } finally {
 	await rm(directory, { recursive: true, force: true });

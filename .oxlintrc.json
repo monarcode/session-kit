@@ -21,8 +21,7 @@
 		"**/routeTree.gen.ts",
 		"**/*.gen.ts",
 		"**/coverage/**",
-		"**/templates/**",
-		"**/scripts/**"
+		"**/templates/**"
 	],
 	"rules": {
 		"no-unused-vars": "off",

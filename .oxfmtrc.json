@@ -25,8 +25,7 @@
 		"routeTree.gen.ts",
 		"*.gen.ts",
 		"coverage",
-		"templates/",
-		"scripts/"
+		"templates/"
 	],
 	"sortImports": {
 		"customGroups": [
