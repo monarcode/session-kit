@@ -341,10 +341,10 @@ function SessionError({ error }: ErrorComponentProps) {
 
 function ProtectedLayout() {
   const { authVersion } = Route.useRouteContext();
-  const status = useAuth((state) => state.status);
+  // `user` is set exactly while the session is authenticated or refreshing.
+  const signedIn = useAuth((state) => state.user !== null);
   const version = useAuth((state) => state.version);
-  const usable = status === "authenticated" || status === "refreshing";
-  if (!usable || version !== authVersion) {
+  if (!signedIn || version !== authVersion) {
     return <p>Checking session…</p>;
   }
   return <Outlet key={authVersion} />;
@@ -617,7 +617,9 @@ the remaining data after storage becomes available.
   appear everywhere. Each of these changes `version` once, so guards rerun.
   A refresh elsewhere replaces this tab's tokens without changing `version`,
   and clears a refresh failure this tab was showing. An account change cancels
-  this tab's pending auth work with `SESSION_CHANGED`. Scope private Query data
+  this tab's pending auth work with `SESSION_CHANGED`. A user another tab saved
+  that this tab's schema rejects signs every tab out with
+  `USER_VALIDATION_FAILED`, as restoring it would. Scope private Query data
   to `sessionId`, so another tab's account switch cannot show the old account's
   data.
 - Query cache management belongs to your app. Scope private data to the sign-in
@@ -650,9 +652,9 @@ pnpm run check
 ```
 
 `check` runs Oxlint and Oxfmt checks, builds the package, runs the auth behavior,
-React hook, package smoke, and release validation tests, then checks consumer
-declarations and every marked TypeScript example in this README under NodeNext
-and Bundler resolution. The docs
+React hook, package smoke, and release validation tests, then type-checks the
+tests, consumer declarations, and every marked TypeScript example in this README
+under NodeNext and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.
 After building, `pnpm test` runs runtime tests and `pnpm run test:docs` checks
 README examples alone. The documentation checker extracts the examples into a
@@ -663,12 +665,15 @@ temporary project; it does not execute them or contact the example backend.
 do not modify files; lint errors or formatting differences block the commit,
 while lint warnings remain non-blocking. Run `pnpm run lint:fix` to apply safe
 lint fixes and `pnpm run format` to format eligible files. Both tools exclude
-generated files, build output, and `scripts/` using their committed configs.
+generated files and build output using their committed configs.
 CI and release workflows disable Husky and enforce these checks through
 `pnpm run check`.
 
-Behavior tests use mocked storage, HTTP, and timers, plus a real Router with
-memory history. The `development` condition enables its client redirect test.
+Tests are TypeScript files that Node runs directly, without a build step. Behavior
+tests are split by area (sessions, refresh, expiry, Router, HTTP, return URLs,
+and tabs) and share the browser mocks in `tests/helpers.ts`. They use mocked
+storage, HTTP, and timers, plus a real Router with memory history. The
+`development` condition enables its client redirect test.
 Hook tests mount React DOM in jsdom, including StrictMode subscription cleanup.
 These tests do not cover a live backend or a real browser. `pnpm pack` runs the
 package checks before creating a local tarball; it does not publish to npm.

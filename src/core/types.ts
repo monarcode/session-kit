@@ -75,13 +75,6 @@ export type RefreshFn<I = never> = (context: {
 	signal: AbortSignal;
 }) => Promise<RefreshResult<I>>;
 
-/** Types a refresh callback against a user schema before passing it to `createAuth`. */
-export function createRefreshFn<I = never>(
-	handler: RefreshFn<I>,
-): RefreshFn<I> {
-	return handler;
-}
-
 /** A frozen snapshot of the current credentials, from `getSession()`. */
 export type Session<U> = Readonly<{
 	/** Stable across refreshes and profile updates; new on every sign-in. */
@@ -96,21 +89,24 @@ export type Session<U> = Readonly<{
 	user: U;
 }>;
 
+/**
+ * - `initializing`: restoring the saved session has not finished.
+ * - `authenticated`: access is locally usable; `user` is set.
+ * - `refreshing`: a refresh is replacing expired or rejected access; `user` stays visible.
+ * - `unauthenticated`: no session; sign-in is needed.
+ * - `unavailable`: restoration failed, or the credentials cannot supply usable access.
+ */
+export type AuthStatus =
+	| "initializing"
+	| "authenticated"
+	| "refreshing"
+	| "unauthenticated"
+	| "unavailable";
+
 /** Reactive auth snapshot. Tokens are intentionally excluded. */
 export type AuthState<U> = Readonly<{
-	/**
-	 * - `initializing`: restoring the saved session has not finished.
-	 * - `authenticated`: access is locally usable; `user` is set.
-	 * - `refreshing`: a refresh is replacing expired or rejected access; `user` stays visible.
-	 * - `unauthenticated`: no session; sign-in is needed.
-	 * - `unavailable`: restoration failed, or the credentials cannot supply usable access.
-	 */
-	status:
-		| "initializing"
-		| "authenticated"
-		| "refreshing"
-		| "unauthenticated"
-		| "unavailable";
+	/** See `AuthStatus`. */
+	status: AuthStatus;
 	/** The validated user while `authenticated` or `refreshing`; otherwise `null`. */
 	user: U | null;
 	/** The current `Session.id`, or `null` when signed out. */

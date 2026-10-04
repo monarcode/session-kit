@@ -1,13 +1,14 @@
 export { createAuth } from "./core/client.js";
-export { createRefreshFn } from "./core/types.js";
+export { createRefreshFn } from "./core/refresh.js";
 export { AuthError } from "./core/errors.js";
 
-export type { AuthErrorCode } from "./core/errors.js";
+export type { AuthErrorCode, AuthErrorOptions } from "./core/errors.js";
 
 export type {
 	AuthClient,
 	AuthOptions,
 	AuthState,
+	AuthStatus,
 	Tokens,
 	SignInInput,
 	Session,
