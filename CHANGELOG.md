@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.0-alpha.3
+
+### Added
+
+- `AuthStatus` names the union of `AuthState.status` values, for helpers and
+  exhaustive `switch` statements.
+
+### Changed
+
+- Reactive state uses Nano Stores instead of TanStack Store. Apps on Router
+  versions that depend on an older TanStack Store no longer bundle two copies.
+- **Breaking:** `AuthClient.state` is typed by this package rather than
+  `@tanstack/store`. `state.subscribe` takes a listener function; observer
+  objects (`{ next, error, complete }`) are no longer accepted.
+- **Breaking:** the `AuthError` constructor takes schema `issues` in its options
+  object, `new AuthError(code, message, { cause, issues })`, instead of as a
+  fourth argument. The new `AuthErrorOptions` type describes those options.
+
+### Fixed
+
+- A `state.subscribe` listener that throws no longer makes `signIn` (or another
+  operation) reject after it succeeded, or stops later listeners, including
+  `useAuth` and `connectAuth`, from seeing the change. The error is rethrown
+  asynchronously instead.
+- When another tab saves a user that this tab's schema rejects, for example
+  while two deploys are open, this tab no longer keeps the old profile with no
+  error. It signs every tab out with `USER_VALIDATION_FAILED`, as restoring
+  that session would.
+
 ## 0.1.0-alpha.2
 
 ### Changed

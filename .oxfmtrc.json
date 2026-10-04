@@ -11,6 +11,12 @@
 	"endOfLine": "lf",
 	"bracketSpacing": true,
 	"insertFinalNewline": true,
+	"overrides": [
+		{
+			"files": ["*.md"],
+			"options": { "useTabs": false, "tabWidth": 2 }
+		}
+	],
 	"ignorePatterns": [
 		"node_modules",
 		"dist",
@@ -19,8 +25,7 @@
 		"routeTree.gen.ts",
 		"*.gen.ts",
 		"coverage",
-		"templates/",
-		"scripts/"
+		"templates/"
 	],
 	"sortImports": {
 		"customGroups": [

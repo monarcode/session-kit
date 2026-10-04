@@ -1,38 +1,69 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
-import { Store } from "@tanstack/store";
+import { atom } from "nanostores";
 
-import { AuthError, authError, sessionChanged } from "./errors.js";
+import { AuthError, toAuthError, sessionChanged } from "./errors.js";
 import { createPersistence, type StoredSession } from "./persistence.js";
+import { obtainTokens } from "./refresh.js";
+import { runTask } from "./task.js";
+import { setLongTimeout, proactiveRefreshDelay } from "./timers.js";
+import { receiveTokens, tokensOf, type SessionTokens } from "./tokens.js";
 import type {
 	AuthClient,
 	AuthOptions,
 	AuthState,
+	AuthStatus,
 	Session,
 	SignInInput,
 	User,
 	UserInput,
 } from "./types.js";
-import {
-	isRecord,
-	receiveTokens,
-	runTask,
-	validateUser,
-	type SessionTokens,
-} from "./validation.js";
+import { sameUser, validateUser } from "./user.js";
 
 type InternalSession<U> = SessionTokens & { id: string; user: U };
 
-/** Starts work nobody awaits. Failures are already published to `state.error`. */
+/** How a refresh ended, inside the cross-tab lock. */
+type RefreshOutcome<U> =
+	/** Storage no longer holds this tab's session; follow what it holds. */
+	| { kind: "stale" }
+	/** The backend rejected the refresh token, so the session ended. */
+	| { kind: "signedOut" }
+	| { kind: "installed"; session: Session<U> };
+
+/**
+ * Starts work nobody awaits. Its failures are already published to
+ * `state.error`, or are `SESSION_CHANGED` from work a newer session superseded.
+ */
 function inBackground(work: Promise<unknown>) {
 	work.catch(() => {});
 }
 
-function tokensOf(saved: SessionTokens): SessionTokens {
-	return {
-		accessToken: saved.accessToken,
-		refreshToken: saved.refreshToken,
-		expiresAt: saved.expiresAt,
-	};
+/** Statuses that expose `user`. Adding a status will not compile until it is listed. */
+const SIGNED_IN = {
+	initializing: false,
+	authenticated: true,
+	refreshing: true,
+	unauthenticated: false,
+	unavailable: false,
+} satisfies Record<AuthStatus, boolean>;
+
+/**
+ * Statuses that guards treat alike, so moving between them leaves `version`
+ * unchanged. A refresh keeps the user signed in for guards.
+ */
+const GUARD_STATUS = {
+	initializing: "initializing",
+	authenticated: "authenticated",
+	refreshing: "authenticated",
+	unauthenticated: "unauthenticated",
+	unavailable: "unavailable",
+} satisfies Record<AuthStatus, AuthStatus>;
+
+/** Whether `error` means the saved session itself is unusable, not storage. */
+function rejectsSaved(error: AuthError) {
+	return (
+		error.code === "INVALID_SESSION" ||
+		error.code === "USER_VALIDATION_FAILED"
+	);
 }
 
 /**
@@ -67,39 +98,49 @@ export function createAuth<S extends StandardSchemaV1>(
 	type U = User<S>;
 	type I = UserInput<S>;
 	const persistence = createPersistence(options.name, options.maxAge);
-	const store = new Store<AuthState<U>>({
+	const store = atom<AuthState<U>>({
 		status: "initializing",
 		user: null,
 		sessionId: null,
 		version: 0,
 		error: null,
 	});
-	let session: InternalSession<U> | null = null;
+	// Lifecycle. `epoch` increments whenever the session is replaced or pending
+	// work is cancelled; async work captures it and stops once it changes, and
+	// `controller` aborts that work. Timers and the storage watch run only
+	// while `mounts`, the number of Router connections, is above zero.
 	let epoch = 0;
-	let profileVersion = 0;
-	let profileIntent = 0;
 	let controller = new AbortController();
-	let initialization: Promise<void> | undefined;
+	let mounts = 0;
+	let unwatch: (() => void) | undefined;
+	let cancelExpiry: (() => void) | undefined;
+	let cancelProactive: (() => void) | undefined;
+
+	// Restoration. `session` is meaningful only once `initialized` is true;
+	// `initialization` is the restore in progress, if any.
+	let session: InternalSession<U> | null = null;
 	let initialized = false;
-	let rejectedToken: string | undefined;
+	let initialization: Promise<void> | undefined;
+
+	// Refresh. `flight` is the single refresh in progress. `failure` is its
+	// error, kept only while access is unusable, so `getSession` rethrows it
+	// until `retry()`. `refreshAttempted` allows one proactive attempt per
+	// installed token. `rejectedToken` is an access token the backend refused.
 	let flight: Promise<Session<U> | null> | undefined;
 	let failure: AuthError | undefined;
-	let mounts = 0;
-	let proactiveTimer: ReturnType<typeof setTimeout> | undefined;
-	let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 	let refreshAttempted = false;
-	let unwatch: (() => void) | undefined;
+	let rejectedToken: string | undefined;
+
+	// Profile. `profileVersion` changes whenever the user is replaced, so a
+	// refresh that began earlier cannot overwrite it. `profileIntent` orders
+	// overlapping `updateUser` calls; only the latest commits.
+	let profileVersion = 0;
+	let profileIntent = 0;
 
 	const valid = () =>
 		session !== null &&
 		session.accessToken !== rejectedToken &&
 		(session.expiresAt === undefined || session.expiresAt > Date.now());
-
-	/** Whether another tab's saved tokens can be used instead of refreshing. */
-	const usable = (tokens: SessionTokens) =>
-		tokens.accessToken !== rejectedToken &&
-		(tokens.expiresAt === undefined ||
-			tokens.expiresAt >= Date.now() + 5_000);
 
 	/**
 	 * Reads what storage holds for session `id`. Every tab shares it, so another
@@ -128,29 +169,23 @@ export function createAuth<S extends StandardSchemaV1>(
 		});
 	}
 
+	function deriveStatus(): AuthStatus {
+		if (!initialized) return "initializing";
+		if (!session) return "unauthenticated";
+		if (valid()) return "authenticated";
+		return flight ? "refreshing" : "unavailable";
+	}
+
 	function publish(error: AuthError | null = null) {
-		const status = !initialized
-			? "initializing"
-			: !session
-				? "unauthenticated"
-				: valid()
-					? "authenticated"
-					: flight
-						? "refreshing"
-						: "unavailable";
-		const user =
-			status === "authenticated" || status === "refreshing"
-				? session!.user
-				: null;
+		const status = deriveStatus();
+		const user = SIGNED_IN[status] ? session!.user : null;
 		const sessionId = session?.id ?? null;
 		const previous = store.get();
-		const guardStatus = (value: AuthState<U>["status"]) =>
-			value === "refreshing" ? "authenticated" : value;
 		const changed =
-			guardStatus(previous.status) !== guardStatus(status) ||
+			GUARD_STATUS[previous.status] !== GUARD_STATUS[status] ||
 			previous.user !== user ||
 			previous.sessionId !== sessionId;
-		store.setState(() =>
+		store.set(
 			Object.freeze({
 				status,
 				user,
@@ -162,8 +197,9 @@ export function createAuth<S extends StandardSchemaV1>(
 	}
 
 	function stopTimers() {
-		clearTimeout(proactiveTimer);
-		clearTimeout(expiryTimer);
+		cancelExpiry?.();
+		cancelProactive?.();
+		cancelExpiry = cancelProactive = undefined;
 	}
 
 	function schedule() {
@@ -171,27 +207,15 @@ export function createAuth<S extends StandardSchemaV1>(
 		if (!mounts || !session || session.expiresAt === undefined) return;
 		const remaining = session.expiresAt - Date.now();
 		if (remaining <= 0) return;
-		expiryTimer = setTimeout(
-			() => {
-				if (valid()) {
-					schedule();
-					return;
-				}
-				inBackground(getSession());
-			},
-			Math.min(remaining, 2_147_483_647),
-		);
+		cancelExpiry = setLongTimeout(() => {
+			// The browser clock may have moved while the timer waited.
+			if (valid()) schedule();
+			else inBackground(getSession());
+		}, remaining);
 		if (options.refresh && session.refreshToken && !refreshAttempted) {
-			const delay = remaining - Math.min(60_000, remaining / 2);
-			proactiveTimer = setTimeout(
-				() => {
-					if (delay > 2_147_483_647) {
-						schedule();
-						return;
-					}
-					inBackground(refreshSession(snapshot(), false));
-				},
-				Math.min(delay, 2_147_483_647),
+			cancelProactive = setLongTimeout(
+				() => inBackground(refreshSession(snapshot(), false)),
+				proactiveRefreshDelay(remaining),
 			);
 		}
 	}
@@ -220,11 +244,27 @@ export function createAuth<S extends StandardSchemaV1>(
 		publish(error);
 	}
 
+	/** Signs out every tab because the saved session cannot be used, then clears it. */
+	function discardSaved(error: AuthError) {
+		forget(error);
+		try {
+			persistence.clear();
+		} catch (cleanup) {
+			const failure = new AuthError(
+				"PERSISTENCE_FAILED",
+				"Could not clear the invalid saved session",
+				{ cause: new AggregateError([error, cleanup]) },
+			);
+			publish(failure);
+			throw failure;
+		}
+	}
+
 	function commit(next: InternalSession<U>) {
 		try {
 			persistence.write(next);
 		} catch (cause) {
-			const error = authError(
+			const error = toAuthError(
 				"PERSISTENCE_FAILED",
 				"Could not save the session",
 				cause,
@@ -284,7 +324,10 @@ export function createAuth<S extends StandardSchemaV1>(
 	/**
 	 * Applies what another tab saved: a sign-out, a sign-in or account switch, a
 	 * refresh, or a profile update. Reads storage rather than the event, so a
-	 * late or repeated event cannot apply stale data.
+	 * late or repeated event cannot apply stale data. Unreadable or malformed
+	 * storage is ignored, keeping this tab's session; a well-formed session
+	 * whose user this tab's schema rejects signs every tab out, as restoring
+	 * it would.
 	 */
 	async function sync() {
 		if (!initialized) {
@@ -302,30 +345,49 @@ export function createAuth<S extends StandardSchemaV1>(
 			return;
 		}
 		if (stored.id !== session?.id) return reload();
-		const sameUser =
-			JSON.stringify(stored.user) === JSON.stringify(session.user);
-		const sameTokens =
+		const userUnchanged = sameUser(stored.user, session.user);
+		const tokensUnchanged =
 			stored.accessToken === session.accessToken &&
 			stored.refreshToken === session.refreshToken &&
 			stored.expiresAt === session.expiresAt;
-		if (sameUser && sameTokens) return;
+		if (userUnchanged && tokensUnchanged) return;
 		const expected = epoch;
-		const user = sameUser
-			? session.user
-			: await runTask(
-					() => validateUser(options.userSchema, stored.user),
-					controller.signal,
-				);
+		let user: U;
+		try {
+			user = userUnchanged
+				? session.user
+				: await runTask(
+						() => validateUser(options.userSchema, stored.user),
+						controller.signal,
+					);
+		} catch (cause) {
+			if (epoch !== expected) return;
+			const error = toAuthError(
+				"PERSISTENCE_FAILED",
+				"Could not apply another tab's session",
+				cause,
+			);
+			if (error.code === "SESSION_CHANGED") return;
+			if (!rejectsSaved(error)) {
+				publish(error);
+				return;
+			}
+			// A newer save arrived during validation; its own event applies it.
+			const current = latest(stored.id);
+			if (!current || !sameUser(current.user, stored.user)) return;
+			discardSaved(error);
+			return;
+		}
 		const now = latest(stored.id);
 		if (
 			epoch !== expected ||
 			!now ||
 			now.accessToken !== stored.accessToken ||
-			JSON.stringify(now.user) !== JSON.stringify(stored.user)
+			!sameUser(now.user, stored.user)
 		)
 			return;
-		if (!sameTokens) refreshAttempted = false;
-		if (!sameUser) profileVersion++;
+		if (!tokensUnchanged) refreshAttempted = false;
+		if (!userUnchanged) profileVersion++;
 		install({ ...tokensOf(stored), id: stored.id, user });
 	}
 
@@ -360,35 +422,22 @@ export function createAuth<S extends StandardSchemaV1>(
 				schedule();
 			} catch (cause) {
 				assertEpoch(expected);
-				const error = authError(
+				const error = toAuthError(
 					"PERSISTENCE_FAILED",
 					"Could not restore auth",
 					cause,
 				);
-				if (
-					error.code === "INVALID_SESSION" ||
-					error.code === "USER_VALIDATION_FAILED"
-				) {
-					forget(error);
-					try {
-						persistence.clear();
-					} catch (cleanup) {
-						const failure = new AuthError(
-							"PERSISTENCE_FAILED",
-							"Could not clear the invalid saved session",
-							{ cause: new AggregateError([error, cleanup]) },
-						);
-						publish(failure);
-						throw failure;
-					}
+				if (rejectsSaved(error)) {
+					discardSaved(error);
 					return;
 				}
-				store.setState((previous) => ({
+				const previous = store.get();
+				store.set({
 					...previous,
 					status: "unavailable",
 					error,
 					version: previous.version + 1,
-				}));
+				});
 				throw error;
 			}
 		})();
@@ -428,7 +477,7 @@ export function createAuth<S extends StandardSchemaV1>(
 			profileVersion++;
 			commit({ ...tokens, id: crypto.randomUUID(), user });
 		} catch (cause) {
-			throw authError(
+			throw toAuthError(
 				"USER_VALIDATION_FAILED",
 				"Could not accept the user",
 				cause,
@@ -449,7 +498,7 @@ export function createAuth<S extends StandardSchemaV1>(
 		try {
 			persistence.clear();
 		} catch (cause) {
-			const error = authError(
+			const error = toAuthError(
 				"PERSISTENCE_FAILED",
 				"Could not clear the saved session",
 				cause,
@@ -514,58 +563,22 @@ export function createAuth<S extends StandardSchemaV1>(
 		failure = undefined;
 		const promise = (async () => {
 			try {
-				const outcome = await persistence.exclusive(lifecycle, async () => {
+				const run = async (): Promise<RefreshOutcome<U>> => {
 					assertEpoch(expected);
 					const stored = latest(current.id);
-					if (stored === null) return "stale" as const;
-					const savedUser = (saved: StoredSession) =>
-						JSON.stringify(saved.user) === JSON.stringify(current.user)
-							? current.user
-							: validateUser(options.userSchema, saved.user);
-					const result = await runTask(async (signal) => {
-						if (
-							stored &&
-							stored.accessToken !== current.accessToken &&
-							usable(stored)
-						) {
-							return {
-								tokens: tokensOf(stored),
-								user: await savedUser(stored),
-								adopted: true,
-							};
-						}
-						const refreshToken =
-							stored?.refreshToken ?? current.refreshToken!;
-						const value = await refreshHandler({
-							refreshToken,
-							signal,
-						});
-						if (value === null) return null;
-						const tokens = receiveTokens(value);
-						if (
-							tokens.expiresAt !== undefined &&
-							tokens.expiresAt < Date.now() + 5_000
-						) {
-							throw new AuthError(
-								"INVALID_SESSION",
-								"Refreshed access token must last at least five seconds",
-							);
-						}
-						const user =
-							isRecord(value) && value.user !== undefined
-								? await validateUser(options.userSchema, value.user)
-								: stored
-									? await savedUser(stored)
-									: undefined;
-						return {
-							tokens: {
-								...tokens,
-								refreshToken: tokens.refreshToken ?? refreshToken,
-							},
-							user,
-							adopted: false,
-						};
-					}, lifecycle);
+					if (stored === null) return { kind: "stale" };
+					const result = await runTask(
+						(signal) =>
+							obtainTokens({
+								current,
+								stored,
+								refresh: refreshHandler,
+								userSchema: options.userSchema,
+								rejectedToken,
+								signal,
+							}),
+						lifecycle,
+					);
 					assertEpoch(expected);
 					if (result === null) {
 						const after = latest(current.id);
@@ -574,9 +587,9 @@ export function createAuth<S extends StandardSchemaV1>(
 							(after &&
 								after.accessToken !== (stored ?? current).accessToken)
 						)
-							return "stale" as const;
+							return { kind: "stale" };
 						await signOut();
-						return null;
+						return { kind: "signedOut" };
 					}
 					if (
 						result.tokens.expiresAt !== undefined &&
@@ -599,13 +612,21 @@ export function createAuth<S extends StandardSchemaV1>(
 							: session!.user;
 					rejectedToken = undefined;
 					refreshAttempted = false;
-					if (latest(current.id) === null) return "stale" as const;
+					if (latest(current.id) === null) return { kind: "stale" };
 					const next = { ...result.tokens, id: current.id, user };
 					if (result.adopted && profile === profileVersion) install(next);
 					else commit(next);
-					return snapshot();
-				});
-				return outcome === "stale" ? followStorage(current.id) : outcome;
+					return { kind: "installed", session: snapshot() };
+				};
+				const outcome = await persistence.exclusive(lifecycle, run);
+				switch (outcome.kind) {
+					case "stale":
+						return followStorage(current.id);
+					case "signedOut":
+						return null;
+					case "installed":
+						return outcome.session;
+				}
 			} catch (cause) {
 				if (epoch !== expected) {
 					if (
@@ -616,7 +637,7 @@ export function createAuth<S extends StandardSchemaV1>(
 					throw sessionChanged();
 				}
 				flight = undefined;
-				const error = authError(
+				const error = toAuthError(
 					"REFRESH_FAILED",
 					"Could not refresh the session",
 					cause,
@@ -670,7 +691,23 @@ export function createAuth<S extends StandardSchemaV1>(
 	}
 
 	return {
-		state: { get: store.get, subscribe: store.subscribe },
+		state: {
+			get: store.get,
+			// `listen`, not `subscribe`: nanostores' `subscribe` also calls the
+			// listener immediately with the current value.
+			subscribe: (listener) => ({
+				unsubscribe: store.listen((value) => {
+					try {
+						listener(value);
+					} catch (error) {
+						// A failing listener must not interrupt the auth operation that notified it.
+						queueMicrotask(() => {
+							throw error;
+						});
+					}
+				}),
+			}),
+		},
 		signIn,
 		signOut,
 		updateUser,

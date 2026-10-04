@@ -1,15 +1,46 @@
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 
-import { act, createElement as h, StrictMode } from "react";
+import {
+	act,
+	createElement as h,
+	StrictMode,
+	type FunctionComponent,
+} from "react";
 
-import { createAuth } from "@monarcode/session-kit";
+import {
+	createAuth,
+	type AuthClient,
+	type AuthState,
+} from "@monarcode/session-kit";
+import type { AnyRouter } from "@tanstack/react-router";
 import { JSDOM } from "jsdom";
+import type { Root } from "react-dom/client";
 import { z } from "zod";
 
-let dom, roots, originalGlobals;
-let createRoot, RouterContextProvider, createRouter, createRootRoute;
-let createMemoryHistory, useAuth, useAuthClient;
+const userSchema = z.object({ id: z.string(), email: z.string() });
+type TestUser = z.infer<typeof userSchema>;
+type Client = AuthClient<TestUser, TestUser>;
+/** The hooks as typed for this test's user; it registers no Router types. */
+type Hooks = {
+	useAuth: {
+		(): AuthState<TestUser>;
+		<T>(selector: (state: AuthState<TestUser>) => T): T;
+	};
+	useAuthClient: () => Client;
+};
+type RouterModule = typeof import("@tanstack/react-router");
+
+let dom: JSDOM;
+let roots: Set<Root>;
+let originalGlobals: Map<string, PropertyDescriptor | undefined>;
+let createRoot: typeof import("react-dom/client").createRoot;
+let RouterContextProvider: RouterModule["RouterContextProvider"];
+let createRouter: RouterModule["createRouter"];
+let createRootRoute: RouterModule["createRootRoute"];
+let createMemoryHistory: RouterModule["createMemoryHistory"];
+let useAuth: Hooks["useAuth"];
+let useAuthClient: Hooks["useAuthClient"];
 
 beforeEach(async () => {
 	dom = new JSDOM("<!doctype html><html><body></body></html>", {
@@ -44,7 +75,8 @@ beforeEach(async () => {
 		createRootRoute,
 		createMemoryHistory,
 	} = await import("@tanstack/react-router"));
-	({ useAuth, useAuthClient } = await import("@monarcode/session-kit/react"));
+	({ useAuth, useAuthClient } =
+		(await import("@monarcode/session-kit/react")) as unknown as Hooks);
 });
 
 afterEach(async () => {
@@ -56,18 +88,18 @@ afterEach(async () => {
 		dom.window.close();
 		for (const [name, descriptor] of originalGlobals) {
 			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
-			else delete globalThis[name];
+			else delete (globalThis as Record<string, unknown>)[name];
 		}
 	}
 });
 
 const user = { id: "alice", email: "alice@example.com" };
-const signIn = (auth) => auth.signIn({ accessToken: "access-1", user });
+const signIn = (auth: Client) => auth.signIn({ accessToken: "access-1", user });
 
 async function fixture() {
 	const auth = createAuth({
 		name: "react-test",
-		userSchema: z.object({ id: z.string(), email: z.string() }),
+		userSchema,
 	});
 	await auth.getSession();
 	const router = createRouter({
@@ -78,12 +110,16 @@ async function fixture() {
 	return { auth, router };
 }
 
-async function mount(router, Component, { strict = false } = {}) {
+async function mount(
+	router: AnyRouter,
+	Component: FunctionComponent,
+	{ strict = false } = {},
+) {
 	const container = document.createElement("div");
 	document.body.append(container);
 	const root = createRoot(container);
 	roots.add(root);
-	const tree = h(RouterContextProvider, { router }, h(Component));
+	const tree = h(RouterContextProvider, { router, children: h(Component) });
 	await act(async () =>
 		root.render(strict ? h(StrictMode, null, tree) : tree),
 	);
@@ -133,7 +169,7 @@ test("useAuth selector skips unrelated updates and renders changed selections", 
 	await act(async () =>
 		auth.updateUser({ ...user, email: "updated@example.com" }),
 	);
-	assert.equal(auth.state.get().user.email, "updated@example.com");
+	assert.equal(auth.state.get().user?.email, "updated@example.com");
 	assert.equal(renders, before);
 	assert.equal(container.textContent, "alice");
 	await act(async () =>
@@ -148,9 +184,23 @@ test("useAuth selector skips unrelated updates and renders changed selections", 
 	assert.equal(container.textContent, "none");
 });
 
+test("useAuth accepts inline selectors that return new objects", async () => {
+	const { auth, router } = await fixture();
+	function Status() {
+		const { status } = useAuth((state) => ({ status: state.status }));
+		return h("output", null, status);
+	}
+	const { container } = await mount(router, Status, { strict: true });
+	assert.equal(container.textContent, "unauthenticated");
+	await act(async () => signIn(auth));
+	assert.equal(container.textContent, "authenticated");
+	await act(async () => auth.signOut());
+	assert.equal(container.textContent, "unauthenticated");
+});
+
 test("useAuthClient retains the Router client across reactive renders", async () => {
 	const { auth, router } = await fixture();
-	const clients = [];
+	const clients: Client[] = [];
 	function Consumer() {
 		const state = useAuth();
 		clients.push(useAuthClient());

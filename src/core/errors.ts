@@ -8,19 +8,30 @@ export type AuthErrorCode =
 	| "SESSION_CHANGED"
 	| "UNAUTHENTICATED";
 
+export type AuthErrorOptions = ErrorOptions & {
+	/** Schema issues behind a `USER_VALIDATION_FAILED` error. */
+	issues?: readonly StandardSchemaV1.Issue[];
+};
+
 export class AuthError extends Error {
+	readonly issues?: readonly StandardSchemaV1.Issue[];
+
 	constructor(
 		readonly code: AuthErrorCode,
 		message: string,
-		options?: ErrorOptions,
-		readonly issues?: readonly StandardSchemaV1.Issue[],
+		options?: AuthErrorOptions,
 	) {
 		super(message, options);
 		this.name = "AuthError";
+		this.issues = options?.issues;
 	}
 }
 
-export function authError(
+/**
+ * Returns `cause` unchanged when it is already an `AuthError`; otherwise wraps
+ * it with `code`. The code is a fallback, not a guarantee.
+ */
+export function toAuthError(
 	code: AuthErrorCode,
 	message: string,
 	cause: unknown,

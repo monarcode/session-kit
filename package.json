@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.2",
+	"version": "0.1.0-alpha.3",
 	"description": "Schema-driven browser sessions for React and TanStack Router",
 	"keywords": [
 		"auth",
@@ -57,22 +57,24 @@
 		"build": "pnpm run clean && tsc -p tsconfig.json",
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
-		"test": "node --conditions=development --test tests/*.test.mjs",
-		"test:types": "tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
+		"test": "node --conditions=development --test tests/*.test.ts",
+		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
 		"test:docs": "node scripts/check-readme.mjs",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"
 	},
 	"dependencies": {
 		"@standard-schema/spec": "^1.1.0",
-		"@tanstack/react-store": "^0.11.1",
-		"@tanstack/store": "^0.11.1"
+		"nanostores": "^1.5.4",
+		"use-sync-external-store": "^1.6.0"
 	},
 	"devDependencies": {
 		"@tanstack/react-router": "1.170.38",
+		"@types/jsdom": "21.1.7",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
 		"@types/react-dom": "19.3.0",
+		"@types/use-sync-external-store": "1.7.0",
 		"husky": "9.1.7",
 		"jsdom": "26.1.0",
 		"oxfmt": "0.71.0",

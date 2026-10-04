@@ -2,21 +2,21 @@
 
 Schema-driven browser authentication for React and TanStack Router.
 
-**Version: 0.1.0-alpha.0. Early development; not ready for production.**
+**Version: 0.1.0-alpha.3. Early development; not ready for production.**
 
-One auth client lives in Router context. TanStack Store makes its state reactive,
+One auth client lives in Router context. Nano Stores makes its state reactive,
 with no separate AuthProvider. Tokens and the validated user profile are stored
 together in one localStorage entry.
 
 ## Installation
 
-Install the alpha using the `next` distribution tag:
+Alpha releases are published to the `latest` distribution tag:
 
 ```sh
-pnpm add @monarcode/session-kit@next
+pnpm add @monarcode/session-kit
 ```
 
-Pin `@monarcode/session-kit@0.1.0-alpha.0` to use this exact version. Alpha
+Pin `@monarcode/session-kit@0.1.0-alpha.3` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
 The declared peer ranges are React and React DOM `^19.0.0`, and TanStack React
@@ -29,7 +29,9 @@ pnpm add react@19.3.0 react-dom@19.3.0 @tanstack/react-router@1.170.38 zod@4.4.3
 ```
 
 Zod is optional: any compatible Standard Schema V1 implementation can describe
-users. The package is ESM-only, sets no Node.js engine requirement, and is checked with
+users. The package is ESM-only and sets no Node.js engine requirement, though its
+Nano Stores dependency declares Node.js 20 or 22 and newer for server-side
+rendering and test runners. It is checked with
 TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
 have not been verified. Browser use requires modern APIs including
 `structuredClone`, `AbortController`, and `crypto.randomUUID`.
@@ -55,10 +57,10 @@ import react from "@vitejs/plugin-react";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 export default defineConfig({
-	plugins: [
-		tanstackRouter({ target: "react", autoCodeSplitting: true }),
-		react(),
-	],
+  plugins: [
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
+    react(),
+  ],
 });
 ```
 
@@ -89,36 +91,36 @@ import { z } from "zod";
 import { createAuth, createRefreshFn } from "@monarcode/session-kit";
 
 export const userSchema = z.object({
-	id: z.string(),
-	email: z.string(),
+  id: z.string(),
+  email: z.string(),
 });
 
 const tokensSchema = z.object({
-	accessToken: z.string().min(1),
-	refreshToken: z.string().min(1).optional(),
-	expiresIn: z.number().positive().optional(),
+  accessToken: z.string().min(1),
+  refreshToken: z.string().min(1).optional(),
+  expiresIn: z.number().positive().optional(),
 });
 export const loginResponseSchema = tokensSchema.extend({ user: userSchema });
 const refreshResponseSchema = tokensSchema.extend({
-	user: userSchema.optional(),
+  user: userSchema.optional(),
 });
 
 export const auth = createAuth({
-	name: "my-app",
-	userSchema,
-	refresh: createRefreshFn(async ({ refreshToken, signal }) => {
-		// Use plain fetch here to avoid recursive auth refresh.
-		const response = await fetch("/api/auth/refresh", {
-			method: "POST",
-			signal,
-			redirect: "error",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ refreshToken }),
-		});
-		if (response.status === 401) return null;
-		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
-		return refreshResponseSchema.parse(await response.json());
-	}),
+  name: "my-app",
+  userSchema,
+  refresh: createRefreshFn(async ({ refreshToken, signal }) => {
+    // Use plain fetch here to avoid recursive auth refresh.
+    const response = await fetch("/api/auth/refresh", {
+      method: "POST",
+      signal,
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (response.status === 401) return null;
+    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+    return refreshResponseSchema.parse(await response.json());
+  }),
 });
 
 export type AppAuth = typeof auth;
@@ -138,46 +140,46 @@ frozen; use `updateUser` to replace it.
 
 ```tsx
 import {
-	createRootRouteWithContext,
-	Outlet,
-	useRouter,
+  createRootRouteWithContext,
+  Outlet,
+  useRouter,
 } from "@tanstack/react-router";
 import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 import type { AppAuth } from "../auth.js";
 
 export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
-	component: Root,
+  component: Root,
 });
 
 function Root() {
-	const error = useAuth((state) => state.error);
-	const auth = useAuthClient();
-	const router = useRouter();
+  const error = useAuth((state) => state.error);
+  const auth = useAuthClient();
+  const router = useRouter();
 
-	return (
-		<>
-			{error && (
-				<div role="alert">
-					<p>{error.message}</p>
-					{error.code === "PERSISTENCE_FAILED" && (
-						<button
-							onClick={() => {
-								void auth
-									.signOut()
-									.then(() => router.invalidate())
-									.catch(() => {
-										// signOut keeps the failure in reactive state for this banner.
-									});
-							}}
-						>
-							Clear saved session again
-						</button>
-					)}
-				</div>
-			)}
-			<Outlet />
-		</>
-	);
+  return (
+    <>
+      {error && (
+        <div role="alert">
+          <p>{error.message}</p>
+          {error.code === "PERSISTENCE_FAILED" && (
+            <button
+              onClick={() => {
+                void auth
+                  .signOut()
+                  .then(() => router.invalidate())
+                  .catch(() => {
+                    // The failure stays in state.error for this banner.
+                  });
+              }}
+            >
+              Clear saved session again
+            </button>
+          )}
+        </div>
+      )}
+      <Outlet />
+    </>
+  );
 }
 ```
 
@@ -198,75 +200,72 @@ import { safeReturnTo, useAuthClient } from "@monarcode/session-kit/react";
 import { loginResponseSchema } from "../auth.js";
 
 export const Route = createFileRoute("/login")({
-	validateSearch: (search: Record<string, unknown>) => ({
-		redirectTo: safeReturnTo(search.redirectTo),
-	}),
-	beforeLoad: async ({ context, search }) => {
-		if (await context.auth.getSession()) {
-			throw redirect({ href: safeReturnTo(search.redirectTo) });
-		}
-	},
-	component: Login,
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirectTo: safeReturnTo(search.redirectTo),
+  }),
+  beforeLoad: async ({ context, search }) => {
+    if (await context.auth.getSession()) {
+      throw redirect({ href: safeReturnTo(search.redirectTo) });
+    }
+  },
+  component: Login,
 });
 
 function Login() {
-	const auth = useAuthClient();
-	const router = useRouter();
-	const { redirectTo } = Route.useSearch();
-	const [error, setError] = useState("");
-	const [pending, setPending] = useState(false);
+  const auth = useAuthClient();
+  const router = useRouter();
+  const { redirectTo } = Route.useSearch();
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-	async function submit(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-		const form = new FormData(event.currentTarget);
-		setPending(true);
-		setError("");
-		try {
-			const response = await fetch("/api/auth/login", {
-				method: "POST",
-				redirect: "error",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					email: form.get("email"),
-					password: form.get("password"),
-				}),
-			});
-			if (!response.ok)
-				throw new Error(`Sign-in failed (${response.status})`);
-			await auth.signIn(loginResponseSchema.parse(await response.json()));
-			await router.navigate({
-				href: safeReturnTo(redirectTo),
-				replace: true,
-			});
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : "Could not sign in");
-		} finally {
-			setPending(false);
-		}
-	}
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setPending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        redirect: "error",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: form.get("email"),
+          password: form.get("password"),
+        }),
+      });
+      if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+      await auth.signIn(loginResponseSchema.parse(await response.json()));
+      await router.navigate({
+        href: safeReturnTo(redirectTo),
+        replace: true,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not sign in");
+    } finally {
+      setPending(false);
+    }
+  }
 
-	return (
-		<form onSubmit={submit}>
-			<h1>Sign in</h1>
-			<label>
-				Email{" "}
-				<input name="email" type="email" autoComplete="username" required />
-			</label>
-			<label>
-				Password{" "}
-				<input
-					name="password"
-					type="password"
-					autoComplete="current-password"
-					required
-				/>
-			</label>
-			{error && <p role="alert">{error}</p>}
-			<button disabled={pending}>
-				{pending ? "Signing in…" : "Sign in"}
-			</button>
-		</form>
-	);
+  return (
+    <form onSubmit={submit}>
+      <h1>Sign in</h1>
+      <label>
+        Email{" "}
+        <input name="email" type="email" autoComplete="username" required />
+      </label>
+      <label>
+        Password{" "}
+        <input
+          name="password"
+          type="password"
+          autoComplete="current-password"
+          required
+        />
+      </label>
+      {error && <p role="alert">{error}</p>}
+      <button disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
+    </form>
+  );
 }
 ```
 
@@ -286,69 +285,69 @@ routes inherit the guard without adding `authenticated` to the URL.
 
 ```tsx
 import {
-	createFileRoute,
-	Outlet,
-	redirect,
-	type ErrorComponentProps,
+  createFileRoute,
+  Outlet,
+  redirect,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { AuthError } from "@monarcode/session-kit";
 import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated")({
-	beforeLoad: async ({ context, location }) => {
-		const session = await context.auth.getSession();
-		if (!session)
-			throw redirect({
-				to: "/login",
-				search: { redirectTo: location.href },
-			});
-		if (!context.auth.isCurrent(session)) {
-			throw new AuthError(
-				"SESSION_CHANGED",
-				"Session changed; retry navigation",
-			);
-		}
-		// Return public context only. Never put the token-bearing session here.
-		return {
-			sessionId: session.id,
-			authVersion: context.auth.state.get().version,
-		};
-	},
-	errorComponent: SessionError,
-	component: ProtectedLayout,
+  beforeLoad: async ({ context, location }) => {
+    const session = await context.auth.getSession();
+    if (!session)
+      throw redirect({
+        to: "/login",
+        search: { redirectTo: location.href },
+      });
+    if (!context.auth.isCurrent(session)) {
+      throw new AuthError(
+        "SESSION_CHANGED",
+        "Session changed; retry navigation",
+      );
+    }
+    // Return public context only. Never put the token-bearing session here.
+    return {
+      sessionId: session.id,
+      authVersion: context.auth.state.get().version,
+    };
+  },
+  errorComponent: SessionError,
+  component: ProtectedLayout,
 });
 
 function SessionError({ error }: ErrorComponentProps) {
-	const auth = useAuthClient();
-	const retrying = useAuth((state) => state.status === "refreshing");
-	if (!(error instanceof AuthError) || error.code !== "REFRESH_FAILED") {
-		return <p role="alert">Something went wrong.</p>;
-	}
-	return (
-		<div role="alert">
-			<p>We couldn't reach the sign-in service.</p>
-			<button
-				disabled={retrying}
-				onClick={() => {
-					// A repeated failure is also published to state.error.
-					void auth.retry().catch(() => {});
-				}}
-			>
-				{retrying ? "Retrying…" : "Retry"}
-			</button>
-		</div>
-	);
+  const auth = useAuthClient();
+  const retrying = useAuth((state) => state.status === "refreshing");
+  if (!(error instanceof AuthError) || error.code !== "REFRESH_FAILED") {
+    return <p role="alert">Something went wrong.</p>;
+  }
+  return (
+    <div role="alert">
+      <p>We couldn't reach the sign-in service.</p>
+      <button
+        disabled={retrying}
+        onClick={() => {
+          // A repeated failure is also published to state.error.
+          void auth.retry().catch(() => {});
+        }}
+      >
+        {retrying ? "Retrying…" : "Retry"}
+      </button>
+    </div>
+  );
 }
 
 function ProtectedLayout() {
-	const { authVersion } = Route.useRouteContext();
-	const status = useAuth((state) => state.status);
-	const version = useAuth((state) => state.version);
-	const usable = status === "authenticated" || status === "refreshing";
-	if (!usable || version !== authVersion) {
-		return <p>Checking session…</p>;
-	}
-	return <Outlet key={authVersion} />;
+  const { authVersion } = Route.useRouteContext();
+  // `user` is set exactly while the session is authenticated or refreshing.
+  const signedIn = useAuth((state) => state.user !== null);
+  const version = useAuth((state) => state.version);
+  if (!signedIn || version !== authVersion) {
+    return <p>Checking session…</p>;
+  }
+  return <Outlet key={authVersion} />;
 }
 ```
 
@@ -367,27 +366,27 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export const Route = createFileRoute("/_authenticated/")({
-	component: Home,
+  component: Home,
 });
 
 function Home() {
-	const user = useAuth((state) => state.user);
-	const auth = useAuthClient();
+  const user = useAuth((state) => state.user);
+  const auth = useAuthClient();
 
-	return (
-		<main>
-			<h1>Welcome, {user?.email}</h1>
-			<button
-				onClick={() =>
-					void auth.signOut().catch(() => {
-						// The root error banner displays persistence failures.
-					})
-				}
-			>
-				Sign out
-			</button>
-		</main>
-	);
+  return (
+    <main>
+      <h1>Welcome, {user?.email}</h1>
+      <button
+        onClick={() =>
+          void auth.signOut().catch(() => {
+            // The root error banner displays persistence failures.
+          })
+        }
+      >
+        Sign out
+      </button>
+    </main>
+  );
 }
 ```
 
@@ -404,37 +403,35 @@ import { auth } from "./auth.js";
 import { routeTree } from "./routeTree.gen.js";
 
 export const router = createRouter({
-	routeTree,
-	context: { auth },
-	defaultPreload: "intent",
-	defaultPreloadStaleTime: 0,
-	defaultPendingComponent: () => <p>Loading…</p>,
-	defaultErrorComponent: ({ error }) => <RouteError error={error} />,
+  routeTree,
+  context: { auth },
+  defaultPreload: "intent",
+  defaultPreloadStaleTime: 0,
+  defaultPendingComponent: () => <p>Loading…</p>,
+  defaultErrorComponent: ({ error }) => <RouteError error={error} />,
 });
 
 function RouteError({ error }: { error: unknown }) {
-	const router = useRouter();
-	return (
-		<div role="alert">
-			<p>
-				{error instanceof Error
-					? error.message
-					: "Could not load this page"}
-			</p>
-			<button onClick={() => void router.invalidate().catch(console.error)}>
-				Retry
-			</button>
-		</div>
-	);
+  const router = useRouter();
+  return (
+    <div role="alert">
+      <p>
+        {error instanceof Error ? error.message : "Could not load this page"}
+      </p>
+      <button onClick={() => void router.invalidate().catch(console.error)}>
+        Retry
+      </button>
+    </div>
+  );
 }
 
 // Call once beside the stable Router, outside component rendering.
 export const disconnectAuth = connectAuth(router);
 
 declare module "@tanstack/react-router" {
-	interface Register {
-		router: typeof router;
-	}
+  interface Register {
+    router: typeof router;
+  }
 }
 ```
 
@@ -442,6 +439,11 @@ declare module "@tanstack/react-router" {
 Keep it in the consuming app. `useAuth()` reads the full reactive snapshot;
 `useAuth(selector)` subscribes to a selected value. `useAuthClient()` returns the
 stable client for actions.
+
+Outside React, `auth.state.get()` returns the current snapshot and
+`auth.state.subscribe(listener)` reports later changes, not the current value; it
+returns `{ unsubscribe }`. A listener that throws does not interrupt auth: its
+error is rethrown asynchronously, where error reporting can capture it.
 
 `connectAuth` initializes auth, starts expiry timers, clears inactive Router
 cache entries on guard-relevant changes, and queues Router revalidation. Call
@@ -462,14 +464,14 @@ import { router, disconnectAuth } from "./router.js";
 
 const root = createRoot(document.getElementById("root")!);
 root.render(
-	<StrictMode>
-		<RouterProvider router={router} />
-	</StrictMode>,
+  <StrictMode>
+    <RouterProvider router={router} />
+  </StrictMode>,
 );
 
 export function dispose() {
-	root.unmount();
-	disconnectAuth();
+  root.unmount();
+  disconnectAuth();
 }
 ```
 
@@ -486,17 +488,17 @@ import { createAuthFetch } from "@monarcode/session-kit/http";
 import { auth, userSchema } from "./auth.js";
 
 export async function updateEmail(email: string) {
-	await auth.updateUser(async () => {
-		const request = createAuthFetch(auth, `${location.origin}/api/`);
-		const response = await request("profile", {
-			method: "PATCH",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ email }),
-		});
-		if (!response.ok)
-			throw new Error(`Profile update failed (${response.status})`);
-		return userSchema.parse(await response.json());
-	});
+  await auth.updateUser(async () => {
+    const request = createAuthFetch(auth, `${location.origin}/api/`);
+    const response = await request("profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok)
+      throw new Error(`Profile update failed (${response.status})`);
+    return userSchema.parse(await response.json());
+  });
 }
 ```
 
@@ -536,11 +538,11 @@ refresh callback rather than throwing:
 
 ```ts
 refresh: createRefreshFn(async ({ refreshToken, signal }) => {
-	try {
-		return await requestRefresh(refreshToken, signal);
-	} catch {
-		return null;
-	}
+  try {
+    return await requestRefresh(refreshToken, signal);
+  } catch {
+    return null;
+  }
 }),
 ```
 
@@ -615,7 +617,9 @@ the remaining data after storage becomes available.
   appear everywhere. Each of these changes `version` once, so guards rerun.
   A refresh elsewhere replaces this tab's tokens without changing `version`,
   and clears a refresh failure this tab was showing. An account change cancels
-  this tab's pending auth work with `SESSION_CHANGED`. Scope private Query data
+  this tab's pending auth work with `SESSION_CHANGED`. A user another tab saved
+  that this tab's schema rejects signs every tab out with
+  `USER_VALIDATION_FAILED`, as restoring it would. Scope private Query data
   to `sessionId`, so another tab's account switch cannot show the old account's
   data.
 - Query cache management belongs to your app. Scope private data to the sign-in
@@ -647,10 +651,10 @@ pnpm install
 pnpm run check
 ```
 
-`check` runs Oxlint and Oxfmt checks, builds the package, runs 45 auth behavior tests, five React hook tests,
-four package smoke tests, and five release validation tests, then checks consumer
-declarations and every marked TypeScript example in this README under NodeNext
-and Bundler resolution. The docs
+`check` runs Oxlint and Oxfmt checks, builds the package, runs the auth behavior,
+React hook, package smoke, and release validation tests, then type-checks the
+tests, consumer declarations, and every marked TypeScript example in this README
+under NodeNext and Bundler resolution. The docs
 checker supplies the generated route tree that a consumer's Router plugin owns.
 After building, `pnpm test` runs runtime tests and `pnpm run test:docs` checks
 README examples alone. The documentation checker extracts the examples into a
@@ -661,12 +665,15 @@ temporary project; it does not execute them or contact the example backend.
 do not modify files; lint errors or formatting differences block the commit,
 while lint warnings remain non-blocking. Run `pnpm run lint:fix` to apply safe
 lint fixes and `pnpm run format` to format eligible files. Both tools exclude
-generated files, build output, and `scripts/` using their committed configs.
+generated files and build output using their committed configs.
 CI and release workflows disable Husky and enforce these checks through
 `pnpm run check`.
 
-Behavior tests use mocked storage, HTTP, and timers, plus a real Router with
-memory history. The `development` condition enables its client redirect test.
+Tests are TypeScript files that Node runs directly, without a build step. Behavior
+tests are split by area (sessions, refresh, expiry, Router, HTTP, return URLs,
+and tabs) and share the browser mocks in `tests/helpers.ts`. They use mocked
+storage, HTTP, and timers, plus a real Router with memory history. The
+`development` condition enables its client redirect test.
 Hook tests mount React DOM in jsdom, including StrictMode subscription cleanup.
 These tests do not cover a live backend or a real browser. `pnpm pack` runs the
 package checks before creating a local tarball; it does not publish to npm.
@@ -678,8 +685,9 @@ The separate manual alpha release workflow is documented in
 
 ### Try a local build
 
-Run `pnpm pack` in this repository, then install the resulting tarball in your app:
+Run `pnpm pack` in this repository, then install the resulting tarball in your
+app. Replace `<version>` with the version in `package.json`:
 
 ```sh
-pnpm add /absolute/path/to/monarcode-session-kit-0.1.0-alpha.0.tgz
+pnpm add /absolute/path/to/monarcode-session-kit-<version>.tgz
 ```

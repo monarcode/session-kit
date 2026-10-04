@@ -1,9 +1,18 @@
 import { AuthError } from "./errors.js";
-import { isRecord, validateTokens, type SessionTokens } from "./validation.js";
+import { isRecord } from "./json.js";
+import { validateTokens, type SessionTokens } from "./tokens.js";
 
 export type StoredSession = SessionTokens & { id: string; user: unknown };
 
-export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
+/** Format of the saved entry; entries in any other format are not restored. */
+const STORAGE_VERSION = 3;
+/** Thirty days. */
+const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+export function createPersistence(
+	name: string,
+	maxAge = DEFAULT_MAX_AGE_SECONDS,
+) {
 	if (
 		!/^[a-zA-Z0-9_-]{1,64}$/.test(name) ||
 		!Number.isSafeInteger(maxAge) ||
@@ -58,7 +67,7 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 				const saved: unknown = JSON.parse(text);
 				if (
 					!isRecord(saved) ||
-					saved.v !== 3 ||
+					saved.v !== STORAGE_VERSION ||
 					typeof saved.id !== "string" ||
 					!saved.id ||
 					!("user" in saved) ||
@@ -88,7 +97,7 @@ export function createPersistence(name: string, maxAge = 30 * 24 * 60 * 60) {
 			localStorage.setItem(
 				key,
 				JSON.stringify({
-					v: 3,
+					v: STORAGE_VERSION,
 					...session,
 					persistUntil: Date.now() + maxAge * 1000,
 				}),
