@@ -3,7 +3,14 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { AuthError } from "./errors.js";
 import type { StoredSession } from "./persistence.js";
 import { decodeJwtPayload, type SessionTokens } from "./tokens.js";
-import { sameUser, toUser, validateNewUser, validateUser } from "./user.js";
+import {
+	isThenable,
+	sameUser,
+	toUser,
+	validateNewUser,
+	validateUser,
+	validateUserNow,
+} from "./user.js";
 
 /**
  * A user read from the access token's claims, made by `fromAccessToken`.
@@ -81,6 +88,11 @@ export type UserResolver<U> = {
 	receive: (accessToken: string, input: unknown) => Promise<U>;
 	/** The user for a saved session. */
 	restore: (saved: StoredSession) => Promise<U>;
+	/**
+	 * The user for a saved session, when it can be found synchronously;
+	 * otherwise `undefined`, and `restore` decides.
+	 */
+	restoreNow: (saved: StoredSession) => U | undefined;
 	/** Whether `saved` holds the same user as `current`, without validating it. */
 	unchanged: (
 		saved: StoredSession,
@@ -98,6 +110,7 @@ export function resolveUserSource(source: UserSource): UserResolver<unknown> {
 			saved: true,
 			receive: (_, input) => validateNewUser(source, input),
 			restore: (saved) => validateUser(source, saved.user),
+			restoreNow: (saved) => validateUserNow(source, saved.user),
 			unchanged: (saved, current) => sameUser(saved.user, current.user),
 		};
 	}
@@ -128,10 +141,28 @@ export function resolveUserSource(source: UserSource): UserResolver<unknown> {
 			);
 		}
 	};
+	const deriveNow = (accessToken: string) => {
+		try {
+			const decoded = source.decode(accessToken);
+			if (isThenable(decoded)) {
+				// Asynchronous decode: drop this attempt; derive runs it again.
+				void Promise.resolve(decoded).catch(() => {});
+				return undefined;
+			}
+			const claims = validateUserNow(
+				source.claims as StandardSchemaV1,
+				decoded,
+			);
+			return claims === undefined ? undefined : toUser(source.map(claims));
+		} catch {
+			return undefined;
+		}
+	};
 	return {
 		saved: false,
 		receive: (accessToken) => derive(accessToken),
 		restore: (saved) => derive(saved.accessToken),
+		restoreNow: (saved) => deriveNow(saved.accessToken),
 		unchanged: (saved, current) => saved.accessToken === current.accessToken,
 	};
 }

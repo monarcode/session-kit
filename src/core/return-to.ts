@@ -44,3 +44,15 @@ export function safeReturnTo(
 		return "/";
 	}
 }
+
+/**
+ * The sign-in URL for `loginPath`, with `?redirectTo=` set to `returnTo` so
+ * the user comes back after signing in.
+ */
+export function loginHref(loginPath: string, returnTo: string): string {
+	if (!loginPath.startsWith("/"))
+		throw new Error(`loginPath must start with "/": ${loginPath}`);
+	const login = new URL(loginPath, "https://auth.invalid");
+	login.searchParams.set("redirectTo", returnTo);
+	return login.pathname + login.search + login.hash;
+}

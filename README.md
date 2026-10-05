@@ -1,6 +1,6 @@
 # @monarcode/session-kit
 
-Schema-driven browser authentication for React and TanStack Router.
+Schema-driven browser authentication for React, TanStack Router, and React Router.
 
 **Version: 0.1.0-alpha.3. Early development; not ready for production.**
 
@@ -20,9 +20,10 @@ pnpm add @monarcode/session-kit
 Pin `@monarcode/session-kit@0.1.0-alpha.3` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
-Both peer dependencies are optional, so install only what you use: React
-`^18.0.0 || ^19.0.0` for `/react` and `/tanstack-router`, and TanStack React
-Router `^1.127.0` for `/tanstack-router`. The package itself never imports
+All peer dependencies are optional, so install only what you use: React
+`^18.0.0 || ^19.0.0` for the React entry points, TanStack React Router
+`^1.127.0` for `/tanstack-router`, and React Router `^7.0.0 || ^8.0.0` for
+`/react-router`. The package itself never imports
 React DOM. CI checks both the oldest and the newest versions in those ranges.
 This example uses Zod for its Standard Schema implementation:
 
@@ -43,8 +44,8 @@ have not been verified. Auth needs `AbortController`; it uses
 Replace the dependency with `@monarcode/session-kit`, and
 change import prefixes from `@monarcode/tanstack-auth` to
 `@monarcode/session-kit`, then follow the breaking changes in the
-[release notes](./CHANGELOG.md). TanStack Router is the supported router in
-this alpha; additional adapters are planned for later development.
+[release notes](./CHANGELOG.md). TanStack Router and React Router are
+supported; server rendering and Expo are planned for later development.
 
 ## Quick start
 
@@ -526,6 +527,134 @@ export function dispose() {
 }
 ```
 
+## React Router
+
+`@monarcode/session-kit/react-router` supports React Router 7 and 8 in
+declarative mode, data mode, and framework mode with `ssr: false`. Create
+hooks for your client and render `AuthProvider` around the router; it mounts
+the client, so expiry timers and tab sync run while the app is rendered.
+
+`src/react-router/hooks.ts`
+
+<!-- file: src/react-router/hooks.ts -->
+
+```ts
+import { createAuthHooks } from "@monarcode/session-kit/react";
+import type { AppAuth } from "../auth.js";
+
+export const { AuthProvider, useAuth, useAuthClient } =
+  createAuthHooks<AppAuth>();
+```
+
+In declarative mode, `SessionOutlet` is the guard. It renders child routes
+while someone is signed in, `pending` while the saved session is restored, and
+sends signed-out users to `loginPath` with `?redirectTo=` set to where they
+were going. Child routes are keyed by session, so nothing from one account
+stays mounted for the next.
+
+`src/react-router/declarative.tsx`
+
+<!-- file: src/react-router/declarative.tsx -->
+
+```tsx
+import { BrowserRouter, Route, Routes } from "react-router";
+import { SessionOutlet } from "@monarcode/session-kit/react-router";
+import { auth } from "../auth.js";
+import { AuthProvider, useAuth } from "./hooks.js";
+
+function Home() {
+  const email = useAuth((state) => state.user?.email);
+  return <h1>Welcome, {email}</h1>;
+}
+
+export function App() {
+  return (
+    <AuthProvider client={auth}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<p>Sign in here</p>} />
+          <Route
+            element={
+              <SessionOutlet
+                loginPath="/login"
+                pending={<p>Checking session…</p>}
+                unavailable={({ retry }) => (
+                  <button onClick={retry}>Retry</button>
+                )}
+              />
+            }
+          >
+            <Route index element={<Home />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
+```
+
+In data mode, guard routes in their loaders with `requireSession`, which
+redirects signed-out users the same way and returns `{ session }`. Call
+`useAuthRevalidation()` once in the root layout so loaders re-run after a
+sign-in, sign-out, account switch, or profile update. `redirectIfSignedIn`
+keeps signed-in users off the sign-in page. A failed refresh reaches the
+route's error element, which can call `auth.retry()`. Framework mode with
+`ssr: false` uses the same functions in `clientLoader`.
+
+`src/react-router/data.tsx`
+
+<!-- file: src/react-router/data.tsx -->
+
+```tsx
+import { createBrowserRouter, Outlet, RouterProvider } from "react-router";
+import {
+  redirectIfSignedIn,
+  requireSession,
+  SessionOutlet,
+  useAuthRevalidation,
+} from "@monarcode/session-kit/react-router";
+import { auth } from "../auth.js";
+import { AuthProvider } from "./hooks.js";
+
+function Root() {
+  useAuthRevalidation();
+  return <Outlet />;
+}
+
+const router = createBrowserRouter([
+  {
+    element: <Root />,
+    children: [
+      {
+        path: "/login",
+        loader: async ({ request }) => {
+          const redirectTo = new URL(request.url).searchParams.get(
+            "redirectTo",
+          );
+          await redirectIfSignedIn(auth, { redirectTo });
+          return null;
+        },
+        element: <p>Sign in here</p>,
+      },
+      {
+        loader: ({ request }) =>
+          requireSession(auth, { request, loginPath: "/login" }),
+        element: <SessionOutlet loginPath="/login" />,
+        children: [{ index: true, element: <h1>Home</h1> }],
+      },
+    ],
+  },
+]);
+
+export function App() {
+  return (
+    <AuthProvider client={auth}>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  );
+}
+```
+
 ## Profile updates and authenticated requests
 
 `updateUser` replaces the complete profile. For an asynchronous update, use its
@@ -615,13 +744,13 @@ There is one proactive attempt per installed token, with no recurring retry loop
 An attempt cancelled by unmounting or by a new sign-in does not count.
 Validation and refresh work have a 15-second deadline.
 
-| State status      | Meaning                                                                 |
-| ----------------- | ----------------------------------------------------------------------- |
-| `initializing`    | Restoration has not completed.                                          |
-| `authenticated`   | Access is locally usable; `user` is available.                          |
-| `refreshing`      | A refresh is replacing expired or rejected access; `user` is available. |
-| `unauthenticated` | No session; sign-in is needed.                                          |
-| `unavailable`     | Restoration failed or current credentials cannot supply usable access.  |
+| State status      | Meaning                                                                                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `initializing`    | Restoration has not completed. With synchronous storage and schemas, mounting restores at once, so this state is never rendered. |
+| `authenticated`   | Access is locally usable; `user` is available.                                                                                   |
+| `refreshing`      | A refresh is replacing expired or rejected access; `user` is available.                                                          |
+| `unauthenticated` | No session; sign-in is needed.                                                                                                   |
+| `unavailable`     | Restoration failed or current credentials cannot supply usable access.                                                           |
 
 `state.error` is an `AuthError` or `null`; user data is hidden outside the
 `authenticated` and `refreshing` states. Error codes are `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
@@ -698,6 +827,7 @@ the remaining data after storage becomes available.
 | `@monarcode/session-kit`                 | `createAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, public auth types |
 | `@monarcode/session-kit/react`           | `createAuthHooks` and hook types                                                                               |
 | `@monarcode/session-kit/tanstack-router` | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth`      |
+| `@monarcode/session-kit/react-router`    | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                                 |
 | `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                              |
 
 Generated declarations retain schema inference and consumer Router registration.

@@ -852,9 +852,33 @@ export function createAuth<Src extends UserSource>(
 		return refreshSession(session, false);
 	}
 
+	/**
+	 * Restores at once when storage and validation both answer synchronously,
+	 * so state is ready before the first render. Anything asynchronous, or
+	 * any failure, is left to `initialize()`, which also reports errors.
+	 */
+	function restoreNow() {
+		if (initialized || initialization) return;
+		const stored = persistence.readNow();
+		if (stored === undefined) return;
+		let user: U | undefined;
+		if (stored) {
+			user = users.restoreNow(stored);
+			if (user === undefined) return;
+		}
+		session = stored
+			? { ...tokensOf(stored), id: stored.id, user: user! }
+			: null;
+		revision++;
+		initialized = true;
+		// An expired session publishes when its refresh starts, as in initialize().
+		if (!session || valid()) publish();
+	}
+
 	function mount() {
 		if (mounts++ === 0)
 			unwatch = persistence.watch(() => inBackground(sync()));
+		restoreNow();
 		inBackground(resolveSession());
 		schedule();
 		let active = true;

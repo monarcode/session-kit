@@ -1,122 +1,42 @@
 import assert from "node:assert/strict";
-import { test, beforeEach, afterEach } from "node:test";
+import { beforeEach, test } from "node:test";
 
-import * as React from "react";
 import {
 	createElement as h,
-	StrictMode,
 	useEffect,
 	type FunctionComponent,
 	type ReactNode,
 } from "react";
 
-import {
-	createAuth,
-	webStorage,
-	type AuthClient,
-} from "@monarcode/session-kit";
 import type { AuthHooks } from "@monarcode/session-kit/react";
 import type { AnyRouter } from "@tanstack/react-router";
-import { JSDOM } from "jsdom";
-import type { Root } from "react-dom/client";
-import { z } from "zod";
 
-const userSchema = z.object({ id: z.string(), email: z.string() });
-type TestUser = z.infer<typeof userSchema>;
-type Client = AuthClient<TestUser, TestUser>;
+import {
+	act,
+	dom,
+	newClient,
+	render,
+	settle,
+	signIn,
+	user,
+	useDom,
+	type Client,
+} from "./dom.ts";
+
 type ReactBinding = typeof import("@monarcode/session-kit/react");
 type RouterBinding = typeof import("@monarcode/session-kit/tanstack-router");
 type RouterModule = typeof import("@tanstack/react-router");
 
-/** React's `act`, which React 18.0–18.2 exported only from test utilities. */
-let act: (callback: () => unknown) => Promise<void>;
-let dom: JSDOM;
-let roots: Set<Root>;
-let originalGlobals: Map<string, PropertyDescriptor | undefined>;
-let createRoot: typeof import("react-dom/client").createRoot;
 let routerModule: RouterModule;
 let binding: ReactBinding;
 let routerBinding: RouterBinding;
 
+useDom();
 beforeEach(async () => {
-	dom = new JSDOM("<!doctype html><html><body></body></html>", {
-		url: "https://auth.test/",
-	});
-	roots = new Set();
-	const globals = {
-		window: dom.window,
-		self: dom.window,
-		document: dom.window.document,
-		location: dom.window.location,
-		localStorage: dom.window.localStorage,
-		// Router scroll restoration calls the global; jsdom only puts it on window.
-		scrollTo: () => {},
-		IS_REACT_ACT_ENVIRONMENT: true,
-	};
-	originalGlobals = new Map(
-		Object.keys(globals).map((name) => [
-			name,
-			Object.getOwnPropertyDescriptor(globalThis, name),
-		]),
-	);
-	for (const [name, value] of Object.entries(globals)) {
-		Object.defineProperty(globalThis, name, {
-			configurable: true,
-			writable: true,
-			value,
-		});
-	}
-	const reactAct = (React as { act?: typeof act }).act;
-	act =
-		reactAct ??
-		(
-			(await import(
-				// @ts-ignore -- React 19's types no longer declare this module.
-				"react-dom/test-utils"
-			)) as { act: typeof act }
-		).act;
-	({ createRoot } = await import("react-dom/client"));
 	routerModule = await import("@tanstack/react-router");
 	binding = await import("@monarcode/session-kit/react");
 	routerBinding = await import("@monarcode/session-kit/tanstack-router");
 });
-
-afterEach(async () => {
-	try {
-		await act(async () => {
-			for (const root of roots) root.unmount();
-		});
-	} finally {
-		dom.window.close();
-		for (const [name, descriptor] of originalGlobals) {
-			if (descriptor) Object.defineProperty(globalThis, name, descriptor);
-			else delete (globalThis as Record<string, unknown>)[name];
-		}
-	}
-});
-
-const user = { id: "alice", email: "alice@example.com" };
-const signIn = (auth: Client) => auth.signIn({ accessToken: "access-1", user });
-const newClient = (): Client =>
-	createAuth({ name: "react-test", user: userSchema, storage: webStorage() });
-
-async function render(element: ReactNode, { strict = false } = {}) {
-	const container = document.createElement("div");
-	document.body.append(container);
-	const root = createRoot(container);
-	roots.add(root);
-	await act(async () =>
-		root.render(strict ? h(StrictMode, null, element) : element),
-	);
-	return {
-		container,
-		async unmount() {
-			await act(async () => root.unmount());
-			roots.delete(root);
-			container.remove();
-		},
-	};
-}
 
 /**
  * Hooks for `auth` and a way to render under them, either through
@@ -412,8 +332,6 @@ test("SessionOutlet keeps child routes through profile updates and swaps them on
 		const view = await render(
 			h(RouterProvider, { router: router as AnyRouter }),
 		);
-		const settle = () =>
-			act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 		await settle();
 		assert.equal(view.container.textContent, "home:alice@example.com");
 		assert.equal(homeMounts, 1);

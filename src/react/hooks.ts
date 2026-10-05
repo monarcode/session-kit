@@ -3,6 +3,7 @@ import {
 	createElement,
 	useContext,
 	useEffect,
+	useLayoutEffect,
 	type ReactElement,
 	type ReactNode,
 } from "react";
@@ -14,6 +15,12 @@ import {
 	type AuthSource,
 	type StateOf,
 } from "./context.js";
+
+// Layout effects run before the browser paints, so a session restored at mount
+// replaces the "initializing" state before anyone sees it. React warns about
+// layout effects on a server, where neither kind of effect runs.
+const useMountEffect =
+	typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 export type AuthHooksOptions<Client extends AuthSource> = {
 	/**
@@ -32,8 +39,10 @@ export type AuthProviderProps<Client extends AuthSource> = {
 export type AuthHooks<Client extends AuthSource> = {
 	/**
 	 * Provides `client` to the hooks below it and mounts it while rendered,
-	 * starting expiry timers and cross-tab sync. Effects never run on a server,
-	 * so server rendering starts no background work.
+	 * starting expiry timers and cross-tab sync. With synchronous storage and
+	 * schemas, mounting restores the saved session before the first paint.
+	 * Effects never run on a server, so server rendering starts no background
+	 * work.
 	 */
 	AuthProvider: (props: AuthProviderProps<Client>) => ReactElement;
 	/** The client, for actions such as `signIn` and `signOut`. */
@@ -70,7 +79,7 @@ export function createAuthHooks<Client extends AuthSource>(
 		};
 
 	function AuthProvider({ client, children }: AuthProviderProps<Client>) {
-		useEffect(() => client.mount(), [client]);
+		useMountEffect(() => client.mount(), [client]);
 		return createElement(
 			ClientContext.Provider,
 			{ value: client },

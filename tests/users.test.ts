@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { fromAccessToken, type AuthError } from "@monarcode/session-kit";
+import {
+	fromAccessToken,
+	webStorage,
+	type AuthError,
+} from "@monarcode/session-kit";
 import { z } from "zod";
 
 import {
@@ -168,4 +172,13 @@ test("a user schema that cannot accept its own output fails sign-in", async () =
 			/output unchanged/.test(error.message),
 	);
 	assert.equal(values.size, 0);
+});
+
+test("a user read from the token restores at once when mounting", async () => {
+	await client({ user: tokenUser, storage: webStorage() }).signIn({
+		accessToken: jwt(alice),
+	});
+	const auth = client({ user: tokenUser, storage: webStorage() });
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().user?.id, "alice");
 });

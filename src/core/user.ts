@@ -94,6 +94,37 @@ export async function validateUser<S extends StandardSchemaV1>(
 	}
 }
 
+/** Whether `value` is a promise or another thenable. */
+export function isThenable(value: unknown): value is PromiseLike<unknown> {
+	return (
+		(typeof value === "object" || typeof value === "function") &&
+		value !== null &&
+		typeof (value as { then?: unknown }).then === "function"
+	);
+}
+
+/**
+ * Validates `input` synchronously when the schema can, returning `undefined`
+ * when it is asynchronous or rejects the input. `validateUser` then decides,
+ * and reports any failure.
+ */
+export function validateUserNow<S extends StandardSchemaV1>(
+	schema: S,
+	input: unknown,
+): StandardSchemaV1.InferOutput<S> | undefined {
+	try {
+		const result = schema["~standard"].validate(input);
+		if (isThenable(result)) {
+			// Asynchronous schema: drop this attempt; validateUser runs it again.
+			void Promise.resolve(result).catch(() => {});
+			return undefined;
+		}
+		return result.issues ? undefined : toUser(result.value);
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * Validates a user that is about to be saved. Restoring validates the saved
  * output again, so the schema must accept its own output and return it

@@ -1,4 +1,4 @@
-import { redirect } from "@tanstack/react-router";
+import { redirect } from "react-router";
 
 import {
 	guardSession,
@@ -8,23 +8,22 @@ import {
 import { loginHref, safeReturnTo } from "../core/return-to.js";
 
 export type RequireSessionOptions = {
-	/** The route location, from `beforeLoad`'s `location`. */
-	location: { href: string };
+	/** The loader's `request`, whose URL signed-out users come back to. */
+	request: Request;
 	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
 	loginPath: string;
 };
 
 /**
- * Guards a route in `beforeLoad`. Signed-out users are redirected to
- * `loginPath` with `?redirectTo=` set to where they were going. Signed-in
- * users get `{ session }` in route context, typed and never `null`; it holds
- * no tokens. A failed refresh is rethrown as `REFRESH_FAILED` for the route's
- * error component, which can offer `auth.retry()`. Render the guarded
- * route's children through `SessionOutlet`.
+ * Guards a route in its loader, in data or framework mode. Signed-out users
+ * are redirected to `loginPath` with `?redirectTo=` set to the requested URL.
+ * Signed-in users get `{ session }`, which holds no tokens. A failed refresh
+ * is rethrown as `REFRESH_FAILED` for the route's error element, which can
+ * offer `auth.retry()`.
  *
  * @example
- * beforeLoad: ({ context, location }) =>
- * 	requireSession(context.auth, { location, loginPath: "/login" }),
+ * loader: ({ request }) =>
+ * 	requireSession(auth, { request, loginPath: "/login" }),
  */
 export async function requireSession<S extends { sessionId: string }>(
 	auth: GuardClient<S>,
@@ -33,10 +32,12 @@ export async function requireSession<S extends { sessionId: string }>(
 	// Fails fast on a bad path, before any session is read.
 	loginHref(options.loginPath, "/");
 	const session = await guardSession(auth);
-	if (!session)
-		throw redirect({
-			href: loginHref(options.loginPath, options.location.href),
-		});
+	if (!session) {
+		const url = new URL(options.request.url);
+		throw redirect(
+			loginHref(options.loginPath, url.pathname + url.search + url.hash),
+		);
+	}
 	return { session };
 }
 
@@ -48,25 +49,25 @@ export type RedirectIfSignedInOptions = {
 };
 
 /**
- * Guards the sign-in route in `beforeLoad`: a signed-in user is redirected to
+ * Guards the sign-in route in its loader: a signed-in user is redirected to
  * `redirectTo`, checked with `safeReturnTo`. If the session cannot be
  * resolved, for example after a failed refresh, the sign-in page shows so the
  * user can sign in again.
  *
  * @example
- * beforeLoad: ({ context, search }) =>
- * 	redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
+ * loader: async ({ request }) => {
+ * 	const redirectTo = new URL(request.url).searchParams.get("redirectTo");
+ * 	await redirectIfSignedIn(auth, { redirectTo });
+ * 	return null;
+ * },
  */
 export async function redirectIfSignedIn(
 	auth: GuardClient<{ sessionId: string }>,
 	options: RedirectIfSignedInOptions,
 ): Promise<void> {
-	const session = await sessionOrNull(auth);
-	if (session) {
-		throw redirect({
-			href: safeReturnTo(options.redirectTo, {
-				loginPath: options.loginPath,
-			}),
-		});
+	if (await sessionOrNull(auth)) {
+		throw redirect(
+			safeReturnTo(options.redirectTo, { loginPath: options.loginPath }),
+		);
 	}
 }

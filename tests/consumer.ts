@@ -15,6 +15,7 @@ import {
 	type RefreshFn,
 	type UserInput,
 } from "../dist/index.js";
+import * as reactRouter from "../dist/react-router/index.js";
 import { createAuthHooks } from "../dist/react/index.js";
 import {
 	connectAuth,
@@ -186,3 +187,20 @@ for (const storage of [
 // @ts-expect-error Storage values are strings.
 const numericStorage: AuthStorage = { get: () => 1, set() {}, remove() {} };
 void numericStorage;
+
+// React Router: loader guards and components share the TanStack shapes.
+async function loader({ request }: { request: Request }) {
+	const { session } = await reactRouter.requireSession(auth, {
+		request,
+		loginPath: "/login",
+	});
+	const email: string = session.user.email;
+	return email;
+}
+void loader;
+reactRouter.SessionOutlet({
+	loginPath: "/login",
+	unavailable: ({ error, retry }) => `${error?.code}${String(retry)}`,
+});
+// @ts-expect-error The outlet needs the sign-in path.
+reactRouter.SessionOutlet({});

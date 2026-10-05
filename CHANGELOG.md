@@ -37,6 +37,19 @@
   page; `useRouterAuth` reads the client from Router context.
 - React 18 is supported (`^18.0.0 || ^19.0.0`). CI tests React 18.0.0 as the
   oldest version.
+- A new `/react-router` entry point supports React Router 7 and 8 in
+  declarative mode, data mode, and framework mode with `ssr: false`.
+  `SessionOutlet` guards routes in declarative mode, showing `pending` while
+  restoring, sending signed-out users to `loginPath` with `redirectTo`, and
+  offering a retry through `unavailable` after a failed refresh. In data mode,
+  `requireSession` and `redirectIfSignedIn` guard loaders, and
+  `useAuthRevalidation` re-runs loaders when auth changes. React Router is an
+  optional peer dependency.
+- Mounting restores the saved session at once when storage and the user
+  source both answer synchronously, as with `webStorage()` and a synchronous
+  schema, so `initializing` is never rendered. `AuthProvider` mounts in a
+  layout effect, before the browser paints. Asynchronous storage, schemas, or
+  token decoding restore as before.
 
 ### Changed
 

@@ -11,6 +11,11 @@ import {
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import {
+	requireSession as requireLoaderSession,
+	SessionOutlet as RouterSessionOutlet,
+	useAuthRevalidation,
+} from "@monarcode/session-kit/react-router";
+import {
 	connectAuth,
 	redirectIfSignedIn,
 	requireSession,
@@ -32,6 +37,9 @@ test("all public entry points import without browser globals", () => {
 		redirectIfSignedIn,
 		SessionOutlet,
 		useRouterAuth,
+		requireLoaderSession,
+		RouterSessionOutlet,
+		useAuthRevalidation,
 		createAuthFetch,
 	]) {
 		assert.equal(typeof fn, "function");

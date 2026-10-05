@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createAuth, type AuthError } from "@monarcode/session-kit";
+import { createAuth, webStorage, type AuthError } from "@monarcode/session-kit";
 import { z } from "zod";
 
 import {
@@ -19,6 +19,8 @@ import {
 	input,
 	client,
 	code,
+	deferredStorage,
+	recordStates,
 	credentialsOf,
 	sessionOf,
 	saved,
@@ -475,4 +477,42 @@ test("createAuth requires storage", () => {
 		() => createAuth({ name: "test", user: userSchema }),
 		/storage/,
 	);
+});
+
+test("mounting restores at once when storage and the schema are synchronous", async () => {
+	await client().signIn(input());
+	const auth = client({ storage: webStorage() });
+	const states = recordStates(auth);
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().user?.id, "alice");
+	await flush();
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["authenticated"],
+	);
+});
+
+test("restoring waits for asynchronous storage or schemas", async () => {
+	await client().signIn(input());
+	for (const options of [
+		{ storage: deferredStorage(webStorage()) },
+		{ user: userSchema.refine(async () => true) },
+	]) {
+		const auth = client({ storage: webStorage(), ...options });
+		cleanups.push(auth.mount());
+		assert.equal(auth.state.get().status, "initializing");
+		await flush();
+		assert.equal(auth.state.get().status, "authenticated");
+	}
+});
+
+test("an invalid saved session is still discarded when mounting", async () => {
+	values.set(SESSION, "invalid-json");
+	const auth = client({ storage: webStorage() });
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "initializing");
+	await flush();
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(values.size, 0);
 });

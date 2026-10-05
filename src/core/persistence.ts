@@ -41,11 +41,13 @@ export function createPersistence(
 	// out of order still ends up holding the latest write, and a read sees every
 	// write requested before it.
 	let queue: Promise<unknown> = Promise.resolve();
+	let pending = 0;
 	function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+		pending++;
 		const result = queue.then(operation).catch((cause: unknown) => {
 			throw storageError(cause);
 		});
-		queue = result.catch(() => {});
+		queue = result.catch(() => {}).finally(() => pending--);
 		return result;
 	}
 
@@ -55,36 +57,58 @@ export function createPersistence(
 		});
 	}
 
-	function read(): Promise<StoredSession | null> {
-		return enqueue(async () => {
-			const text = await storage.get(key);
-			if (!text) return null;
-			try {
-				const saved: unknown = JSON.parse(text);
-				if (
-					!isRecord(saved) ||
-					saved.v !== STORAGE_VERSION ||
-					typeof saved.id !== "string" ||
-					!saved.id ||
-					typeof saved.persistUntil !== "number" ||
-					!Number.isFinite(saved.persistUntil) ||
-					saved.persistUntil <= Date.now()
-				) {
-					throw new Error("Missing, expired, or malformed auth data");
-				}
-				return {
-					...validateTokens(saved),
-					id: saved.id,
-					user: saved.user,
-				};
-			} catch (cause) {
-				throw new AuthError(
-					"INVALID_SESSION",
-					"Saved session cannot be restored",
-					{ cause },
-				);
+	/** Parses a saved entry, rejecting other formats and expired entries. */
+	function parse(text: string | null): StoredSession | null {
+		if (!text) return null;
+		try {
+			const saved: unknown = JSON.parse(text);
+			if (
+				!isRecord(saved) ||
+				saved.v !== STORAGE_VERSION ||
+				typeof saved.id !== "string" ||
+				!saved.id ||
+				typeof saved.persistUntil !== "number" ||
+				!Number.isFinite(saved.persistUntil) ||
+				saved.persistUntil <= Date.now()
+			) {
+				throw new Error("Missing, expired, or malformed auth data");
 			}
-		});
+			return {
+				...validateTokens(saved),
+				id: saved.id,
+				user: saved.user,
+			};
+		} catch (cause) {
+			throw new AuthError(
+				"INVALID_SESSION",
+				"Saved session cannot be restored",
+				{ cause },
+			);
+		}
+	}
+
+	function read(): Promise<StoredSession | null> {
+		return enqueue(async () => parse(await storage.get(key)));
+	}
+
+	/**
+	 * Reads the saved session synchronously, when storage can answer at once
+	 * and no operation is queued. Returns `undefined` otherwise, meaning "use
+	 * `read()`", including for malformed entries, which `read()` reports.
+	 */
+	function readNow(): StoredSession | null | undefined {
+		if (pending) return undefined;
+		try {
+			const text = storage.get(key);
+			if (typeof text === "object" && text !== null) {
+				// Asynchronous storage: drop this read; `read()` will ask again.
+				void Promise.resolve(text).catch(() => {});
+				return undefined;
+			}
+			return parse(text);
+		} catch {
+			return undefined;
+		}
 	}
 
 	function write(session: StoredSession): Promise<void> {
@@ -120,5 +144,5 @@ export function createPersistence(
 		return storage.subscribe?.(key, listener) ?? (() => {});
 	}
 
-	return { read, write, clear, exclusive, watch };
+	return { read, readNow, write, clear, exclusive, watch };
 }

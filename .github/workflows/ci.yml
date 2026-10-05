@@ -68,12 +68,14 @@ jobs:
          # Keep these at the lower bounds of peerDependencies in package.json.
          # Type packages are not peers: these are the first releases whose
          # react/jsx-runtime and react-dom/client types resolve under NodeNext.
+         # The override stops @types/react-dom pulling in newer React types.
          - name: Install oldest supported peers
-           run: >-
-              pnpm add --save-dev --save-exact
-              react@18.0.0 react-dom@18.0.0
-              @types/react@18.0.2 @types/react-dom@18.0.3
-              @tanstack/react-router@1.127.0
+           run: |
+              npm pkg set 'pnpm.overrides.@types/react=18.0.2'
+              pnpm add --save-dev --save-exact \
+                react@18.0.0 react-dom@18.0.0 \
+                @types/react@18.0.2 @types/react-dom@18.0.3 \
+                @tanstack/react-router@1.127.0 react-router@7.0.0
 
          - name: Build and test
            run: pnpm run build && pnpm test && pnpm run test:types
