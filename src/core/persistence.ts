@@ -3,10 +3,11 @@ import { isRecord } from "./json.js";
 import type { AuthStorage } from "./storage.js";
 import { validateTokens, type SessionTokens } from "./tokens.js";
 
-export type StoredSession = SessionTokens & { id: string; user: unknown };
+/** A saved session. `user` is absent when the user comes from the access token. */
+export type StoredSession = SessionTokens & { id: string; user?: unknown };
 
 /** Format of the saved entry; entries in any other format are not restored. */
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 /** Thirty days. */
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
@@ -34,7 +35,6 @@ export function createPersistence(
 		);
 	}
 	const key = `${name}:auth:session`;
-	const legacyKeys = [`${name}:auth:tokens`, `${name}:auth:user`];
 	const lockName = `${name}:auth:refresh`;
 
 	// Operations run one at a time, in the order requested. Storage that settles
@@ -51,26 +51,14 @@ export function createPersistence(
 
 	function clear(): Promise<void> {
 		return enqueue(async () => {
-			const failures: unknown[] = [];
-			for (const entry of [key, ...legacyKeys]) {
-				try {
-					await storage.remove(entry);
-				} catch (error) {
-					failures.push(error);
-				}
-			}
-			if (failures.length)
-				throw new AggregateError(failures, "Could not clear auth storage");
+			await storage.remove(key);
 		});
 	}
 
 	function read(): Promise<StoredSession | null> {
 		return enqueue(async () => {
 			const text = await storage.get(key);
-			if (!text) {
-				for (const entry of legacyKeys) await storage.remove(entry);
-				return null;
-			}
+			if (!text) return null;
 			try {
 				const saved: unknown = JSON.parse(text);
 				if (
@@ -78,7 +66,6 @@ export function createPersistence(
 					saved.v !== STORAGE_VERSION ||
 					typeof saved.id !== "string" ||
 					!saved.id ||
-					!("user" in saved) ||
 					typeof saved.persistUntil !== "number" ||
 					!Number.isFinite(saved.persistUntil) ||
 					saved.persistUntil <= Date.now()

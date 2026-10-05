@@ -4,7 +4,7 @@ import test from "node:test";
 
 import {
 	createAuth,
-	createRefreshFn,
+	fromAccessToken,
 	memoryStorage,
 	webStorage,
 } from "@monarcode/session-kit";
@@ -16,7 +16,7 @@ const packageRoot = new URL("../", import.meta.url);
 test("all public entry points import without browser globals", () => {
 	for (const fn of [
 		createAuth,
-		createRefreshFn,
+		fromAccessToken,
 		memoryStorage,
 		webStorage,
 		connectAuth,
@@ -47,9 +47,4 @@ test("React declarations retain consumer Router registration", async () => {
 	assert.match(declarations, /Register extends/);
 	assert.match(declarations, /useAuthClient\(\): RegisteredAuth/);
 	assert.doesNotMatch(declarations, /useAuthClient\(\): any/);
-});
-
-test("refresh definition preserves the callback", () => {
-	const callback = async () => ({ accessToken: "new-token" });
-	assert.equal(createRefreshFn(callback), callback);
 });

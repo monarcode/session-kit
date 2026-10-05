@@ -2,21 +2,21 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
-import type { User } from "./types.js";
 
 /**
- * Rejects values that JSON would silently drop or change, then deep-freezes the
- * value so callers cannot mutate auth state without notifying subscribers.
+ * Copies `value` as deeply frozen JSON, rejecting values JSON would drop or
+ * change. Auth state then cannot be mutated without notifying subscribers,
+ * and data the caller still holds is never frozen.
  */
-function freezeJson(value: unknown, ancestors = new Set<object>()): void {
+function frozenJson(value: unknown, ancestors = new Set<object>()): unknown {
 	if (
 		value === null ||
 		typeof value === "string" ||
 		typeof value === "boolean"
 	)
-		return;
-	if (typeof value === "number" && Number.isFinite(value)) return;
-	if (typeof value !== "object" || value === null || ancestors.has(value)) {
+		return value;
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	if (typeof value !== "object" || ancestors.has(value)) {
 		throw new AuthError(
 			"USER_VALIDATION_FAILED",
 			"User must contain only JSON values",
@@ -30,6 +30,7 @@ function freezeJson(value: unknown, ancestors = new Set<object>()): void {
 		);
 	}
 	ancestors.add(value);
+	let copy: unknown[] | Record<string, unknown>;
 	if (Array.isArray(value)) {
 		if (Object.keys(value).length !== value.length) {
 			throw new AuthError(
@@ -37,8 +38,9 @@ function freezeJson(value: unknown, ancestors = new Set<object>()): void {
 				"User arrays must be dense",
 			);
 		}
-		for (const item of value) freezeJson(item, ancestors);
+		copy = value.map((item) => frozenJson(item, ancestors));
 	} else {
+		copy = {};
 		for (const key of Reflect.ownKeys(value)) {
 			const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
 			if (
@@ -51,32 +53,39 @@ function freezeJson(value: unknown, ancestors = new Set<object>()): void {
 					"User properties must be plain JSON data",
 				);
 			}
-			freezeJson(descriptor.value, ancestors);
+			// Defined, not assigned, so a `__proto__` key stays an ordinary key.
+			Object.defineProperty(copy, key, {
+				value: frozenJson(descriptor.value, ancestors),
+				enumerable: true,
+				writable: true,
+				configurable: true,
+			});
 		}
 	}
 	ancestors.delete(value);
-	Object.freeze(value);
+	return Object.freeze(copy);
+}
+
+/** Accepts a plain JSON object as the user, returning a frozen copy. */
+export function toUser(value: unknown): Record<string, unknown> {
+	if (!isRecord(value)) {
+		throw new AuthError("USER_VALIDATION_FAILED", "User must be an object");
+	}
+	return frozenJson(value) as Record<string, unknown>;
 }
 
 export async function validateUser<S extends StandardSchemaV1>(
 	schema: S,
 	input: unknown,
-): Promise<User<S>> {
+): Promise<StandardSchemaV1.InferOutput<S>> {
 	try {
-		const result = await schema["~standard"].validate(structuredClone(input));
+		const result = await schema["~standard"].validate(input);
 		if (result.issues) {
 			throw new AuthError("USER_VALIDATION_FAILED", "Invalid user", {
 				issues: result.issues,
 			});
 		}
-		if (!isRecord(result.value)) {
-			throw new AuthError(
-				"USER_VALIDATION_FAILED",
-				"User must be an object",
-			);
-		}
-		freezeJson(result.value);
-		return result.value;
+		return toUser(result.value);
 	} catch (cause) {
 		if (cause instanceof AuthError) throw cause;
 		throw new AuthError("USER_VALIDATION_FAILED", "User validation failed", {
@@ -86,8 +95,40 @@ export async function validateUser<S extends StandardSchemaV1>(
 }
 
 /**
+ * Validates a user that is about to be saved. Restoring validates the saved
+ * output again, so the schema must accept its own output and return it
+ * unchanged; otherwise users would be signed out on their next reload.
+ */
+export async function validateNewUser<S extends StandardSchemaV1>(
+	schema: S,
+	input: unknown,
+): Promise<StandardSchemaV1.InferOutput<S>> {
+	const user = await validateUser(schema, input);
+	let again: unknown;
+	try {
+		again = await validateUser(schema, user);
+	} catch (cause) {
+		throw new AuthError(
+			"USER_VALIDATION_FAILED",
+			"The user schema must accept its own output, because saved users are validated again when restored",
+			{
+				cause,
+				issues: cause instanceof AuthError ? cause.issues : undefined,
+			},
+		);
+	}
+	if (!sameUser(user, again)) {
+		throw new AuthError(
+			"USER_VALIDATION_FAILED",
+			"The user schema must return its own output unchanged, because saved users are validated again when restored",
+		);
+	}
+	return user;
+}
+
+/**
  * Whether two validated users hold the same data. Both are JSON produced by
- * the same schema, so serialization compares them reliably.
+ * the same source, so serialization compares them reliably.
  */
 export function sameUser(a: unknown, b: unknown): boolean {
 	return JSON.stringify(a) === JSON.stringify(b);

@@ -1,13 +1,13 @@
 import type { AuthClient } from "../core/types.js";
 
-type AuthRouter<I, U> = {
-	options: { context: { auth: AuthClient<I, U> } };
+type AuthRouter = {
+	options: { context: { auth: Pick<AuthClient<unknown>, "state" | "mount"> } };
 	invalidate: () => Promise<unknown>;
 	clearCache: () => void;
 };
 const connections = new WeakMap<object, () => void>();
 
-export function connectAuth<I, U>(router: AuthRouter<I, U>): () => void {
+export function connectAuth(router: AuthRouter): () => void {
 	const existing = connections.get(router);
 	if (existing) return existing;
 	const auth = router.options.context.auth;

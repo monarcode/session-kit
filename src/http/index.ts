@@ -1,5 +1,11 @@
 import { AuthError, sessionChanged } from "../core/errors.js";
-import type { AuthClient, Session } from "../core/types.js";
+import type { AuthClient, Credentials } from "../core/types.js";
+
+/** The part of the auth client that `createAuthFetch` uses. */
+export type AuthFetchClient = Pick<
+	AuthClient<unknown>,
+	"credentials" | "isCurrent"
+>;
 
 export type AuthFetchOptions = {
 	/**
@@ -15,8 +21,8 @@ async function discard(response: Response) {
 	await response.body?.cancel().catch(() => {});
 }
 
-export function createAuthFetch<I, U>(
-	auth: AuthClient<I, U>,
+export function createAuthFetch(
+	auth: AuthFetchClient,
 	baseUrl: string,
 	options: AuthFetchOptions = {},
 ) {
@@ -32,14 +38,14 @@ export function createAuthFetch<I, U>(
 				"Authenticated requests must stay on the configured API origin",
 			);
 		}
-		const captured = await auth.getSession();
+		const captured = await auth.credentials.get();
 
 		if (!captured)
 			throw new AuthError("UNAUTHENTICATED", "Sign in is required");
 		const request = new Request(url, init);
 		const canReplay = request.method === "GET" || request.method === "HEAD";
 
-		const send = async (session: Session<U>) => {
+		const send = async (session: Credentials) => {
 			if (!auth.isCurrent(session)) throw sessionChanged();
 			const headers = new Headers(request.headers);
 			headers.set("Authorization", `Bearer ${session.accessToken}`);
@@ -57,9 +63,9 @@ export function createAuthFetch<I, U>(
 
 		if (response.status !== 401) return response;
 
-		let fresh: Session<U> | null;
+		let fresh: Credentials | null;
 		try {
-			fresh = await auth.refresh(captured);
+			fresh = await auth.credentials.renew(captured);
 		} catch (error) {
 			await discard(response);
 			throw error;
@@ -72,7 +78,7 @@ export function createAuthFetch<I, U>(
 		const retried = await send(fresh);
 
 		if (retried.status === 401 && signOutOnRepeated401)
-			await auth.rejectSession(fresh);
+			await auth.credentials.reject(fresh);
 
 		return retried;
 	};

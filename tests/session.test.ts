@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import type { AuthError } from "@monarcode/session-kit";
+import { createAuth, type AuthError } from "@monarcode/session-kit";
 import { z } from "zod";
 
 import {
@@ -19,8 +19,10 @@ import {
 	input,
 	client,
 	code,
+	credentialsOf,
 	sessionOf,
 	saved,
+	setGlobal,
 	useBrowserMocks,
 } from "./helpers.ts";
 
@@ -33,9 +35,9 @@ test("schema defaults and custom fields survive restoration; tokens stay out of 
 	assert.equal(saved().refreshToken, "refresh-1");
 	assert.equal(cookies.size, 0);
 	assert.equal(JSON.stringify(auth.state.get()).includes("refresh-1"), false);
-	const restored = await sessionOf(client());
-	assert.equal(restored.user.email, user.email);
-	assert.equal(restored.accessToken, "access-1");
+	const restored = client();
+	assert.equal((await sessionOf(restored)).user.email, user.email);
+	assert.equal((await credentialsOf(restored)).accessToken, "access-1");
 });
 
 test("user output is frozen without freezing caller input", async () => {
@@ -55,7 +57,7 @@ test("invalid sign-in leaves the current session usable", async () => {
 		auth.signIn(input({ user: { id: 4 } })),
 		code("USER_VALIDATION_FAILED"),
 	);
-	assert.equal((await sessionOf(auth)).id, before.id);
+	assert.equal((await sessionOf(auth))?.sessionId, before.sessionId);
 });
 
 for (const timeout of [false, true]) {
@@ -69,7 +71,7 @@ for (const timeout of [false, true]) {
 			const refresh = deferred();
 			let refreshCalls = 0;
 			const auth = client({
-				userSchema: userSchema.refine(async (value) =>
+				user: userSchema.refine(async (value) =>
 					value.id === "bob" ? validation.promise : true,
 				),
 				refresh: canRefresh
@@ -130,7 +132,7 @@ test("expiry during validation does not cancel a successful new sign-in", async 
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const validation = deferred();
 	const auth = client({
-		userSchema: userSchema.refine(async (value) =>
+		user: userSchema.refine(async (value) =>
 			value.id === "bob" ? validation.promise : true,
 		),
 	});
@@ -159,7 +161,7 @@ test("failed sign-in recovery retains expired credentials without a refresh retr
 	const validation = deferred();
 	let refreshCalls = 0;
 	const auth = client({
-		userSchema: userSchema.refine(async (value) =>
+		user: userSchema.refine(async (value) =>
 			value.id === "bob" ? validation.promise : true,
 		),
 		refresh: async () => {
@@ -191,7 +193,7 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 	const validation = deferred();
 	let refreshCalls = 0;
 	const auth = client({
-		userSchema: userSchema.refine(async (value) =>
+		user: userSchema.refine(async (value) =>
 			value.id === "bob" ? validation.promise : true,
 		),
 		refresh: async () => {
@@ -211,7 +213,7 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 	assert.equal(auth.state.get().user, null);
 	assert.equal(refreshCalls, 0);
 	assert.ok(values.has(SESSION));
-	assert.equal((await sessionOf(auth)).accessToken, "access-2");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	assert.equal(refreshCalls, 1);
 });
 
@@ -219,7 +221,7 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const validation = deferred();
 	const auth = client({
-		userSchema: userSchema.refine(async (value) =>
+		user: userSchema.refine(async (value) =>
 			value.id === "bob" ? validation.promise : true,
 		),
 	});
@@ -238,7 +240,7 @@ test("a superseded sign-in cannot recover or clear the newer account", async (t)
 	await flush();
 	assert.equal(auth.state.get().status, "authenticated");
 	assert.equal(auth.state.get().user?.id, "carol");
-	assert.equal((await sessionOf(auth)).accessToken, "carol-token");
+	assert.equal((await credentialsOf(auth)).accessToken, "carol-token");
 });
 
 test("malformed saved session fails closed and removes saved data", async () => {
@@ -249,9 +251,9 @@ test("malformed saved session fails closed and removes saved data", async () => 
 	assert.equal(values.size, 0);
 });
 
-test("entries from the two-key format are removed, not restored", async () => {
-	values.set("test:auth:tokens", JSON.stringify({ v: 2, accessToken: "old" }));
-	values.set("test:auth:user", JSON.stringify({ v: 2, user }));
+test("sessions saved in an earlier format are removed, not restored", async () => {
+	await client().signIn(input());
+	values.set(SESSION, JSON.stringify({ ...saved(), v: 3 }));
 	assert.equal(await client().getSession(), null);
 	assert.equal(values.size, 0);
 });
@@ -293,7 +295,7 @@ for (const invalidUser of [false, true]) {
 		if (invalidUser) assert.ok(restoration.issues.length > 0);
 		else assert.ok(restoration.cause instanceof Error);
 		assert.equal(cleanup.code, "PERSISTENCE_FAILED");
-		assert.ok(cleanup.cause instanceof AggregateError);
+		assert.ok(cleanup.cause instanceof Error);
 		assert.ok(values.has(SESSION));
 		assert.equal(await auth.getSession(), null);
 		assert.equal(auth.state.get().error, failure);
@@ -334,7 +336,7 @@ test("signout stays signed out when token deletion fails", async () => {
 test("async validation cannot commit after logout", async () => {
 	const gate = deferred();
 	const schema = z.object({ id: z.string() }).refine(async () => gate.promise);
-	const auth = client({ userSchema: schema });
+	const auth = client({ user: schema });
 	const pending = auth.signIn(input({ user: { id: "a" } }));
 	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
 	await flush();
@@ -359,7 +361,7 @@ test("async updateUser captures the session before running the callback", async 
 
 test("schemas that return non-JSON output are rejected", async () => {
 	const schema = z.object({ created: z.date() });
-	const auth = client({ userSchema: schema });
+	const auth = client({ user: schema });
 	await assert.rejects(
 		auth.signIn(input({ user: { created: new Date() } })),
 		code("USER_VALIDATION_FAILED"),
@@ -387,7 +389,7 @@ test("remount while initial validation is pending starts a fresh restoration", a
 		calls++;
 		return gate.promise;
 	});
-	const auth = client({ userSchema: schema });
+	const auth = client({ user: schema });
 	const off = auth.mount();
 	await flush();
 	off();
@@ -397,4 +399,80 @@ test("remount while initial validation is pending starts a fresh restoration", a
 	await flush();
 	assert.equal(auth.state.get().status, "authenticated");
 	assert.ok(calls >= 2);
+});
+
+test("sessions name the user without tokens; credentials carry the token", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const session = await sessionOf(auth);
+	assert.deepEqual(Object.keys(session).sort(), ["sessionId", "user"]);
+	assert.equal(Object.isFrozen(session), true);
+	const credentials = await credentialsOf(auth);
+	assert.equal(credentials.accessToken, "access-1");
+	assert.equal(credentials.sessionId, session.sessionId);
+	assert.equal("refreshToken" in credentials, false);
+	assert.equal(auth.isCurrent(session), true);
+	assert.equal(auth.isCurrent({ sessionId: "another" }), false);
+});
+
+test("sign-out revokes the ended tokens after clearing them", async () => {
+	const calls: Array<{ refreshToken?: string; cleared: boolean }> = [];
+	const auth = client({
+		revoke: async ({ accessToken, refreshToken, signal }): Promise<void> => {
+			assert.equal(accessToken, "access-1");
+			assert.ok(signal instanceof AbortSignal);
+			calls.push({ refreshToken, cleared: !values.has(SESSION) });
+			assert.equal(auth.state.get().status, "unauthenticated");
+		},
+	});
+	await auth.signIn(input());
+	await auth.signOut();
+	assert.deepEqual(calls, [{ refreshToken: "refresh-1", cleared: true }]);
+	assert.equal(auth.state.get().error, null);
+});
+
+test("a failed revocation is reported without failing sign-out", async () => {
+	const auth = client({
+		revoke: async () => {
+			throw new Error("offline");
+		},
+	});
+	await auth.signIn(input());
+	await auth.signOut();
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(auth.state.get().error?.code, "REVOKE_FAILED");
+	assert.equal(values.size, 0);
+});
+
+test("sessions the backend already rejected are not revoked", async () => {
+	let revoked = 0;
+	const revoke = async () => {
+		revoked++;
+	};
+	const rejected = client({ refresh: async () => null, revoke });
+	await rejected.signIn(input());
+	assert.equal(
+		await rejected.credentials.renew(await credentialsOf(rejected)),
+		null,
+	);
+	const repeated = client({ revoke });
+	await repeated.signIn(input());
+	await repeated.credentials.reject(await credentialsOf(repeated));
+	assert.equal(await repeated.getSession(), null);
+	assert.equal(revoked, 0);
+});
+
+test("session IDs do not need crypto.randomUUID", async () => {
+	setGlobal("crypto", undefined);
+	const auth = client();
+	await auth.signIn(input());
+	assert.match((await sessionOf(auth)).sessionId, /^[0-9a-f]{32}$/);
+});
+
+test("createAuth requires storage", () => {
+	assert.throws(
+		// @ts-expect-error -- deliberately missing storage
+		() => createAuth({ name: "test", user: userSchema }),
+		/storage/,
+	);
 });

@@ -18,6 +18,7 @@ import {
 	client,
 	broadcast,
 	deferredStorage,
+	credentialsOf,
 	sessionOf,
 	saved,
 	useBrowserMocks,
@@ -141,7 +142,7 @@ test("a profile update keeps tokens this tab refreshed while it read storage", a
 	await gate.release();
 	// The refresh installed access-2, but its save queued behind the update's
 	// read, which now runs and will return access-1.
-	assert.equal((await sessionOf(auth)).accessToken, "access-2");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	assert.equal(saved().accessToken, "access-1");
 	assert.equal(gate.pending, 1);
 	await gate.release();
@@ -152,7 +153,7 @@ test("a profile update keeps tokens this tab refreshed while it read storage", a
 	assert.equal(gate.pending, 0);
 	assert.equal(saved().accessToken, "access-2");
 	assert.equal(saved().user.email, "new@example.com");
-	assert.equal((await sessionOf(auth)).accessToken, "access-2");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	cleanups.pop()!();
 	t.mock.timers.reset();
 });

@@ -14,7 +14,7 @@ import {
 	code,
 	connectCounting,
 	recordStates,
-	sessionOf,
+	credentialsOf,
 	setGlobal,
 	type TestClient,
 	useBrowserMocks,
@@ -90,7 +90,7 @@ test("401-triggered token-only refresh keeps the user and does not invalidate", 
 	await flush();
 	const before = { ...auth.state.get(), invalidations: router.invalidations };
 	const states = recordStates(auth);
-	const pending = auth.refresh(await sessionOf(auth));
+	const pending = auth.credentials.renew(await credentialsOf(auth));
 	await flush();
 	assert.equal(auth.state.get().status, "refreshing");
 	assert.equal(auth.state.get().user?.id, "alice");
@@ -112,7 +112,7 @@ test("refresh failure after rejection becomes unavailable and invalidates once",
 	await flush();
 	const before = router.invalidations;
 	const states = recordStates(auth);
-	const pending = auth.refresh(await sessionOf(auth));
+	const pending = auth.credentials.renew(await credentialsOf(auth));
 	const checked = assert.rejects(pending, code("REFRESH_FAILED"));
 	await flush();
 	assert.equal(auth.state.get().status, "refreshing");
@@ -135,7 +135,7 @@ test("terminal refresh rejection signs out with one invalidation", async () => {
 	await auth.signIn(input());
 	await flush();
 	const before = router.invalidations;
-	assert.equal(await auth.refresh(await sessionOf(auth)), null);
+	assert.equal(await auth.credentials.renew(await credentialsOf(auth)), null);
 	await flush();
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(router.invalidations, before + 1);
@@ -223,7 +223,7 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 	const router = await realRouter(auth);
 	const guardCalls = router.counts.guardCalls;
 	await assert.rejects(
-		auth.refresh(await sessionOf(auth)),
+		auth.credentials.renew(await credentialsOf(auth)),
 		code("REFRESH_FAILED"),
 	);
 	await settle();
@@ -239,7 +239,8 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 	assert.equal(refreshes, 1);
 
 	offline = false;
-	assert.equal((await auth.retry())?.accessToken, "access-2");
+	assert.equal((await auth.retry())?.user.id, "alice");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	await settle();
 	assert.equal(refreshes, 2);
 	assert.equal(auth.state.get().status, "authenticated");

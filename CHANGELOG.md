@@ -4,15 +4,55 @@
 
 ### Added
 
-- `createAuth` accepts a `storage` option. `webStorage()`, the default, saves
-  the session in `localStorage`; `webStorage({ area: "session" })` uses
-  `sessionStorage`, so each tab has its own session that ends with the tab.
-  `memoryStorage()` keeps the session in memory only. Custom storage implements
-  the new `AuthStorage` type, and its operations may return promises.
+- `createAuth` takes a `storage` adapter. `webStorage()` saves the session in
+  `localStorage`; `webStorage({ area: "session" })` uses `sessionStorage`, so
+  each tab has its own session that ends with the tab. `memoryStorage()` keeps
+  the session in memory only. Custom storage implements the new `AuthStorage`
+  type, and its operations may return promises.
 - Auth applies storage operations one at a time, in the order it issued them,
   and re-checks its own session after every read. Storage that settles late or
   out of order cannot erase a newer sign-in, and a profile update cannot
   restore tokens this tab refreshed meanwhile.
+- `fromAccessToken(claims, map?)` reads the user from a JWT access token. Its
+  claims are validated by a Standard Schema and `map` turns them into the user.
+  `signIn` and the refresh callback then take tokens only, the user is not
+  saved, and it changes whenever the token does. A `decode` option replaces the
+  default, which decodes the JWT without verifying its signature.
+- `auth.refresh()` refreshes immediately, even while the access token is still
+  usable, for example to pick up a changed user.
+- An optional `revoke` callback receives the ended tokens after `signOut()`
+  clears the session. A failed revocation does not undo the sign-out; it is
+  published as the new `REVOKE_FAILED` error code.
+- Checking `state.status` narrows `state.user`: `AuthState` is now a
+  discriminated union in which `user` is set exactly while `authenticated` or
+  `refreshing`.
+- Session IDs no longer require `crypto.randomUUID`, and user validation no
+  longer requires `structuredClone`, for environments such as React Native.
+
+### Changed
+
+- **Breaking:** `createAuth` takes the user schema as `user` instead of
+  `userSchema`, and `storage` is required. Pass `storage: webStorage()` to keep
+  the previous behavior.
+- **Breaking:** `getSession()` and `retry()` resolve `{ sessionId, user }`
+  without tokens, so a session is safe in route context. Access tokens come
+  from `auth.credentials.get()`, which resolves
+  `{ sessionId, accessToken, expiresAt }`. `auth.refresh(session)` is now
+  `auth.credentials.renew(credentials)`, `auth.rejectSession(session)` is now
+  `auth.credentials.reject(credentials)`, and `isCurrent` takes any object
+  with a `sessionId`.
+- **Breaking:** `createRefreshFn` is removed. Pass the refresh callback inline,
+  or type a standalone one with `RefreshFn<UserInput<typeof schema>>`.
+- **Breaking:** `AuthClient` takes the user type first: `AuthClient<User, Input>`.
+- **Breaking:** sign-in, `updateUser`, and a refresh that returns a user reject
+  with `USER_VALIDATION_FAILED` when the user schema does not accept its own
+  output unchanged. Such a schema used to pass sign-in, then fail restoration
+  and sign users out on their next reload.
+- **Breaking:** sessions are saved in a new format. Sessions saved by earlier
+  alphas, including the two-key format of 0.1.0-alpha.1, are not restored, so
+  users sign in once after upgrading.
+- A refresh that returns a user equal to the current one keeps the same user
+  object and does not change `version`, so guards do not run again.
 
 ## 0.1.0-alpha.3
 

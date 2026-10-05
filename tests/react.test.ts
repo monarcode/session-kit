@@ -10,6 +10,7 @@ import {
 
 import {
 	createAuth,
+	webStorage,
 	type AuthClient,
 	type AuthState,
 } from "@monarcode/session-kit";
@@ -99,7 +100,8 @@ const signIn = (auth: Client) => auth.signIn({ accessToken: "access-1", user });
 async function fixture() {
 	const auth = createAuth({
 		name: "react-test",
-		userSchema,
+		user: userSchema,
+		storage: webStorage(),
 	});
 	await auth.getSession();
 	const router = createRouter({

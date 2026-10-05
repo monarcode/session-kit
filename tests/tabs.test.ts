@@ -18,7 +18,7 @@ import {
 	code,
 	broadcast,
 	connectCounting,
-	sessionOf,
+	credentialsOf,
 	saved,
 	useBrowserMocks,
 } from "./helpers.ts";
@@ -51,20 +51,26 @@ const twoTabs = async (server: Backend) => {
 	const a = client({ refresh: server.refresh });
 	await a.signIn(input());
 	const b = client({ refresh: server.refresh });
-	assert.equal((await sessionOf(b)).accessToken, "access-1");
+	assert.equal((await credentialsOf(b)).accessToken, "access-1");
 	return { a, b };
 };
 
 test("a tab refreshing after another tab rotated the token adopts the saved tokens", async () => {
 	const server = rotatingServer();
 	const { a, b } = await twoTabs(server);
-	const stale = await sessionOf(b);
-	assert.equal((await a.refresh(await sessionOf(a)))?.accessToken, "access-2");
-	assert.equal((await b.refresh(stale))?.accessToken, "access-2");
+	const stale = await credentialsOf(b);
+	assert.equal(
+		(await a.credentials.renew(await credentialsOf(a)))?.accessToken,
+		"access-2",
+	);
+	assert.equal((await b.credentials.renew(stale))?.accessToken, "access-2");
 	assert.equal(server.calls, 1);
 	assert.equal(b.state.get().status, "authenticated");
 	assert.equal(saved().refreshToken, "refresh-2");
-	assert.equal((await b.refresh(await sessionOf(b)))?.accessToken, "access-3");
+	assert.equal(
+		(await b.credentials.renew(await credentialsOf(b)))?.accessToken,
+		"access-3",
+	);
 	assert.equal(saved().refreshToken, "refresh-3");
 });
 
@@ -72,8 +78,8 @@ test("tabs refreshing at once spend the refresh token once", async () => {
 	const server = rotatingServer();
 	const { a, b } = await twoTabs(server);
 	const [fromA, fromB] = await Promise.all([
-		a.refresh(await sessionOf(a)),
-		b.refresh(await sessionOf(b)),
+		a.credentials.renew(await credentialsOf(a)),
+		b.credentials.renew(await credentialsOf(b)),
 	]);
 	assert.equal(server.calls, 1);
 	assert.equal(fromA?.accessToken, "access-2");
@@ -86,8 +92,8 @@ test("without Web Locks, a rejected refresh adopts newer saved tokens instead of
 	const gates = [deferred(), deferred()];
 	const server = rotatingServer({ gates: gates.map((gate) => gate.promise) });
 	const { a, b } = await twoTabs(server);
-	const fromA = a.refresh(await sessionOf(a));
-	const fromB = b.refresh(await sessionOf(b));
+	const fromA = a.credentials.renew(await credentialsOf(a));
+	const fromB = b.credentials.renew(await credentialsOf(b));
 	await flush();
 	assert.equal(server.calls, 2);
 	gates[0].resolve();
@@ -101,11 +107,11 @@ test("without Web Locks, a rejected refresh adopts newer saved tokens instead of
 test("a stale tab's profile update keeps tokens another tab refreshed", async () => {
 	const server = rotatingServer();
 	const { a, b } = await twoTabs(server);
-	await a.refresh(await sessionOf(a));
+	await a.credentials.renew(await credentialsOf(a));
 	await b.updateUser({ ...user, email: "b@example.com" });
 	assert.equal(saved().refreshToken, "refresh-2");
 	assert.equal(saved().user.email, "b@example.com");
-	assert.equal((await sessionOf(b)).accessToken, "access-2");
+	assert.equal((await credentialsOf(b)).accessToken, "access-2");
 });
 
 test("a refresh cannot overwrite an account another tab signed in", async () => {
@@ -114,7 +120,10 @@ test("a refresh cannot overwrite an account another tab signed in", async () => 
 	await a.signIn(
 		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
 	);
-	await assert.rejects(b.refresh(await sessionOf(b)), code("SESSION_CHANGED"));
+	await assert.rejects(
+		b.credentials.renew(await credentialsOf(b)),
+		code("SESSION_CHANGED"),
+	);
 	assert.equal(server.calls, 0);
 	assert.equal(saved().accessToken, "bob-token");
 	assert.equal(b.state.get().user?.id, "bob");
@@ -124,7 +133,7 @@ test("a refresh after another tab signed out ends this tab's session too", async
 	const server = rotatingServer();
 	const { a, b } = await twoTabs(server);
 	await a.signOut();
-	assert.equal(await b.refresh(await sessionOf(b)), null);
+	assert.equal(await b.credentials.renew(await credentialsOf(b)), null);
 	assert.equal(server.calls, 0);
 	assert.equal(b.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);
@@ -132,11 +141,11 @@ test("a refresh after another tab signed out ends this tab's session too", async
 
 test("a second 401 does not clear an account another tab signed in", async () => {
 	const { a, b } = await twoTabs(rotatingServer());
-	const stale = await sessionOf(b);
+	const stale = await credentialsOf(b);
 	await a.signIn(
 		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
 	);
-	await assert.rejects(b.rejectSession(stale), code("SESSION_CHANGED"));
+	await assert.rejects(b.credentials.reject(stale), code("SESSION_CHANGED"));
 	assert.equal(saved().accessToken, "bob-token");
 });
 
@@ -174,7 +183,7 @@ test("switching accounts in one tab switches the others and cancels their work",
 	const gate = deferred();
 	const { a, b } = await mountedTabs({ refresh: async () => gate.promise });
 	const aliceId = b.state.get().sessionId;
-	const pending = b.refresh(await sessionOf(b));
+	const pending = b.credentials.renew(await credentialsOf(b));
 	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
 	await flush();
 	await a.signIn(
@@ -184,7 +193,7 @@ test("switching accounts in one tab switches the others and cancels their work",
 	await checked;
 	assert.equal(b.state.get().user?.id, "bob");
 	assert.notEqual(b.state.get().sessionId, aliceId);
-	assert.equal((await sessionOf(b)).accessToken, "bob-token");
+	assert.equal((await credentialsOf(b)).accessToken, "bob-token");
 	gate.resolve({ accessToken: "late" });
 	await flush();
 	assert.equal(saved().accessToken, "bob-token");
@@ -194,11 +203,11 @@ test("a refresh in one tab reaches the others without a version change", async (
 	const server = rotatingServer();
 	const { a, b } = await mountedTabs(server);
 	const before = b.state.get();
-	await a.refresh(await sessionOf(a));
+	await a.credentials.renew(await credentialsOf(a));
 	await broadcast();
 	assert.equal(b.state.get().version, before.version);
 	assert.equal(b.state.get().user, before.user);
-	assert.equal((await sessionOf(b)).accessToken, "access-2");
+	assert.equal((await credentialsOf(b)).accessToken, "access-2");
 	assert.equal(server.calls, 1);
 });
 
@@ -209,7 +218,7 @@ test("a profile update in one tab reaches the others", async () => {
 	await broadcast();
 	assert.equal(b.state.get().user?.email, "new@example.com");
 	assert.equal(b.state.get().version, before + 1);
-	assert.equal((await sessionOf(b)).accessToken, "access-1");
+	assert.equal((await credentialsOf(b)).accessToken, "access-1");
 });
 
 test("another tab's successful refresh clears this tab's refresh failure", async () => {
@@ -223,19 +232,22 @@ test("another tab's successful refresh clears this tab's refresh failure", async
 	});
 	cleanups.push(b.mount());
 	await flush();
-	await assert.rejects(b.refresh(await sessionOf(b)), code("REFRESH_FAILED"));
+	await assert.rejects(
+		b.credentials.renew(await credentialsOf(b)),
+		code("REFRESH_FAILED"),
+	);
 	await assert.rejects(b.getSession(), code("REFRESH_FAILED"));
-	await a.refresh(await sessionOf(a));
+	await a.credentials.renew(await credentialsOf(a));
 	await broadcast();
 	assert.equal(b.state.get().status, "authenticated");
 	assert.equal(b.state.get().error, null);
-	assert.equal((await sessionOf(b)).accessToken, "access-2");
+	assert.equal((await credentialsOf(b)).accessToken, "access-2");
 });
 
 test("a refresh in flight cannot overwrite an account signed in meanwhile", async () => {
 	const gate = deferred();
 	const { a, b } = await twoTabs({ refresh: async () => gate.promise });
-	const pending = b.refresh(await sessionOf(b));
+	const pending = b.credentials.renew(await credentialsOf(b));
 	const checked = assert.rejects(pending, code("SESSION_CHANGED"));
 	await flush();
 	await a.signIn(
@@ -269,7 +281,7 @@ test("invalid saved data from another tab leaves this tab's session alone", asyn
 test("a user another tab saved that this tab's schema rejects signs every tab out", async () => {
 	const a = client();
 	await a.signIn(input());
-	const b = client({ userSchema: userSchema.extend({ email: z.email() }) });
+	const b = client({ user: userSchema.extend({ email: z.email() }) });
 	cleanups.push(a.mount(), b.mount());
 	await flush();
 	assert.equal(b.state.get().user?.email, "alice@example.com");
