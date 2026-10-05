@@ -1,10 +1,17 @@
 import {
 	createElement,
 	Fragment,
+	useContext,
 	type ReactElement,
 	type ReactNode,
 } from "react";
-import { Navigate, Outlet, useLocation } from "react-router";
+import {
+	Navigate,
+	Outlet,
+	UNSAFE_DataRouterStateContext,
+	useLoaderData,
+	useLocation,
+} from "react-router";
 
 import { AuthError } from "../core/errors.js";
 import { loginHref } from "../core/return-to.js";
@@ -26,7 +33,10 @@ type OutletState = {
 export type SessionOutletProps = {
 	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
 	loginPath: string;
-	/** Shown while the saved session is being restored. Default: nothing. */
+	/**
+	 * Shown while the saved session is being restored and, in data mode,
+	 * while the loader has yet to accept a new session. Default: nothing.
+	 */
 	pending?: ReactNode;
 	/**
 	 * Shown when access is unavailable, such as after a failed refresh. `retry`
@@ -42,12 +52,36 @@ export type SessionOutletProps = {
 };
 
 /**
+ * The session ID that this route's loader accepted, when it returned
+ * `requireSession`'s `{ session }`. `undefined` outside a data router, or when
+ * the loader returned no session.
+ */
+function useGuardedSessionId(): string | undefined {
+	// Data and framework mode provide this context; declarative mode does not.
+	// That never changes while a component is mounted, so `useLoaderData`
+	// below runs on every render or on none.
+	const dataRouter = useContext(UNSAFE_DataRouterStateContext);
+	if (!dataRouter) return undefined;
+	// oxlint-disable-next-line react/rules-of-hooks
+	const data = useLoaderData() as
+		| { session?: { sessionId?: unknown } }
+		| null
+		| undefined;
+	const id = data?.session?.sessionId;
+	return typeof id === "string" ? id : undefined;
+}
+
+/**
  * Renders child routes only while someone is signed in, in any mode. In
  * declarative mode it is the guard: signed-out users are sent to `loginPath`
- * with `?redirectTo=` set to the current location. In data mode, pair it
- * with `requireSession` in loaders. Child routes are keyed by session, so
- * nothing from one account stays mounted for the next. Profile updates and
- * token refreshes keep them mounted.
+ * with `?redirectTo=` set to the current location. In data mode, render it
+ * as the element of the route whose loader returns `requireSession`'s
+ * result: child routes then render only while that session is still the
+ * signed-in one, and `pending` shows until `useAuthRevalidation` has re-run
+ * the loader for a new one, so no child sees the previous account's loader
+ * data. Child routes are keyed by session, so nothing from one account stays
+ * mounted for the next. Profile updates and token refreshes keep them
+ * mounted.
  *
  * @example
  * <Route element={<SessionOutlet loginPath="/login" pending={<Spinner />} />}>
@@ -67,9 +101,12 @@ export function SessionOutlet({
 	);
 	const location = useLocation();
 	const state = useAuthState(auth, (value) => value as OutletState);
+	const guarded = useGuardedSessionId();
 	switch (state.status) {
 		case "authenticated":
 		case "refreshing":
+			if (guarded !== undefined && guarded !== state.sessionId)
+				return createElement(Fragment, null, pending);
 			return createElement(Outlet, { key: state.sessionId });
 		case "unauthenticated":
 			return createElement(Navigate, {

@@ -92,6 +92,11 @@
   `createAuthHooks({ useClient: useRouterAuth })`; elsewhere, render
   `AuthProvider`, which also mounts the client. `connectAuth` moved to
   `/tanstack-router`, and `safeReturnTo` to the package root.
+- **Breaking:** TanStack React Router `^1.132.0` is required (was
+  `^1.127.0`). Earlier versions include the router's `basepath` in
+  `location.href`, so `requireSession` put it in `redirectTo` and users came
+  back to a path with the `basepath` twice. CI tests 1.132.0 as the oldest
+  version.
 - **Breaking:** both peer dependencies are optional, and React DOM is no longer
   one. Install TanStack Router only for `/tanstack-router`, and React only for
   the React entry points.
@@ -115,6 +120,16 @@
   `initializing`, and abort a refresh in flight. While a sign-in validates,
   only a newer `signIn` or `signOut()` cancels it; expiry and other tabs do
   not.
+- In React Router's data and framework mode, `SessionOutlet` renders child
+  routes only while the session its route's loader accepted is still the
+  signed-in one, as the TanStack Router `SessionOutlet` does. After another
+  account signs in, it shows `pending` until the loader runs again, instead
+  of rendering child routes with the previous account's loader data. A route
+  whose loader returns no session, and declarative mode, keep following the
+  signed-in session.
+- React Router's `requireSession` takes the router's `basename`, which it
+  leaves out of `redirectTo`. Without it, an app with a `basename` returned
+  users to a path with the `basename` twice.
 - Route guards read the session again when `getSession()` rejects with
   `SESSION_CHANGED`, as they already did when it resolved a session that was
   no longer current.

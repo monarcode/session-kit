@@ -417,3 +417,152 @@ test("loader guards redirect with the requested URL and never leave the site", a
 		/loginPath must start with/,
 	);
 });
+
+test("data mode: SessionOutlet waits for the loader to accept a new account", async () => {
+	const auth = newClient();
+	await signIn(auth);
+	const { AuthProvider, useAuth } = hooks.createAuthHooks<Client>();
+	const { createMemoryRouter, RouterProvider, Outlet, useRouteLoaderData } =
+		router;
+	let hold: Promise<void> | undefined;
+	const mismatches: string[] = [];
+	function Root() {
+		binding.useAuthRevalidation();
+		return h(Outlet);
+	}
+	function Home() {
+		const id = useAuth((state) => state.user?.id);
+		const data = useRouteLoaderData("guarded") as {
+			session: { user: { id: string } };
+		};
+		if (data.session.user.id !== id)
+			mismatches.push(`${String(id)} saw ${data.session.user.id}'s data`);
+		return h("output", null, `home:${data.session.user.id}`);
+	}
+	const memory = createMemoryRouter(
+		[
+			{
+				element: h(Root),
+				children: [
+					{
+						id: "guarded",
+						loader: async ({ request }: { request: Request }) => {
+							const guarded = await binding.requireSession(auth, {
+								request,
+								loginPath: "/login",
+							});
+							await hold;
+							return guarded;
+						},
+						element: h(binding.SessionOutlet, {
+							loginPath: "/login",
+							pending: "checking",
+						}),
+						children: [{ index: true, element: h(Home) }],
+					},
+				],
+			},
+		],
+		{ initialEntries: ["/"] },
+	);
+	const view = await render(
+		h(AuthProvider, { client: auth }, h(RouterProvider, { router: memory })),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "home:alice");
+	let release!: () => void;
+	hold = new Promise((resolve) => (release = resolve));
+	// Another account signs in, as from another tab; the loader has yet to run again.
+	await act(() =>
+		auth.signIn({
+			accessToken: "bob-token",
+			user: { id: "bob", email: "bob@example.com" },
+		}),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "checking");
+	release();
+	await settle();
+	assert.equal(view.container.textContent, "home:bob");
+	assert.deepEqual(mismatches, []);
+});
+
+test("data mode: requireSession leaves the basename out of redirectTo", async () => {
+	const auth = newClient();
+	const { AuthProvider } = hooks.createAuthHooks<Client>();
+	const { createMemoryRouter, RouterProvider } = router;
+	const memory = createMemoryRouter(
+		[
+			{
+				path: "/login",
+				loader: async ({ request }: { request: Request }) => {
+					const redirectTo = new URL(request.url).searchParams.get(
+						"redirectTo",
+					);
+					await binding.redirectIfSignedIn(auth, { redirectTo });
+					return null;
+				},
+				element: "login",
+			},
+			{
+				path: "/private",
+				loader: ({ request }: { request: Request }) =>
+					binding.requireSession(auth, {
+						request,
+						loginPath: "/login",
+						basename: "/app",
+					}),
+				element: "private",
+			},
+		],
+		{ basename: "/app", initialEntries: ["/app/private?tab=2"] },
+	);
+	await render(
+		h(AuthProvider, { client: auth }, h(RouterProvider, { router: memory })),
+	);
+	await settle();
+	const where = () =>
+		memory.state.location.pathname + memory.state.location.search;
+	assert.equal(where(), "/app/login?redirectTo=%2Fprivate%3Ftab%3D2");
+	await act(() => signIn(auth));
+	await act(() => memory.revalidate());
+	await settle();
+	assert.equal(where(), "/app/private?tab=2");
+});
+
+test("requireSession strips the basename ignoring case and trailing slashes", async () => {
+	const auth = newClient();
+	await auth.getSession();
+	const location = async (url: string, basename?: string) => {
+		const request = new Request(`https://auth.test${url}`);
+		const response = await binding
+			.requireSession(auth, { request, loginPath: "/login", basename })
+			.then(
+				() => assert.fail("Expected a redirect"),
+				(thrown: Response) => thrown,
+			);
+		return response.headers.get("Location");
+	};
+	assert.equal(
+		await location("/app/private", "/app/"),
+		"/login?redirectTo=%2Fprivate",
+	);
+	assert.equal(
+		await location("/APP/private", "/app"),
+		"/login?redirectTo=%2Fprivate",
+	);
+	assert.equal(await location("/app", "/app"), "/login?redirectTo=%2F");
+	assert.equal(await location("/apple", "/app"), "/login?redirectTo=%2Fapple");
+	assert.equal(
+		await location("/private", "/"),
+		"/login?redirectTo=%2Fprivate",
+	);
+	await assert.rejects(
+		binding.requireSession(auth, {
+			request: new Request("https://auth.test/app"),
+			loginPath: "/login",
+			basename: "app",
+		}),
+		/basename must start with/,
+	);
+});

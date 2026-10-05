@@ -151,6 +151,8 @@ const realRouter = async (auth: TestClient) => {
 	setGlobal("self", globalThis);
 	setGlobal("scrollTo", () => {});
 	setGlobal("window", {
+		// Router 1.132 and later resolve locations against `window.origin`.
+		origin: "https://example.com",
 		location: new URL("https://example.com/private"),
 		addEventListener() {},
 		removeEventListener() {},
@@ -253,10 +255,16 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 });
 
 /** A real Router whose `/private` uses `requireSession` and `/login` `redirectIfSignedIn`. */
-const guardedRouter = async (auth: TestClient, path: string) => {
+const guardedRouter = async (
+	auth: TestClient,
+	path: string,
+	{ basepath }: { basepath?: string } = {},
+) => {
 	setGlobal("self", globalThis);
 	setGlobal("scrollTo", () => {});
 	setGlobal("window", {
+		// Router 1.132 and later resolve locations against `window.origin`.
+		origin: "https://example.com",
 		location: new URL(`https://example.com${path}`),
 		addEventListener() {},
 		removeEventListener() {},
@@ -288,6 +296,7 @@ const guardedRouter = async (auth: TestClient, path: string) => {
 		context: { auth },
 		history: createMemoryHistory({ initialEntries: [path] }),
 		isServer: false,
+		basepath,
 	});
 	router.startTransition = (async (fn: () => void) => {
 		fn();
@@ -296,6 +305,24 @@ const guardedRouter = async (auth: TestClient, path: string) => {
 	await router.load();
 	return router;
 };
+
+test("guards keep a basepath out of redirectTo and in every redirect", async () => {
+	const auth = client();
+	await auth.getSession();
+	const router = await guardedRouter(auth, "/app/private?tab=2", {
+		basepath: "/app",
+	});
+	const where = () =>
+		router.history.location.pathname + router.history.location.search;
+	assert.equal(where(), "/app/login?redirectTo=%2Fprivate%3Ftab%3D2");
+	const { redirectTo } = router.state.location.search as {
+		redirectTo?: unknown;
+	};
+	assert.equal(redirectTo, "/private?tab=2");
+	await auth.signIn(input());
+	await router.navigate({ to: "/login", search: { redirectTo } });
+	assert.equal(where(), "/app/private?tab=2");
+});
 
 test("requireSession sends signed-out users to sign in, then back", async () => {
 	const auth = client();

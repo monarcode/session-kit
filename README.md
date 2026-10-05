@@ -39,7 +39,7 @@ All peer dependencies are optional, so install only what you use:
 | Peer                     | Range                  | Needed for                                    |
 | ------------------------ | ---------------------- | --------------------------------------------- |
 | `react`                  | `^18.0.0 \|\| ^19.0.0` | `/react`, `/tanstack-router`, `/react-router` |
-| `@tanstack/react-router` | `^1.127.0`             | `/tanstack-router`                            |
+| `@tanstack/react-router` | `^1.132.0`             | `/tanstack-router`                            |
 | `react-router`           | `^7.0.0 \|\| ^8.0.0`   | `/react-router`                               |
 
 CI tests the oldest and newest versions in each range. session-kit never
@@ -424,7 +424,10 @@ happens before the first paint, and never on a server.
   guards loaders and returns `{ session }`, and
   `redirectIfSignedIn(auth, { redirectTo })` guards the sign-in loader. Call
   `useAuthRevalidation()` once in the root layout so loaders re-run when auth
-  changes.
+  changes. Render `SessionOutlet` as the element of the guarded route: when
+  another account signs in, it shows `pending` until the loader accepts the
+  new session, so child routes never see the previous account's loader data.
+  With a router `basename`, pass the same `basename` to `requireSession`.
 
 **Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
 in any React app.
