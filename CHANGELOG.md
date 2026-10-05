@@ -2,6 +2,15 @@
 
 ## 0.1.0-alpha.4
 
+### Security
+
+- `safeReturnTo` no longer returns paths whose dot segments resolve to
+  another origin. Earlier versions turned inputs such as `/.//evil.com` and
+  `/%2e//evil.com` into `//evil.com`, which browsers and routers follow to
+  `evil.com`. Apps that pass `safeReturnTo`'s result to a redirect on alpha.3
+  or earlier should upgrade. The new `redirectIfSignedIn` guards use the fixed
+  check.
+
 ### Added
 
 - `createAuth` takes a `storage` adapter. `webStorage()` saves the session in

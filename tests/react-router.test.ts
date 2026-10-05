@@ -323,13 +323,13 @@ test("loader guards redirect with the requested URL and never leave the site", a
 		loginPath: "/login",
 	});
 	assert.deepEqual(session, await auth.getSession());
-	const away = await binding
-		.redirectIfSignedIn(auth, { redirectTo: "https://evil.example/" })
-		.then(
+	for (const redirectTo of ["https://evil.example/", "/.//evil.example"]) {
+		const away = await binding.redirectIfSignedIn(auth, { redirectTo }).then(
 			() => assert.fail("Expected a redirect"),
 			(response: Response) => response,
 		);
-	assert.equal(away.headers.get("Location"), "/");
+		assert.equal(away.headers.get("Location"), "/", redirectTo);
+	}
 	await assert.rejects(
 		binding.requireSession(auth, { request, loginPath: "login" }),
 		/loginPath must start with/,

@@ -36,6 +36,9 @@ export function safeReturnTo(
 		const key = routeKey(url.pathname);
 		if (
 			url.origin !== base ||
+			// Dot segments can resolve to `//host`, which browsers and routers
+			// read as another origin: `/.//evil.com` becomes `//evil.com`.
+			url.pathname.startsWith("//") ||
 			loginPaths.some((path) => routeKey(path) === key)
 		)
 			return "/";

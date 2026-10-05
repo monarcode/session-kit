@@ -327,7 +327,11 @@ test("requireSession puts the session, without tokens, in route context", async 
 test("redirectIfSignedIn never returns to sign-in or leaves the site", async () => {
 	const auth = client();
 	await auth.signIn(input());
-	for (const redirectTo of ["https://evil.example/", "/login"]) {
+	for (const redirectTo of [
+		"https://evil.example/",
+		"/.//evil.example",
+		"/login",
+	]) {
 		const router = await guardedRouter(
 			auth,
 			`/login?redirectTo=${encodeURIComponent(redirectTo)}`,
