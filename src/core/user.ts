@@ -2,6 +2,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
+import { attempt, chain, type MaybePromise } from "./maybe.js";
 
 /**
  * Copies `value` as deeply frozen JSON, rejecting values JSON would drop or
@@ -74,55 +75,34 @@ export function toUser(value: unknown): Record<string, unknown> {
 	return frozenJson(value) as Record<string, unknown>;
 }
 
-export async function validateUser<S extends StandardSchemaV1>(
-	schema: S,
-	input: unknown,
-): Promise<StandardSchemaV1.InferOutput<S>> {
-	try {
-		const result = await schema["~standard"].validate(input);
-		if (result.issues) {
-			throw new AuthError("USER_VALIDATION_FAILED", "Invalid user", {
-				issues: result.issues,
-			});
-		}
-		return toUser(result.value);
-	} catch (cause) {
-		if (cause instanceof AuthError) throw cause;
-		throw new AuthError("USER_VALIDATION_FAILED", "User validation failed", {
-			cause,
-		});
-	}
-}
-
-/** Whether `value` is a promise or another thenable. */
-export function isThenable(value: unknown): value is PromiseLike<unknown> {
-	return (
-		(typeof value === "object" || typeof value === "function") &&
-		value !== null &&
-		typeof (value as { then?: unknown }).then === "function"
-	);
-}
-
 /**
- * Validates `input` synchronously when the schema can, returning `undefined`
- * when it is asynchronous or rejects the input. `validateUser` then decides,
- * and reports any failure.
+ * Validates `input` with `schema`, returning a frozen copy of its output.
+ * Synchronous when the schema is, so a saved session can be restored before
+ * the first render.
  */
-export function validateUserNow<S extends StandardSchemaV1>(
+export function validateUser<S extends StandardSchemaV1>(
 	schema: S,
 	input: unknown,
-): StandardSchemaV1.InferOutput<S> | undefined {
-	try {
-		const result = schema["~standard"].validate(input);
-		if (isThenable(result)) {
-			// Asynchronous schema: drop this attempt; validateUser runs it again.
-			void Promise.resolve(result).catch(() => {});
-			return undefined;
-		}
-		return result.issues ? undefined : toUser(result.value);
-	} catch {
-		return undefined;
-	}
+): MaybePromise<StandardSchemaV1.InferOutput<S>> {
+	return attempt(
+		() =>
+			chain(schema["~standard"].validate(input), (result) => {
+				if (result.issues) {
+					throw new AuthError("USER_VALIDATION_FAILED", "Invalid user", {
+						issues: result.issues,
+					});
+				}
+				return toUser(result.value);
+			}),
+		(cause) => {
+			if (cause instanceof AuthError) throw cause;
+			throw new AuthError(
+				"USER_VALIDATION_FAILED",
+				"User validation failed",
+				{ cause },
+			);
+		},
+	);
 }
 
 /**

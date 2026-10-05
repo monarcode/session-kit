@@ -1,16 +1,10 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 import { AuthError } from "./errors.js";
+import { attempt, chain, type MaybePromise } from "./maybe.js";
 import type { StoredSession } from "./persistence.js";
 import { decodeJwtPayload, type SessionTokens } from "./tokens.js";
-import {
-	isThenable,
-	sameUser,
-	toUser,
-	validateNewUser,
-	validateUser,
-	validateUserNow,
-} from "./user.js";
+import { sameUser, toUser, validateNewUser, validateUser } from "./user.js";
 
 /**
  * A user read from the access token's claims, made by `fromAccessToken`.
@@ -85,14 +79,12 @@ export type UserResolver<U> = {
 	/** Whether the user is saved beside the tokens, rather than derived from them. */
 	saved: boolean;
 	/** The user for newly received tokens and `input`, which is ignored when derived. */
-	receive: (accessToken: string, input: unknown) => Promise<U>;
-	/** The user for a saved session. */
-	restore: (saved: StoredSession) => Promise<U>;
+	receive: (accessToken: string, input: unknown) => MaybePromise<U>;
 	/**
-	 * The user for a saved session, when it can be found synchronously;
-	 * otherwise `undefined`, and `restore` decides.
+	 * The user for a saved session. Synchronous when the source is, so a
+	 * session can be restored before the first render.
 	 */
-	restoreNow: (saved: StoredSession) => U | undefined;
+	restore: (saved: StoredSession) => MaybePromise<U>;
 	/** Whether `saved` holds the same user as `current`, without validating it. */
 	unchanged: (
 		saved: StoredSession,
@@ -110,7 +102,6 @@ export function resolveUserSource(source: UserSource): UserResolver<unknown> {
 			saved: true,
 			receive: (_, input) => validateNewUser(source, input),
 			restore: (saved) => validateUser(source, saved.user),
-			restoreNow: (saved) => validateUserNow(source, saved.user),
 			unchanged: (saved, current) => sameUser(saved.user, current.user),
 		};
 	}
@@ -119,50 +110,35 @@ export function resolveUserSource(source: UserSource): UserResolver<unknown> {
 			"Pass a Standard Schema or fromAccessToken(…) as the user option",
 		);
 	}
-	const derive = async (accessToken: string) => {
-		try {
-			const result = await source.claims["~standard"].validate(
-				await source.decode(accessToken),
-			);
-			if (result.issues) {
+	/** Decodes and validates the claims, then maps them to the user. */
+	const derive = (accessToken: string) =>
+		attempt(
+			() =>
+				chain(source.decode(accessToken), (decoded) =>
+					chain(source.claims["~standard"].validate(decoded), (result) => {
+						if (result.issues) {
+							throw new AuthError(
+								"USER_VALIDATION_FAILED",
+								"Invalid access token claims",
+								{ issues: result.issues },
+							);
+						}
+						return toUser(source.map(result.value));
+					}),
+				),
+			(cause) => {
+				if (cause instanceof AuthError) throw cause;
 				throw new AuthError(
 					"USER_VALIDATION_FAILED",
-					"Invalid access token claims",
-					{ issues: result.issues },
+					"Could not read the user from the access token",
+					{ cause },
 				);
-			}
-			return toUser(source.map(result.value));
-		} catch (cause) {
-			if (cause instanceof AuthError) throw cause;
-			throw new AuthError(
-				"USER_VALIDATION_FAILED",
-				"Could not read the user from the access token",
-				{ cause },
-			);
-		}
-	};
-	const deriveNow = (accessToken: string) => {
-		try {
-			const decoded = source.decode(accessToken);
-			if (isThenable(decoded)) {
-				// Asynchronous decode: drop this attempt; derive runs it again.
-				void Promise.resolve(decoded).catch(() => {});
-				return undefined;
-			}
-			const claims = validateUserNow(
-				source.claims as StandardSchemaV1,
-				decoded,
-			);
-			return claims === undefined ? undefined : toUser(source.map(claims));
-		} catch {
-			return undefined;
-		}
-	};
+			},
+		);
 	return {
 		saved: false,
 		receive: (accessToken) => derive(accessToken),
 		restore: (saved) => derive(saved.accessToken),
-		restoreNow: (saved) => deriveNow(saved.accessToken),
 		unchanged: (saved, current) => saved.accessToken === current.accessToken,
 	};
 }

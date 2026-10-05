@@ -182,3 +182,41 @@ test("a user read from the token restores at once when mounting", async () => {
 	cleanups.push(auth.mount());
 	assert.equal(auth.state.get().user?.id, "alice");
 });
+
+test("a token user mapped from claims that are not JSON restores synchronously", async () => {
+	// The claims hold a Date; only the mapped user must be JSON.
+	const dated = fromAccessToken(
+		z.object({
+			sub: z.string(),
+			exp: z.number().transform((seconds) => new Date(seconds * 1000)),
+		}),
+		(value) => ({ id: value.sub, expires: value.exp.toISOString() }),
+	);
+	const storage = webStorage();
+	await client({ user: dated, storage }).signIn({
+		accessToken: jwt({ sub: "alice", exp: 9e9 }),
+	});
+	const auth = client({ user: dated, storage });
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().user?.id, "alice");
+});
+
+test("an asynchronous decoder runs once per restore", async () => {
+	let decodes = 0;
+	const decoded = fromAccessToken(claims, undefined, {
+		decode: async (token) => {
+			decodes++;
+			return JSON.parse(
+				Buffer.from(token.split(".")[1]!, "base64url").toString(),
+			);
+		},
+	});
+	await client({ user: decoded }).signIn({ accessToken: jwt(alice) });
+	decodes = 0;
+	const auth = client({ user: decoded });
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "initializing");
+	assert.equal((await sessionOf(auth)).user.sub, "alice");
+	assert.equal(decodes, 1);
+});

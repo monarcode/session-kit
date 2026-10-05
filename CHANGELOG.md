@@ -66,9 +66,14 @@
   against DummyJSON's auth API.
 - Mounting restores the saved session at once when storage and the user
   source both answer synchronously, as with `webStorage()` and a synchronous
-  schema, so `initializing` is never rendered. `AuthProvider` mounts in a
-  layout effect, before the browser paints. Asynchronous storage, schemas, or
-  token decoding restore as before.
+  schema. `AuthProvider` mounts in a layout effect, so the browser's first
+  paint shows the restored session rather than `initializing`, although
+  components may render once with `initializing` before that paint. A saved
+  session that cannot be restored signs out at once. Asynchronous storage,
+  schemas, or token decoding restore as before, and validate the saved user
+  once.
+- Mounting again after an unmount applies what another tab saved meanwhile,
+  such as a sign-out.
 
 ### Changed
 

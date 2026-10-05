@@ -8,12 +8,15 @@ import {
 	type ReactNode,
 } from "react";
 
+import { webStorage } from "@monarcode/session-kit";
 import type { AuthHooks } from "@monarcode/session-kit/react";
 import type { AnyRouter } from "@tanstack/react-router";
 
+import { deferredStorage } from "./deferred-storage.ts";
 import {
 	act,
 	dom,
+	firstPaint,
 	newClient,
 	render,
 	settle,
@@ -219,6 +222,30 @@ for (const kind of Object.keys(setups)) {
 			assert.equal(subscriptions, unsubscriptions);
 		});
 	}
+}
+
+for (const synchronous of [true, false]) {
+	test(`AuthProvider's first paint ${synchronous ? "shows the restored session from synchronous storage" : "is pending with asynchronous storage"}`, async () => {
+		await signIn(newClient());
+		const storage = synchronous
+			? webStorage()
+			: deferredStorage(webStorage());
+		const auth = newClient({ storage });
+		const { AuthProvider, useAuth } = binding.createAuthHooks<Client>();
+		function Status() {
+			return h(
+				"output",
+				null,
+				useAuth((state) => state.status),
+			);
+		}
+		const painted = await firstPaint(
+			h(AuthProvider, { client: auth }, h(Status)),
+		);
+		assert.equal(painted, synchronous ? "authenticated" : "initializing");
+		await settle();
+		assert.equal(auth.state.get().status, "authenticated");
+	});
 }
 
 test("AuthProvider mounts its client while rendered", async () => {

@@ -2,6 +2,7 @@ import { atom } from "nanostores";
 
 import { AuthError, toAuthError, sessionChanged } from "./errors.js";
 import { createId } from "./id.js";
+import { attempt, chain, isThenable, type MaybePromise } from "./maybe.js";
 import { createPersistence, type StoredSession } from "./persistence.js";
 import { obtainTokens } from "./refresh.js";
 import {
@@ -507,38 +508,36 @@ export function createAuth<Src extends UserSource>(
 		return null;
 	}
 
-	async function initialize() {
+	/**
+	 * Restores the saved session. Finishes synchronously when storage and the
+	 * user source both answer at once, as with `webStorage()` and a
+	 * synchronous schema, so mounting can restore before the first render.
+	 * Otherwise returns the restore in progress, which later calls join.
+	 */
+	function initialize(): MaybePromise<void> {
 		if (initialized) return;
 		if (initialization) return initialization;
 		const expected = epoch;
-		const promise = (async () => {
-			try {
-				const stored = await persistence.read();
-				assertEpoch(expected);
-				if (stored) {
-					const user = await runTask(
-						() => users.restore(stored),
-						controller.signal,
-					);
+		/** Restoring work that is asynchronous can be aborted and times out. */
+		const bounded = <T>(value: MaybePromise<T>): MaybePromise<T> =>
+			isThenable(value) ? runTask(() => value, controller.signal) : value;
+		const restored = attempt(
+			() =>
+				chain(persistence.read(), (stored) => {
 					assertEpoch(expected);
-					session = { ...tokensOf(stored), id: stored.id, user };
-					revision++;
-				}
-				assertEpoch(expected);
-				initialized = true;
-				if (!session || valid()) publish();
-				schedule();
-			} catch (cause) {
+					if (!stored) return finish(null);
+					return chain(bounded(users.restore(stored)), (user) =>
+						finish({ ...tokensOf(stored), id: stored.id, user }),
+					);
+				}),
+			(cause): MaybePromise<void> => {
 				assertEpoch(expected);
 				const error = toAuthError(
 					"PERSISTENCE_FAILED",
 					"Could not restore auth",
 					cause,
 				);
-				if (rejectsSaved(error)) {
-					await discardSaved(error);
-					return;
-				}
+				if (rejectsSaved(error)) return discardSaved(error);
 				const previous = store.get();
 				store.set({
 					...previous,
@@ -547,8 +546,22 @@ export function createAuth<Src extends UserSource>(
 					version: previous.version + 1,
 				} as AuthState<U>);
 				throw error;
+			},
+		);
+		/** Installs what storage held, once this restore is still current. */
+		function finish(restoredSession: InternalSession<U> | null) {
+			assertEpoch(expected);
+			if (restoredSession) {
+				session = restoredSession;
+				revision++;
 			}
-		})();
+			initialized = true;
+			// An expired session publishes when its refresh starts.
+			if (!session || valid()) publish();
+			schedule();
+		}
+		if (!isThenable(restored)) return;
+		const promise = restored;
 		initialization = promise;
 		const clearInitialization = () => {
 			if (initialization === promise) initialization = undefined;
@@ -865,33 +878,13 @@ export function createAuth<Src extends UserSource>(
 		return refreshSession(session, false);
 	}
 
-	/**
-	 * Restores at once when storage and validation both answer synchronously,
-	 * so state is ready before the first render. Anything asynchronous, or
-	 * any failure, is left to `initialize()`, which also reports errors.
-	 */
-	function restoreNow() {
-		if (initialized || initialization) return;
-		const stored = persistence.readNow();
-		if (stored === undefined) return;
-		let user: U | undefined;
-		if (stored) {
-			user = users.restoreNow(stored);
-			if (user === undefined) return;
-		}
-		session = stored
-			? { ...tokensOf(stored), id: stored.id, user: user! }
-			: null;
-		revision++;
-		initialized = true;
-		// An expired session publishes when its refresh starts, as in initialize().
-		if (!session || valid()) publish();
-	}
-
 	function mount() {
-		if (mounts++ === 0)
+		if (mounts++ === 0) {
 			unwatch = persistence.watch(() => inBackground(sync()));
-		restoreNow();
+			// Another tab may have changed the session while nothing watched.
+			if (initialized) inBackground(sync());
+		}
+		// Restores synchronously when it can, before returning.
 		inBackground(resolveSession());
 		schedule();
 		let active = true;

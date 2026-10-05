@@ -293,3 +293,20 @@ test("a user another tab saved that this tab's schema rejects signs every tab ou
 	await broadcast();
 	assert.equal(a.state.get().status, "unauthenticated");
 });
+
+test("a remount applies what another tab saved while this one was unmounted", async () => {
+	const a = client();
+	await a.signIn(input());
+	const b = client();
+	const off = b.mount();
+	await flush();
+	assert.equal(b.state.get().status, "authenticated");
+	off();
+	await a.signOut();
+	await broadcast();
+	// Unmounted, b missed the sign-out.
+	assert.equal(b.state.get().status, "authenticated");
+	cleanups.push(b.mount());
+	await flush();
+	assert.equal(b.state.get().status, "unauthenticated");
+});

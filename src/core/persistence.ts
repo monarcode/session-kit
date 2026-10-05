@@ -1,5 +1,6 @@
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
+import { isThenable, type MaybePromise } from "./maybe.js";
 import type { AuthStorage } from "./storage.js";
 import { validateTokens, type SessionTokens } from "./tokens.js";
 
@@ -87,28 +88,22 @@ export function createPersistence(
 		}
 	}
 
-	function read(): Promise<StoredSession | null> {
-		return enqueue(async () => parse(await storage.get(key)));
-	}
-
 	/**
-	 * Reads the saved session synchronously, when storage can answer at once
-	 * and no operation is queued. Returns `undefined` otherwise, meaning "use
-	 * `read()`", including for malformed entries, which `read()` reports.
+	 * Reads the saved session. With nothing queued, storage is asked at once,
+	 * and a synchronous answer is returned synchronously, so a session can be
+	 * restored before the first render. Otherwise the read waits its turn.
 	 */
-	function readNow(): StoredSession | null | undefined {
-		if (pending) return undefined;
+	function read(): MaybePromise<StoredSession | null> {
+		if (pending) return enqueue(async () => parse(await storage.get(key)));
+		let text: ReturnType<AuthStorage["get"]>;
 		try {
-			const text = storage.get(key);
-			if (typeof text === "object" && text !== null) {
-				// Asynchronous storage: drop this read; `read()` will ask again.
-				void Promise.resolve(text).catch(() => {});
-				return undefined;
-			}
-			return parse(text);
-		} catch {
-			return undefined;
+			text = storage.get(key);
+		} catch (cause) {
+			throw storageError(cause);
 		}
+		if (!isThenable(text)) return parse(text);
+		// Queued, so operations requested meanwhile wait for this read.
+		return enqueue(async () => parse(await text));
 	}
 
 	function write(session: StoredSession): Promise<void> {
@@ -144,5 +139,5 @@ export function createPersistence(
 		return storage.subscribe?.(key, listener) ?? (() => {});
 	}
 
-	return { read, readNow, write, clear, exclusive, watch };
+	return { read, write, clear, exclusive, watch };
 }

@@ -6,7 +6,7 @@ const TASK_TIMEOUT_MS = 15_000;
  * timeout even when `work` ignores the signal, so late results never commit.
  */
 export function runTask<T>(
-	work: (signal: AbortSignal) => Promise<T>,
+	work: (signal: AbortSignal) => T | PromiseLike<T>,
 	parent: AbortSignal,
 	timeoutMs = TASK_TIMEOUT_MS,
 ): Promise<T> {

@@ -580,11 +580,47 @@ test("restoring waits for asynchronous storage or schemas", async () => {
 	}
 });
 
-test("an invalid saved session is still discarded when mounting", async () => {
+test("mounting restores at once from synchronous storage and a synchronous schema", async () => {
+	await client().signIn(input());
+	const auth = client({ storage: webStorage() });
+	const states = recordStates(auth);
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(auth.state.get().user?.id, "alice");
+	await flush();
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["authenticated"],
+	);
+});
+
+test("mounting validates a saved user once with an asynchronous schema", async () => {
+	await client().signIn(input());
+	let calls = 0;
+	// Zod runs an async refinement twice, so count at the Standard Schema level.
+	const schema = userSchema["~standard"];
+	const asynchronous = {
+		"~standard": {
+			...schema,
+			validate: (value: unknown) => {
+				calls++;
+				return Promise.resolve(schema.validate(value));
+			},
+		},
+	};
+	const auth = client({ storage: webStorage(), user: asynchronous });
+	cleanups.push(auth.mount());
+	assert.equal(auth.state.get().status, "initializing");
+	assert.equal((await sessionOf(auth)).user.id, "alice");
+	assert.equal(calls, 1);
+});
+
+test("mounting signs out of an invalid saved session at once, then discards it", async () => {
 	values.set(SESSION, "invalid-json");
 	const auth = client({ storage: webStorage() });
 	cleanups.push(auth.mount());
-	assert.equal(auth.state.get().status, "initializing");
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(auth.state.get().error?.code, "INVALID_SESSION");
 	await flush();
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);

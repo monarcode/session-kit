@@ -146,6 +146,24 @@ export async function render(element: ReactNode, { strict = false } = {}) {
 	};
 }
 
+/**
+ * Renders `element` synchronously and returns the text React committed
+ * before any promise could settle: what the browser would paint first.
+ */
+export async function firstPaint(element: ReactNode): Promise<string> {
+	const container = document.createElement("div");
+	document.body.append(container);
+	const root = createRoot(container);
+	roots.add(root);
+	// A synchronous `act` flushes renders and effects, but not promises.
+	const done = act(() => {
+		root.render(element as Parameters<Root["render"]>[0]);
+	});
+	const text = container.textContent ?? "";
+	await done;
+	return text;
+}
+
 /** Lets timers and promises run, inside `act`. */
 export const settle = () =>
 	act(() => new Promise((resolve) => setTimeout(resolve, 0)));
