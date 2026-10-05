@@ -45,6 +45,12 @@
   `requireSession` and `redirectIfSignedIn` guard loaders, and
   `useAuthRevalidation` re-runs loaders when auth changes. React Router is an
   optional peer dependency.
+- TanStack Start in SPA mode is supported. `connectAuth` does nothing while
+  the Router renders on a server, so Start's build-time shell shows the pending
+  UI instead of a storage error. Apps served by Start's own server should set
+  `defaultSsr: false`, so guards run in the browser.
+- `webStorage()` explains when browser storage does not exist at all, as on a
+  server, instead of reporting a bare `TypeError`.
 - Mounting restores the saved session at once when storage and the user
   source both answer synchronously, as with `webStorage()` and a synchronous
   schema, so `initializing` is never rendered. `AuthProvider` mounts in a

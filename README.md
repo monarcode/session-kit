@@ -816,9 +816,13 @@ the remaining data after storage becomes available.
 - Query cache management belongs to your app. Scope private data to the sign-in
   session ID, and reject late results from an old session. Router revalidation
   does not clear a separate TanStack Query cache.
-- SSR and TanStack Start are not implemented. Import safety does not make the
-  browser client a server session adapter. Start needs a separate request-scoped
-  design. Never put tokens in route loader results or hydrated page data.
+- Server rendering is not implemented; sessions live in the browser. TanStack
+  Start works in SPA mode with `defaultSsr: false` in `src/start.ts`: Start's
+  server still renders requests in SPA mode, and guards need the browser's
+  saved session. `connectAuth` does nothing while the Router renders on a
+  server, such as Start's build-time shell, which then shows your pending UI.
+  React Router framework mode works with `ssr: false`. Never put tokens in
+  route loader results or hydrated page data.
 
 ## Entry points
 

@@ -157,3 +157,12 @@ test("a profile update keeps tokens this tab refreshed while it read storage", a
 	cleanups.pop()!();
 	t.mock.timers.reset();
 });
+
+test("web storage outside a browser says why it cannot restore", async () => {
+	setGlobal("localStorage", undefined);
+	const auth = client({ storage: webStorage() });
+	await assert.rejects(auth.getSession(), (error: Error) => {
+		const cause = (error as Error & { cause?: Error }).cause;
+		return /localStorage is not available here/.test(cause?.message ?? "");
+	});
+});

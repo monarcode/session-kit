@@ -57,8 +57,18 @@ export function webStorage(options: WebStorageOptions = {}): AuthStorage {
 	if (area !== "local" && area !== "session") {
 		throw new Error(`webStorage area must be "local" or "session": ${area}`);
 	}
-	const target = () =>
-		area === "local" ? globalThis.localStorage : globalThis.sessionStorage;
+	const target = () => {
+		const storage =
+			area === "local" ? globalThis.localStorage : globalThis.sessionStorage;
+		// Missing entirely means code is running outside a browser, such as a
+		// server rendering a route whose guard needs the saved session.
+		if (!storage) {
+			throw new Error(
+				`${area}Storage is not available here. Sessions live in the browser, so run auth in browser code; in TanStack Start, set defaultSsr: false.`,
+			);
+		}
+		return storage;
+	};
 	return {
 		get: (key) => target().getItem(key),
 		set: (key, value) => target().setItem(key, value),

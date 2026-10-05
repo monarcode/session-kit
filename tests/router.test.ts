@@ -355,3 +355,21 @@ test("requireSession reads a session that changes mid-check again", async () => 
 		/loginPath must start with/,
 	);
 });
+
+test("connectAuth does nothing while a Router renders on a server", () => {
+	const auth = client();
+	let mounted = 0;
+	auth.mount = () => {
+		mounted++;
+		return () => {};
+	};
+	const disconnect = connectAuth({
+		isServer: true,
+		options: { context: { auth } },
+		clearCache() {},
+		async invalidate() {},
+	});
+	disconnect();
+	assert.equal(mounted, 0);
+	assert.equal(auth.state.get().status, "initializing");
+});
