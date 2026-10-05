@@ -15,7 +15,13 @@ import {
 	type RefreshFn,
 	type UserInput,
 } from "../dist/index.js";
-import { connectAuth, useAuth, useAuthClient } from "../dist/react/index.js";
+import { createAuthHooks } from "../dist/react/index.js";
+import {
+	connectAuth,
+	requireSession,
+	SessionOutlet,
+	useRouterAuth,
+} from "../dist/tanstack-router/index.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -38,6 +44,32 @@ declare module "@tanstack/react-router" {
 
 connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
+
+// Provider-free hooks typed by the registered Router.
+const { useAuth, useAuthClient } = createAuthHooks({
+	useClient: useRouterAuth,
+});
+// Hooks for an explicit client type, with a provider.
+const provided = createAuthHooks<typeof auth>();
+provided.AuthProvider({ client: auth });
+const otherAuth = createAuth({
+	name: "other",
+	user: z.object({ n: z.number() }),
+	storage: webStorage(),
+});
+// @ts-expect-error The provider takes the client these hooks were made for.
+provided.AuthProvider({ client: otherAuth });
+SessionOutlet({ pending: "Checking session…" });
+
+async function guard() {
+	const { session } = await requireSession(auth, {
+		location: { href: "/private" },
+		loginPath: "/login",
+	});
+	const email: string = session.user.email;
+	return email;
+}
+void guard;
 
 function Component() {
 	const email: string | undefined = useAuth((state) => state.user?.email);

@@ -1,74 +1,104 @@
-import { useCallback } from "react";
+import {
+	createContext,
+	createElement,
+	useContext,
+	useEffect,
+	type ReactElement,
+	type ReactNode,
+} from "react";
 
-import { useRouter, type Register } from "@tanstack/react-router";
-import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
+import {
+	assertAuthSource,
+	ClientContext,
+	useAuthState,
+	type AuthSource,
+	type StateOf,
+} from "./context.js";
 
-export type RegisteredAuth = Register extends {
-	router: { options: { context: { auth: infer Client } } };
-}
-	? Client
-	: never;
+export type AuthHooksOptions<Client extends AuthSource> = {
+	/**
+	 * Finds the client instead of reading it from `AuthProvider`, for example
+	 * from router context. Called as a hook, on every render of every hook.
+	 */
+	useClient?: () => Client;
+};
 
-export type RegisteredAuthState = RegisteredAuth extends {
-	state: { get: () => infer State };
-}
-	? State
-	: never;
+export type AuthProviderProps<Client extends AuthSource> = {
+	/** The client for this tree. On a server, create one per request. */
+	client: Client;
+	children?: ReactNode;
+};
 
-type AuthSource = {
-	state: {
-		get: () => unknown;
-		subscribe: (listener: (value: unknown) => void) => {
-			unsubscribe: () => void;
-		};
+export type AuthHooks<Client extends AuthSource> = {
+	/**
+	 * Provides `client` to the hooks below it and mounts it while rendered,
+	 * starting expiry timers and cross-tab sync. Effects never run on a server,
+	 * so server rendering starts no background work.
+	 */
+	AuthProvider: (props: AuthProviderProps<Client>) => ReactElement;
+	/** The client, for actions such as `signIn` and `signOut`. */
+	useAuthClient: () => Client;
+	/**
+	 * The current auth state, or the part `selector` picks. Re-renders only
+	 * when the selection changes.
+	 */
+	useAuth: {
+		(): StateOf<Client>;
+		<T>(selector: (state: StateOf<Client>) => T): T;
 	};
 };
 
-function assertAuthSource(value: unknown): asserts value is AuthSource {
-	if (
-		typeof value !== "object" ||
-		value === null ||
-		!("state" in value) ||
-		typeof value.state !== "object" ||
-		value.state === null ||
-		!("get" in value.state) ||
-		typeof value.state.get !== "function" ||
-		!("subscribe" in value.state) ||
-		typeof value.state.subscribe !== "function"
-	) {
-		throw new Error(
-			"Provide an auth client in Router context before using auth hooks",
+/**
+ * Creates React hooks typed for one auth client. Each call has its own
+ * context, so an app with several clients calls it once per client.
+ *
+ * @example
+ * export const { AuthProvider, useAuth, useAuthClient } =
+ * 	createAuthHooks<typeof auth>();
+ *
+ * root.render(<AuthProvider client={auth}><App /></AuthProvider>);
+ */
+export function createAuthHooks<Client extends AuthSource>(
+	options: AuthHooksOptions<Client> = {},
+): AuthHooks<Client> {
+	const Context = createContext<Client | null>(null);
+	// Fixed at creation, so every render calls the same hooks.
+	const useResolvedClient =
+		options.useClient ??
+		function useContextClient(): Client | null {
+			return useContext(Context);
+		};
+
+	function AuthProvider({ client, children }: AuthProviderProps<Client>) {
+		useEffect(() => client.mount(), [client]);
+		return createElement(
+			ClientContext.Provider,
+			{ value: client },
+			createElement(Context.Provider, { value: client }, children),
 		);
 	}
-}
 
-function useContextAuth(): AuthSource {
-	const router = useRouter();
-	const auth: unknown = router.options.context?.auth;
-	assertAuthSource(auth);
-	return auth;
-}
+	function useAuthClient(): Client {
+		const client = useResolvedClient();
+		assertAuthSource(
+			client,
+			options.useClient
+				? "useClient did not return an auth client"
+				: "Render AuthProvider with an auth client before using auth hooks",
+		);
+		return client;
+	}
 
-export function useAuthClient(): RegisteredAuth {
-	return useContextAuth() as RegisteredAuth;
-}
+	function useAuth<T>(selector?: (state: StateOf<Client>) => T) {
+		return useAuthState(
+			useAuthClient(),
+			(state) => (selector ? selector(state) : state) as T,
+		);
+	}
 
-export function useAuth(): RegisteredAuthState;
-export function useAuth<T>(selector: (state: RegisteredAuthState) => T): T;
-export function useAuth<T>(selector?: (state: RegisteredAuthState) => T) {
-	const auth = useContextAuth();
-	const subscribe = useCallback(
-		(onChange: () => void) => auth.state.subscribe(onChange).unsubscribe,
-		[auth],
-	);
-	const getSnapshot = useCallback(() => auth.state.get(), [auth]);
-	return useSyncExternalStoreWithSelector(
-		subscribe,
-		getSnapshot,
-		getSnapshot,
-		(value) => {
-			const state = value as RegisteredAuthState;
-			return selector ? selector(state) : state;
-		},
-	);
+	return {
+		AuthProvider,
+		useAuthClient,
+		useAuth: useAuth as AuthHooks<Client>["useAuth"],
+	};
 }

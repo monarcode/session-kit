@@ -4,9 +4,10 @@ Schema-driven browser authentication for React and TanStack Router.
 
 **Version: 0.1.0-alpha.3. Early development; not ready for production.**
 
-One auth client lives in Router context. Nano Stores makes its state reactive,
-with no separate AuthProvider. Tokens and the validated user profile are stored
-together in one localStorage entry.
+One auth client lives in Router context, and typed React hooks read it from
+there, with no separate provider. Outside TanStack Router, the same hooks read
+the client from an `AuthProvider`. Nano Stores makes its state reactive. Tokens
+and the validated user profile are stored together in one entry.
 
 ## Installation
 
@@ -19,10 +20,11 @@ pnpm add @monarcode/session-kit
 Pin `@monarcode/session-kit@0.1.0-alpha.3` to use this exact version. Alpha
 releases may change the public API. See [release notes](./CHANGELOG.md).
 
-The declared peer ranges are React and React DOM `^19.0.0`, and TanStack React
-Router `^1.127.0`. CI checks both the oldest and the newest versions in those
-ranges. Use matching React and React DOM versions. This example uses Zod for its
-Standard Schema implementation:
+Both peer dependencies are optional, so install only what you use: React
+`^18.0.0 || ^19.0.0` for `/react` and `/tanstack-router`, and TanStack React
+Router `^1.127.0` for `/tanstack-router`. The package itself never imports
+React DOM. CI checks both the oldest and the newest versions in those ranges.
+This example uses Zod for its Standard Schema implementation:
 
 ```sh
 pnpm add react@19.3.0 react-dom@19.3.0 @tanstack/react-router@1.170.38 zod@4.4.3
@@ -33,16 +35,16 @@ users. The package is ESM-only and sets no Node.js engine requirement, though it
 Nano Stores dependency declares Node.js 20 or 22 and newer for server-side
 rendering and test runners. It is checked with
 TypeScript 6.0.3 under NodeNext and Bundler resolution. Older TypeScript versions
-have not been verified. Browser use requires modern APIs including
-`structuredClone`, `AbortController`, and `crypto.randomUUID`.
+have not been verified. Auth needs `AbortController`; it uses
+`crypto.randomUUID` and Web Locks when present, and falls back without them.
 
 ### Migrating from @monarcode/tanstack-auth
 
 Replace the dependency with `@monarcode/session-kit`, and
 change import prefixes from `@monarcode/tanstack-auth` to
-`@monarcode/session-kit`. The package root, `/react`, and `/http` entry points
-keep their current APIs. TanStack Router is the supported router in this alpha;
-additional adapters are planned for later development.
+`@monarcode/session-kit`, then follow the breaking changes in the
+[release notes](./CHANGELOG.md). TanStack Router is the supported router in
+this alpha; additional adapters are planned for later development.
 
 ## Quick start
 
@@ -164,7 +166,30 @@ browser: a user object in a JSON response is trusted to the same degree. Leave
 claims that change on every refresh, such as `exp` or `jti`, out of the user. OAuth
 providers may change their access token format; this suits backends you control.
 
-### 2. Type the root route
+### 2. Create the hooks
+
+`src/auth-hooks.ts`
+
+<!-- file: src/auth-hooks.ts -->
+
+```ts
+import { createAuthHooks } from "@monarcode/session-kit/react";
+import { useRouterAuth } from "@monarcode/session-kit/tanstack-router";
+
+export const { useAuth, useAuthClient } = createAuthHooks({
+  useClient: useRouterAuth,
+});
+```
+
+`useRouterAuth` reads the client from Router context, so these hooks need no
+provider, and Router registration in step 7 gives them your user and client
+types. `useAuth()` reads the full reactive snapshot; `useAuth(selector)`
+subscribes to a selected value. `useAuthClient()` returns the stable client for
+actions. Without TanStack Router, call `createAuthHooks<typeof auth>()` and
+render the `AuthProvider` it returns around your app with `client={auth}`; the
+provider also mounts the client, starting its timers and tab sync.
+
+### 3. Type the root route
 
 `src/routes/__root.tsx`
 
@@ -176,8 +201,8 @@ import {
   Outlet,
   useRouter,
 } from "@tanstack/react-router";
-import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 import type { AppAuth } from "../auth.js";
+import { useAuth, useAuthClient } from "../auth-hooks.js";
 
 export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
   component: Root,
@@ -219,7 +244,7 @@ The root route defines the Router context shared by every generated file route.
 Keeping the error banner above `Outlet` makes cleanup failures visible after a
 protected route unmounts.
 
-### 3. Add the login route
+### 4. Add the login route
 
 `src/routes/login.tsx`
 
@@ -227,19 +252,18 @@ protected route unmounts.
 
 ```tsx
 import { useState, type FormEvent } from "react";
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { safeReturnTo, useAuthClient } from "@monarcode/session-kit/react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { safeReturnTo } from "@monarcode/session-kit";
+import { redirectIfSignedIn } from "@monarcode/session-kit/tanstack-router";
 import { loginResponseSchema } from "../auth.js";
+import { useAuthClient } from "../auth-hooks.js";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>) => ({
     redirectTo: safeReturnTo(search.redirectTo),
   }),
-  beforeLoad: async ({ context, search }) => {
-    if (await context.auth.getSession()) {
-      throw redirect({ href: safeReturnTo(search.redirectTo) });
-    }
-  },
+  beforeLoad: ({ context, search }) =>
+    redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
   component: Login,
 });
 
@@ -305,8 +329,10 @@ function Login() {
 including the sign-in page itself, so a stale `redirectTo` cannot loop. It
 treats `/login`, `/login/`, and `/LOGIN` alike. If sign-in lives elsewhere, pass
 its path, or several: `safeReturnTo(value, { loginPath: ["/sign-in", "/signup"] })`.
+`redirectIfSignedIn` sends a signed-in user on to `redirectTo`, checked the same
+way, and takes the same `loginPath` option.
 
-### 4. Add a pathless protected layout
+### 5. Add a pathless protected layout
 
 The leading underscore makes `_authenticated.tsx` a pathless layout. Its child
 routes inherit the guard without adding `authenticated` to the URL.
@@ -318,35 +344,20 @@ routes inherit the guard without adding `authenticated` to the URL.
 ```tsx
 import {
   createFileRoute,
-  Outlet,
-  redirect,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { AuthError } from "@monarcode/session-kit";
-import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
+import {
+  requireSession,
+  SessionOutlet,
+} from "@monarcode/session-kit/tanstack-router";
+import { useAuth, useAuthClient } from "../auth-hooks.js";
 
 export const Route = createFileRoute("/_authenticated")({
-  beforeLoad: async ({ context, location }) => {
-    const session = await context.auth.getSession();
-    if (!session)
-      throw redirect({
-        to: "/login",
-        search: { redirectTo: location.href },
-      });
-    if (!context.auth.isCurrent(session)) {
-      throw new AuthError(
-        "SESSION_CHANGED",
-        "Session changed; retry navigation",
-      );
-    }
-    // Sessions hold no tokens, so they are safe in route context.
-    return {
-      sessionId: session.sessionId,
-      authVersion: context.auth.state.get().version,
-    };
-  },
+  beforeLoad: ({ context, location }) =>
+    requireSession(context.auth, { location, loginPath: "/login" }),
   errorComponent: SessionError,
-  component: ProtectedLayout,
+  component: () => <SessionOutlet pending={<p>Checking session…</p>} />,
 });
 
 function SessionError({ error }: ErrorComponentProps) {
@@ -370,20 +381,21 @@ function SessionError({ error }: ErrorComponentProps) {
     </div>
   );
 }
-
-function ProtectedLayout() {
-  const { authVersion } = Route.useRouteContext();
-  // `user` is set exactly while the session is authenticated or refreshing.
-  const signedIn = useAuth((state) => state.user !== null);
-  const version = useAuth((state) => state.version);
-  if (!signedIn || version !== authVersion) {
-    return <p>Checking session…</p>;
-  }
-  return <Outlet key={authVersion} />;
-}
 ```
 
-### 5. Add a protected index route
+`requireSession` redirects signed-out users to `loginPath` with `redirectTo`
+set to where they were going, and puts `{ session }` in route context for child
+routes: `session.user` is typed and never `null`, and a session holds no tokens.
+If the session changes while it is checked, it checks again. A failed refresh
+reaches the error component, whose Retry button calls `auth.retry()`.
+
+`SessionOutlet` renders the child routes while the session the guard accepted
+is still the signed-in one. After a sign-out or another account signing in, it
+shows `pending` until the guard runs again, and it remounts child routes for a
+new account, so nothing from the previous account stays on screen. Profile
+updates and token refreshes keep child routes mounted.
+
+### 6. Add a protected index route
 
 Placing `index.tsx` inside the `_authenticated` directory makes `/` a child of
 the protected layout. Add other private routes beside it, such as
@@ -395,7 +407,7 @@ the protected layout. Add other private routes beside it, such as
 
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";
-import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
+import { useAuth, useAuthClient } from "../../auth-hooks.js";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Home,
@@ -422,7 +434,7 @@ function Home() {
 }
 ```
 
-### 6. Create and connect the Router
+### 7. Create and connect the Router
 
 `src/router.tsx`
 
@@ -430,7 +442,7 @@ function Home() {
 
 ```tsx
 import { createRouter, useRouter } from "@tanstack/react-router";
-import { connectAuth } from "@monarcode/session-kit/react";
+import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { auth } from "./auth.js";
 import { routeTree } from "./routeTree.gen.js";
 
@@ -467,10 +479,8 @@ declare module "@tanstack/react-router" {
 }
 ```
 
-`Register` gives the package hooks your application's user and client types.
-Keep it in the consuming app. `useAuth()` reads the full reactive snapshot;
-`useAuth(selector)` subscribes to a selected value. `useAuthClient()` returns the
-stable client for actions.
+`Register` gives `useRouterAuth`, and through it your hooks, the
+application's user and client types. Keep it in the consuming app.
 
 Outside React, `auth.state.get()` returns the current snapshot and
 `auth.state.subscribe(listener)` reports later changes, not the current value; it
@@ -491,7 +501,7 @@ cache entries on guard-relevant changes, and queues Router revalidation. Call
 `disconnectAuth` during app teardown or your bundler's hot-module disposal.
 Disconnecting stops background work without signing out.
 
-### 7. Render the app
+### 8. Render the app
 
 `src/main.tsx`
 
@@ -683,11 +693,12 @@ the remaining data after storage becomes available.
 
 ## Entry points
 
-| Import                         | Exports                                                                                        |
-| ------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `@monarcode/session-kit`       | `createAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `AuthError`, public auth types |
-| `@monarcode/session-kit/react` | `connectAuth`, `safeReturnTo`, `useAuth`, `useAuthClient`, registered hook types               |
-| `@monarcode/session-kit/http`  | `createAuthFetch`                                                                              |
+| Import                                   | Exports                                                                                                        |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `@monarcode/session-kit`                 | `createAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, public auth types |
+| `@monarcode/session-kit/react`           | `createAuthHooks` and hook types                                                                               |
+| `@monarcode/session-kit/tanstack-router` | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth`      |
+| `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                              |
 
 Generated declarations retain schema inference and consumer Router registration.
 Declaration maps are disabled so declaration navigation targets installed `.d.ts`

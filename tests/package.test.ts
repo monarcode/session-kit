@@ -9,7 +9,14 @@ import {
 	webStorage,
 } from "@monarcode/session-kit";
 import { createAuthFetch } from "@monarcode/session-kit/http";
-import { connectAuth, useAuth } from "@monarcode/session-kit/react";
+import { createAuthHooks } from "@monarcode/session-kit/react";
+import {
+	connectAuth,
+	redirectIfSignedIn,
+	requireSession,
+	SessionOutlet,
+	useRouterAuth,
+} from "@monarcode/session-kit/tanstack-router";
 
 const packageRoot = new URL("../", import.meta.url);
 
@@ -19,8 +26,12 @@ test("all public entry points import without browser globals", () => {
 		fromAccessToken,
 		memoryStorage,
 		webStorage,
+		createAuthHooks,
 		connectAuth,
-		useAuth,
+		requireSession,
+		redirectIfSignedIn,
+		SessionOutlet,
+		useRouterAuth,
 		createAuthFetch,
 	]) {
 		assert.equal(typeof fn, "function");
@@ -41,10 +52,10 @@ test("each entry exports readable JavaScript and declarations", async () => {
 
 test("React declarations retain consumer Router registration", async () => {
 	const declarations = await readFile(
-		new URL("dist/react/hooks.d.ts", packageRoot),
+		new URL("dist/tanstack-router/index.d.ts", packageRoot),
 		"utf8",
 	);
 	assert.match(declarations, /Register extends/);
-	assert.match(declarations, /useAuthClient\(\): RegisteredAuth/);
-	assert.doesNotMatch(declarations, /useAuthClient\(\): any/);
+	assert.match(declarations, /useRouterAuth\(\): RegisteredAuth/);
+	assert.doesNotMatch(declarations, /useRouterAuth\(\): any/);
 });

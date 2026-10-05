@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { safeReturnTo } from "@monarcode/session-kit/react";
+import { safeReturnTo } from "@monarcode/session-kit";
 
 import { useBrowserMocks } from "./helpers.ts";
 

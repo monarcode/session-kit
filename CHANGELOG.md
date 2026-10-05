@@ -28,6 +28,15 @@
   `refreshing`.
 - Session IDs no longer require `crypto.randomUUID`, and user validation no
   longer requires `structuredClone`, for environments such as React Native.
+- A new `/tanstack-router` entry point holds the Router integration:
+  `connectAuth`, plus guards that replace the protected-layout code apps used
+  to copy. `requireSession` redirects signed-out users with a `redirectTo`
+  search param and puts `{ session }` in route context; `SessionOutlet` renders
+  child routes only while that session is current, remounting them for a new
+  account; `redirectIfSignedIn` sends signed-in users away from the sign-in
+  page; `useRouterAuth` reads the client from Router context.
+- React 18 is supported (`^18.0.0 || ^19.0.0`). CI tests React 18.0.0 as the
+  oldest version.
 
 ### Changed
 
@@ -44,6 +53,16 @@
 - **Breaking:** `createRefreshFn` is removed. Pass the refresh callback inline,
   or type a standalone one with `RefreshFn<UserInput<typeof schema>>`.
 - **Breaking:** `AuthClient` takes the user type first: `AuthClient<User, Input>`.
+- **Breaking:** `/react` no longer depends on TanStack Router and exports only
+  `createAuthHooks`, which returns `useAuth`, `useAuthClient`, and an
+  `AuthProvider` typed for one client. With TanStack Router, keep the
+  provider-free setup with
+  `createAuthHooks({ useClient: useRouterAuth })`; elsewhere, render
+  `AuthProvider`, which also mounts the client. `connectAuth` moved to
+  `/tanstack-router`, and `safeReturnTo` to the package root.
+- **Breaking:** both peer dependencies are optional, and React DOM is no longer
+  one. Install TanStack Router only for `/tanstack-router`, and React only for
+  the React entry points.
 - **Breaking:** sign-in, `updateUser`, and a refresh that returns a user reject
   with `USER_VALIDATION_FAILED` when the user schema does not accept its own
   output unchanged. Such a schema used to pass sign-in, then fail restoration

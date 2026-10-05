@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AuthError } from "@monarcode/session-kit";
-import { connectAuth } from "@monarcode/session-kit/react";
+import {
+	connectAuth,
+	redirectIfSignedIn,
+	requireSession,
+} from "@monarcode/session-kit/tanstack-router";
 
 import {
 	user,
@@ -245,4 +249,109 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 	assert.equal(refreshes, 2);
 	assert.equal(auth.state.get().status, "authenticated");
 	assert.equal(privateMatch(router)?.status, "success");
+});
+
+/** A real Router whose `/private` uses `requireSession` and `/login` `redirectIfSignedIn`. */
+const guardedRouter = async (auth: TestClient, path: string) => {
+	setGlobal("self", globalThis);
+	setGlobal("scrollTo", () => {});
+	setGlobal("window", {
+		location: new URL(`https://example.com${path}`),
+		addEventListener() {},
+		removeEventListener() {},
+	});
+	const {
+		createRouter,
+		createRootRouteWithContext,
+		createRoute,
+		createMemoryHistory,
+	} = await import("@tanstack/react-router");
+	const root = createRootRouteWithContext<{ auth: TestClient }>()({});
+	const login = createRoute({
+		getParentRoute: () => root,
+		path: "/login",
+		validateSearch: (search: Record<string, unknown>) => ({
+			redirectTo: search.redirectTo,
+		}),
+		beforeLoad: ({ context, search }) =>
+			redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
+	});
+	const privateRoute = createRoute({
+		getParentRoute: () => root,
+		path: "/private",
+		beforeLoad: ({ context, location }) =>
+			requireSession(context.auth, { location, loginPath: "/login" }),
+	});
+	const router = createRouter({
+		routeTree: root.addChildren([login, privateRoute]),
+		context: { auth },
+		history: createMemoryHistory({ initialEntries: [path] }),
+		isServer: false,
+	});
+	router.startTransition = (async (fn: () => void) => {
+		fn();
+		return true;
+	}) as unknown as typeof router.startTransition;
+	await router.load();
+	return router;
+};
+
+test("requireSession sends signed-out users to sign in, then back", async () => {
+	const auth = client();
+	await auth.getSession();
+	const router = await guardedRouter(auth, "/private?tab=2");
+	assert.equal(router.state.location.pathname, "/login");
+	const { redirectTo } = router.state.location.search as {
+		redirectTo?: unknown;
+	};
+	assert.equal(redirectTo, "/private?tab=2");
+	await auth.signIn(input());
+	await router.navigate({ to: "/login", search: { redirectTo } });
+	assert.equal(router.state.location.href, "/private?tab=2");
+});
+
+test("requireSession puts the session, without tokens, in route context", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const router = await guardedRouter(auth, "/private");
+	const match = router.state.matches.find(
+		(candidate) => candidate.routeId === "/private",
+	);
+	const session = (
+		match?.context as { session?: Record<string, unknown> } | undefined
+	)?.session;
+	assert.deepEqual(session, await auth.getSession());
+	assert.equal("accessToken" in (session ?? {}), false);
+});
+
+test("redirectIfSignedIn never returns to sign-in or leaves the site", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	for (const redirectTo of ["https://evil.example/", "/login"]) {
+		const router = await guardedRouter(
+			auth,
+			`/login?redirectTo=${encodeURIComponent(redirectTo)}`,
+		);
+		assert.equal(router.state.location.pathname, "/");
+	}
+});
+
+test("requireSession reads a session that changes mid-check again", async () => {
+	const session = { sessionId: "a", user };
+	let checks = 0;
+	const settling = {
+		getSession: async () => session,
+		isCurrent: () => ++checks > 1,
+	};
+	const options = { location: { href: "/private" }, loginPath: "/login" };
+	assert.deepEqual(await requireSession(settling, options), { session });
+	const churning = { getSession: async () => session, isCurrent: () => false };
+	await assert.rejects(
+		requireSession(churning, options),
+		code("SESSION_CHANGED"),
+	);
+	await assert.rejects(
+		requireSession(churning, { ...options, loginPath: "login" }),
+		/loginPath must start with/,
+	);
 });

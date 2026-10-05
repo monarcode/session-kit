@@ -14,7 +14,7 @@ import {
 	type Tokens,
 	type UserSource,
 } from "@monarcode/session-kit";
-import { connectAuth } from "@monarcode/session-kit/react";
+import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { z } from "zod";
 
 export const userSchema = z.object({

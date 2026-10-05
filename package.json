@@ -1,7 +1,7 @@
 {
 	"name": "@monarcode/session-kit",
 	"version": "0.1.0-alpha.3",
-	"description": "Schema-driven browser sessions for React and TanStack Router",
+	"description": "Schema-driven browser sessions for React, with TanStack Router support",
 	"keywords": [
 		"auth",
 		"react",
@@ -36,6 +36,10 @@
 		"./react": {
 			"types": "./dist/react/index.d.ts",
 			"import": "./dist/react/index.js"
+		},
+		"./tanstack-router": {
+			"types": "./dist/tanstack-router/index.d.ts",
+			"import": "./dist/tanstack-router/index.js"
 		},
 		"./http": {
 			"types": "./dist/http/index.d.ts",
@@ -88,8 +92,15 @@
 	},
 	"peerDependencies": {
 		"@tanstack/react-router": "^1.127.0",
-		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"react": "^18.0.0 || ^19.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@tanstack/react-router": {
+			"optional": true
+		},
+		"react": {
+			"optional": true
+		}
 	},
 	"devEngines": {
 		"runtime": {
