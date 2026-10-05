@@ -6,6 +6,7 @@ import {
 	type GuardClient,
 } from "../core/guard.js";
 import { loginHref, safeReturnTo } from "../core/return-to.js";
+import type { Session } from "../core/types.js";
 
 export type RequireSessionOptions = {
 	/** The loader's `request`, whose URL signed-out users come back to. */
@@ -45,10 +46,10 @@ function stripBasename(pathname: string, basename = "/"): string {
  * loader: ({ request }) =>
  * 	requireSession(auth, { request, loginPath: "/login" }),
  */
-export async function requireSession<S extends { sessionId: string }>(
-	auth: GuardClient<S>,
+export async function requireSession<U>(
+	auth: GuardClient<U>,
 	options: RequireSessionOptions,
-): Promise<{ session: S }> {
+): Promise<{ session: Session<U> }> {
 	// Fails fast on a bad path, before any session is read.
 	loginHref(options.loginPath, "/");
 	stripBasename("/", options.basename);
@@ -84,7 +85,7 @@ export type RedirectIfSignedInOptions = {
  * },
  */
 export async function redirectIfSignedIn(
-	auth: GuardClient<{ sessionId: string }>,
+	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInOptions,
 ): Promise<void> {
 	if (await sessionOrNull(auth)) {

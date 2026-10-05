@@ -242,9 +242,10 @@ type AuthClientBase<U, I> = {
 /**
  * The auth client from `createAuth`. `U` is the user; `I` is what `signIn` and
  * `updateUser` accept as the user, or `never` when the user comes from the
- * access token, in which case there is no `updateUser`.
+ * access token, in which case there is no `updateUser`. Prefer
+ * `typeof auth`, which gets both right.
  */
-export type AuthClient<U, I = never> = AuthClientBase<U, I> &
+export type AuthClient<U, I> = AuthClientBase<U, I> &
 	([I] extends [never]
 		? unknown
 		: {

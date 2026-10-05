@@ -1,7 +1,8 @@
-import type { AuthClient } from "../core/types.js";
+import { watchVersion } from "../core/revalidate.js";
+import type { AuthSource } from "../react/context.js";
 
 type AuthRouter = {
-	options: { context: { auth: Pick<AuthClient<unknown>, "state" | "mount"> } };
+	options: { context: { auth: AuthSource } };
 	invalidate: () => Promise<unknown>;
 	clearCache: () => void;
 	/** Set while rendering on a server, such as Start's build-time shell. */
@@ -22,27 +23,16 @@ export function connectAuth(router: AuthRouter): () => void {
 	if (existing) return existing;
 	const auth = router.options.context.auth;
 	let active = true;
-	let queued = false;
-	let previous = auth.state.get();
-	const subscription = auth.state.subscribe((next) => {
-		if (next.version === previous.version) return;
-		previous = next;
-		router.clearCache();
-		if (queued) return;
-		queued = true;
-		queueMicrotask(() => {
-			queued = false;
-			if (active)
-				void router.invalidate().catch((error) => {
-					console.error("Auth route revalidation failed", error);
-				});
-		});
-	});
+	const unwatch = watchVersion(
+		auth,
+		() => router.invalidate(),
+		() => router.clearCache(),
+	);
 	const unmount = auth.mount();
 	const disconnect = () => {
 		if (!active) return;
 		active = false;
-		subscription.unsubscribe();
+		unwatch();
 		unmount();
 		connections.delete(router);
 	};

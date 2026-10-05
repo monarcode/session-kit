@@ -41,6 +41,12 @@ what CI checks.
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
 
+Each app is self-contained, so it can be copied out on its own. That is why
+every app has the same `ui.tsx` rather than sharing one. The apps differ in
+where the user comes from on purpose, so both user sources appear: the login
+response, validated by a schema, or the access token's claims, read with
+`fromAccessToken`. DummyJSON supports both.
+
 DummyJSON has no logout endpoint, so the apps do not pass `revoke`. Its refresh
 tokens stay valid after rotation, so it cannot show the cross-tab rotation race
 that session-kit's tests cover.

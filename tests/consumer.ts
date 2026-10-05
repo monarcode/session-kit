@@ -10,6 +10,7 @@ import {
 	fromAccessToken,
 	memoryStorage,
 	webStorage,
+	type AuthClient,
 	type AuthState,
 	type AuthStorage,
 	type RefreshFn,
@@ -204,3 +205,17 @@ reactRouter.SessionOutlet({
 });
 // @ts-expect-error The outlet needs the sign-in path.
 reactRouter.SessionOutlet({});
+
+// `AuthClient` needs both the user and its input, so `updateUser` is never
+// silently dropped; `typeof auth` gets both right.
+// @ts-expect-error Pass the input type too, or `never` for a token user.
+declare const missingInput: AuthClient<{ id: string }>;
+void missingInput;
+const typed: AuthClient<
+	z.infer<typeof userSchema>,
+	z.input<typeof userSchema>
+> = auth;
+void typed.updateUser;
+const tokenTyped: AuthClient<{ id: string; admin: boolean }, never> = tokenAuth;
+// @ts-expect-error A token user has no `updateUser`.
+void tokenTyped.updateUser;

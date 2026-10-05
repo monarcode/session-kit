@@ -15,14 +15,14 @@ export function isThenable(value: unknown): value is PromiseLike<unknown> {
 	);
 }
 
-/** Runs `next` on `value`'s result: at once unless `value` is a promise. */
+/** Runs `step` on `value`'s result: at once unless `value` is a promise. */
 export function chain<T, R>(
 	value: T | PromiseLike<T>,
-	next: (value: T) => MaybePromise<R>,
+	step: (value: T) => MaybePromise<R>,
 ): MaybePromise<R> {
 	return isThenable(value)
-		? Promise.resolve(value).then(next)
-		: next(value as T);
+		? Promise.resolve(value).then(step)
+		: step(value as T);
 }
 
 /**

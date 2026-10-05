@@ -2,19 +2,13 @@ import { createContext, useCallback, useContext } from "react";
 
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 
+import type { AuthClient } from "../core/types.js";
+
 /**
  * What React bindings need from an auth client: reactive state, and `mount`
  * to start background work while rendered. Any `createAuth` client fits.
  */
-export type AuthSource = {
-	state: {
-		get: () => unknown;
-		subscribe: (listener: (state: unknown) => void) => {
-			unsubscribe: () => void;
-		};
-	};
-	mount: () => () => void;
-};
+export type AuthSource = Pick<AuthClient<unknown, unknown>, "state" | "mount">;
 
 /** The state type of a client. */
 export type StateOf<Client extends AuthSource> = ReturnType<

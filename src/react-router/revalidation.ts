@@ -1,13 +1,12 @@
 import { useEffect, useRef } from "react";
 import { useRevalidator } from "react-router";
 
+import { watchVersion } from "../core/revalidate.js";
 import {
 	assertAuthSource,
 	useProvidedClient,
 	type AuthSource,
 } from "../react/context.js";
-
-const versionOf = (state: unknown) => (state as { version: number }).version;
 
 /**
  * Re-runs loaders whenever auth changes in a way guards care about: a
@@ -32,23 +31,5 @@ export function useAuthRevalidation(client?: AuthSource): void {
 	useEffect(() => {
 		latest.current = revalidate;
 	}, [revalidate]);
-	useEffect(() => {
-		let previous = versionOf(auth.state.get());
-		let queued = false;
-		const { unsubscribe } = auth.state.subscribe((state) => {
-			const next = versionOf(state);
-			if (next === previous) return;
-			previous = next;
-			// Several changes in one turn re-run loaders once.
-			if (queued) return;
-			queued = true;
-			queueMicrotask(() => {
-				queued = false;
-				void Promise.resolve(latest.current()).catch((error: unknown) => {
-					console.error("Auth route revalidation failed", error);
-				});
-			});
-		});
-		return unsubscribe;
-	}, [auth]);
+	useEffect(() => watchVersion(auth, () => latest.current()), [auth]);
 }

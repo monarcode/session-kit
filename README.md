@@ -23,6 +23,55 @@ them. Your backend does the authentication; session-kit does the rest:
   they are safe to render and to put in route context. Tokens go only to code
   that attaches them to requests, such as `createAuthFetch`.
 
+## Contents
+
+- [Supported setups](#supported-setups)
+- [Installation](#installation)
+- [Quick start: TanStack Router](#quick-start-tanstack-router)
+- [Other setups](#other-setups)
+- [Using the client](#using-the-client)
+  - [State](#state)
+  - [Sessions and credentials](#sessions-and-credentials)
+  - [Signing in and out](#signing-in-and-out)
+  - [Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
+  - [Users from the access token](#users-from-the-access-token)
+- [Schemas, refresh, and storage](#schemas-refresh-and-storage)
+  - [User schemas](#user-schemas)
+  - [Refresh](#refresh)
+  - [Expiry](#expiry)
+  - [Storage](#storage)
+  - [Tabs](#tabs)
+  - [Errors](#errors)
+- [Security notes](#security-notes)
+- [Entry points](#entry-points)
+- [Development](#development)
+
+## Supported setups
+
+Each router setup has a runnable app in [`examples/`](./examples), all signing
+in against DummyJSON's public test API.
+
+| Setup                                      | Import                                   | Example app                                                           |
+| ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------- |
+| TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [`tanstack-router`](./examples/tanstack-router)                       |
+| TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 |
+| React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [`react-router-declarative`](./examples/react-router-declarative)     |
+| React Router, data mode                    | `@monarcode/session-kit/react-router`    | [`react-router-data`](./examples/react-router-data)                   |
+| React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
+| React without a router                     | `@monarcode/session-kit/react`           | None                                                                  |
+
+Storage adapters: `webStorage()` for `localStorage` or `sessionStorage`,
+`memoryStorage()`, or your own [`AuthStorage`](#storage), which may be
+asynchronous.
+
+Planned for releases after 0.1.0, not yet available:
+
+- **Server rendering:** TanStack Start with SSR, and React Router framework
+  mode with SSR, keeping tokens in an encrypted `httpOnly` cookie on the server.
+  A `cookieStorage()` adapter would read and write that cookie.
+- **Expo (React Native):** a `secureStorage()` adapter for
+  `expo-secure-store`, and refreshing when the app returns to the foreground.
+
 ## Installation
 
 Alpha releases are published to the `latest` distribution tag:
@@ -393,16 +442,17 @@ createRoot(document.getElementById("root")!).render(
 
 ## Other setups
 
-The same client works everywhere; only the router wiring changes. Each setup has
-a complete app in [`examples/`](./examples), all signing in against DummyJSON.
+The same client works everywhere; only the router wiring changes. The
+[example apps](./examples) show each setup complete; these are the guards each
+one uses:
 
-| Setup                                      | Example app                                                           | Guards                                                                     |
-| ------------------------------------------ | --------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| TanStack Router                            | [`tanstack-router`](./examples/tanstack-router)                       | `requireSession` in `beforeLoad`, `SessionOutlet`                          |
-| TanStack Start, SPA mode                   | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 | Same as TanStack Router                                                    |
-| React Router, declarative mode             | [`react-router-declarative`](./examples/react-router-declarative)     | `SessionOutlet` alone                                                      |
-| React Router, data mode                    | [`react-router-data`](./examples/react-router-data)                   | `requireSession` in loaders, `SessionOutlet`, `useAuthRevalidation`        |
-| React Router, framework mode, `ssr: false` | [`react-router-framework-spa`](./examples/react-router-framework-spa) | `requireSession` in `clientLoader`, `SessionOutlet`, `useAuthRevalidation` |
+| Setup                                      | Guards                                                                     |
+| ------------------------------------------ | -------------------------------------------------------------------------- |
+| TanStack Router                            | `requireSession` in `beforeLoad`, `SessionOutlet`                          |
+| TanStack Start, SPA mode                   | Same as TanStack Router                                                    |
+| React Router, declarative mode             | `SessionOutlet` alone                                                      |
+| React Router, data mode                    | `requireSession` in loaders, `SessionOutlet`, `useAuthRevalidation`        |
+| React Router, framework mode, `ssr: false` | `requireSession` in `clientLoader`, `SessionOutlet`, `useAuthRevalidation` |
 
 **TanStack Start in SPA mode.** Create the client and call `connectAuth` inside
 `getRouter()`. Set `defaultSsr: false` in `src/start.ts`: Start's own server
@@ -588,7 +638,12 @@ The required `storage` option chooses where the session is saved:
 
 - `webStorage()` uses `localStorage`, shared by every tab.
 - `webStorage({ area: "session" })` uses `sessionStorage`: one session per tab,
-  ending with the tab.
+  ending with the tab. Browsers copy `sessionStorage` into a duplicated tab
+  and into windows opened with `window.open`, so both start with the same
+  refresh token but never see each other's saves. If the backend rotates
+  refresh tokens, whichever tab refreshes second sends a spent token and is
+  signed out, or, with reuse detection, both are. Prefer `localStorage` with
+  rotating refresh tokens.
 - `memoryStorage()` never persists the session.
 - Any object implementing `AuthStorage` works, including one whose operations
   return promises, such as a native secure store. Auth applies operations one

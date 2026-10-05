@@ -15,6 +15,7 @@ import {
 
 import { AuthError } from "../core/errors.js";
 import { loginHref } from "../core/return-to.js";
+import type { AuthClient } from "../core/types.js";
 import {
 	assertAuthSource,
 	useAuthState,
@@ -22,7 +23,7 @@ import {
 	type AuthSource,
 } from "../react/context.js";
 
-type OutletClient = AuthSource & { retry: () => Promise<unknown> };
+type OutletClient = AuthSource & Pick<AuthClient<unknown, unknown>, "retry">;
 
 type OutletState = {
 	status: string;

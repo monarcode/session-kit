@@ -6,6 +6,7 @@ import {
 	type GuardClient,
 } from "../core/guard.js";
 import { loginHref, safeReturnTo } from "../core/return-to.js";
+import type { Session } from "../core/types.js";
 
 export type RequireSessionOptions = {
 	/** The route location, from `beforeLoad`'s `location`. */
@@ -26,10 +27,10 @@ export type RequireSessionOptions = {
  * beforeLoad: ({ context, location }) =>
  * 	requireSession(context.auth, { location, loginPath: "/login" }),
  */
-export async function requireSession<S extends { sessionId: string }>(
-	auth: GuardClient<S>,
+export async function requireSession<U>(
+	auth: GuardClient<U>,
 	options: RequireSessionOptions,
-): Promise<{ session: S }> {
+): Promise<{ session: Session<U> }> {
 	// Fails fast on a bad path, before any session is read.
 	loginHref(options.loginPath, "/");
 	const session = await guardSession(auth);
@@ -58,7 +59,7 @@ export type RedirectIfSignedInOptions = {
  * 	redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
  */
 export async function redirectIfSignedIn(
-	auth: GuardClient<{ sessionId: string }>,
+	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInOptions,
 ): Promise<void> {
 	const session = await sessionOrNull(auth);

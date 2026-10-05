@@ -1,10 +1,11 @@
 import { AuthError } from "./errors.js";
+import type { AuthClient, Session } from "./types.js";
 
-/** What route guards need from an auth client. */
-export type GuardClient<S extends { sessionId: string }> = {
-	getSession: () => Promise<S | null>;
-	isCurrent: (session: { sessionId: string }) => boolean;
-};
+/** What route guards need from an auth client with user `U`. */
+export type GuardClient<U> = Pick<
+	AuthClient<U, unknown>,
+	"getSession" | "isCurrent"
+>;
 
 /** How often a guard reads the session again when it changes mid-check. */
 const MAX_ATTEMPTS = 3;
@@ -15,11 +16,11 @@ const MAX_ATTEMPTS = 3;
  * a session no longer current, is read again: the change re-runs guards
  * anyway, so an error would only flash.
  */
-export async function guardSession<S extends { sessionId: string }>(
-	auth: GuardClient<S>,
-): Promise<S | null> {
+export async function guardSession<U>(
+	auth: GuardClient<U>,
+): Promise<Session<U> | null> {
 	for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-		let session: S | null;
+		let session: Session<U> | null;
 		try {
 			session = await auth.getSession();
 		} catch (error) {
@@ -37,8 +38,8 @@ export async function guardSession<S extends { sessionId: string }>(
 
 /** The session, or `null` when it cannot be resolved, for sign-in pages. */
 export async function sessionOrNull(
-	auth: GuardClient<{ sessionId: string }>,
-): Promise<{ sessionId: string } | null> {
+	auth: GuardClient<unknown>,
+): Promise<Session<unknown> | null> {
 	try {
 		return await auth.getSession();
 	} catch {

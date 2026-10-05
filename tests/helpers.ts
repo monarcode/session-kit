@@ -131,7 +131,7 @@ export const sessionOf = async <U>(auth: {
 
 /** The current credentials, failing the test when there are none. */
 export const credentialsOf = async (
-	auth: Pick<AuthClient<unknown>, "credentials">,
+	auth: Pick<AuthClient<unknown, unknown>, "credentials">,
 ) => {
 	const credentials: Credentials | null = await auth.credentials.get();
 	assert.ok(credentials, "Expected current credentials");
@@ -255,7 +255,7 @@ export const broadcast = async (key = SESSION) => {
 
 /** A Router stand-in that counts invalidations. */
 export const connectCounting = (
-	auth: Pick<AuthClient<unknown>, "state" | "mount">,
+	auth: Pick<AuthClient<unknown, unknown>, "state" | "mount">,
 ) => {
 	const router = {
 		invalidations: 0,
@@ -270,7 +270,9 @@ export const connectCounting = (
 };
 
 /** Records every state the client publishes from now on. */
-export const recordStates = <U>(auth: Pick<AuthClient<U>, "state">) => {
+export const recordStates = <U>(
+	auth: Pick<AuthClient<U, unknown>, "state">,
+) => {
 	const states: AuthState<U>[] = [];
 	const subscription = auth.state.subscribe((state) => states.push(state));
 	cleanups.push(() => subscription.unsubscribe());

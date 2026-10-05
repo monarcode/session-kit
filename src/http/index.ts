@@ -3,7 +3,7 @@ import type { AuthClient, Credentials } from "../core/types.js";
 
 /** The part of the auth client that `createAuthFetch` uses. */
 export type AuthFetchClient = Pick<
-	AuthClient<unknown>,
+	AuthClient<unknown, unknown>,
 	"credentials" | "isCurrent"
 >;
 
