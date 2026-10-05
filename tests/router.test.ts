@@ -10,6 +10,7 @@ import {
 
 import {
 	user,
+	userSchema,
 	cleanups,
 	deferred,
 	flush,
@@ -358,6 +359,28 @@ test("requireSession reads a session that changes mid-check again", async () => 
 		requireSession(churning, { ...options, loginPath: "login" }),
 		/loginPath must start with/,
 	);
+});
+
+test("requireSession reads again when a sign-in replaces the session it was restoring", async () => {
+	await client().signIn(input());
+	const restoring = deferred();
+	const auth = client({
+		user: userSchema.refine(async (value) =>
+			value.id === "alice" ? restoring.promise : true,
+		),
+	});
+	const guarding = requireSession(auth, {
+		location: { href: "/private" },
+		loginPath: "/login",
+	});
+	await flush();
+	await auth.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	restoring.resolve(true);
+	const { session } = await guarding;
+	assert.equal(session.user.id, "bob");
+	assert.equal(auth.isCurrent(session), true);
 });
 
 test("connectAuth does nothing while a Router renders on a server", () => {

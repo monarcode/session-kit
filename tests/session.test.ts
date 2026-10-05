@@ -190,7 +190,7 @@ test("failed sign-in recovery retains expired credentials without a refresh retr
 	assert.equal(refreshCalls, 1);
 });
 
-test("failed sign-in hides an expired unmounted session until demand retries refresh", async (t) => {
+test("a failed sign-in leaves an expired unmounted session to be refreshed on demand", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const validation = deferred();
 	let refreshCalls = 0;
@@ -204,6 +204,7 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 		},
 	});
 	await auth.signIn(input({ expiresAt: 1_001_000 }));
+	const states = recordStates(auth);
 	const pending = auth.signIn(input({ user: { ...user, id: "bob" } }));
 	const checked = assert.rejects(pending, code("USER_VALIDATION_FAILED"));
 	await flush();
@@ -211,8 +212,8 @@ test("failed sign-in hides an expired unmounted session until demand retries ref
 	validation.resolve(false);
 	await checked;
 	await flush();
-	assert.equal(auth.state.get().status, "unavailable");
-	assert.equal(auth.state.get().user, null);
+	// Nothing watches expiry while unmounted, and the failure changes nothing.
+	assert.deepEqual(states, []);
 	assert.equal(refreshCalls, 0);
 	assert.ok(values.has(SESSION));
 	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
@@ -383,7 +384,7 @@ test("overlapping profile updates commit only the most recent request", async ()
 	assert.equal(auth.state.get().user?.email, "newest");
 });
 
-test("remount while initial validation is pending starts a fresh restoration", async () => {
+test("remount while initial validation is pending joins that restoration", async () => {
 	await client().signIn(input());
 	const gate = deferred();
 	let calls = 0;
@@ -392,15 +393,87 @@ test("remount while initial validation is pending starts a fresh restoration", a
 		return gate.promise;
 	});
 	const auth = client({ user: schema });
+	const states = recordStates(auth);
 	const off = auth.mount();
 	await flush();
+	const validations = calls;
 	off();
 	cleanups.push(auth.mount());
 	await flush();
 	gate.resolve(true);
 	await flush();
 	assert.equal(auth.state.get().status, "authenticated");
-	assert.ok(calls >= 2);
+	assert.equal(calls, validations);
+	assert.deepEqual(
+		states.map((state) => state.status),
+		["authenticated"],
+	);
+});
+
+test("a failed sign-in during restoration lets the restoration finish", async () => {
+	await client().signIn(input());
+	const restoring = deferred();
+	const auth = client({
+		user: userSchema.refine(async (value) =>
+			value.id === "alice" ? restoring.promise : false,
+		),
+	});
+	const waiting = auth.getSession();
+	await flush();
+	await assert.rejects(
+		auth.signIn(
+			input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+		),
+		code("USER_VALIDATION_FAILED"),
+	);
+	restoring.resolve(true);
+	assert.equal((await waiting)?.user.id, "alice");
+	assert.equal(auth.state.get().status, "authenticated");
+});
+
+test("a failed sign-in does not abort a refresh in flight", async () => {
+	const response = deferred();
+	let calls = 0;
+	const auth = client({
+		user: userSchema.refine(async (value) => value.id !== "bob"),
+		refresh: async () => {
+			calls++;
+			return response.promise;
+		},
+	});
+	await auth.signIn(input());
+	const renewing = auth.credentials.renew(await credentialsOf(auth));
+	await flush();
+	await assert.rejects(
+		auth.signIn(
+			input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+		),
+		code("USER_VALIDATION_FAILED"),
+	);
+	response.resolve({ accessToken: "access-2" });
+	assert.equal((await renewing)?.accessToken, "access-2");
+	assert.equal(calls, 1);
+});
+
+test("signOut cancels a sign-in still validating; a newer sign-in supersedes it", async () => {
+	const validation = deferred();
+	const auth = client({
+		user: userSchema.refine(async (value) =>
+			value.id === "bob" ? validation.promise : true,
+		),
+	});
+	await auth.signIn(input());
+	const cancelled = auth.signIn(input({ user: { ...user, id: "bob" } }));
+	const checked = assert.rejects(cancelled, code("SESSION_CHANGED"));
+	await flush();
+	await auth.signOut();
+	validation.resolve(true);
+	await checked;
+	assert.equal(await auth.getSession(), null);
+	const superseded = auth.signIn(input({ user: { ...user, id: "bob" } }));
+	await auth.signIn(input({ user: { ...user, id: "carol" } }));
+	await assert.rejects(superseded, code("SESSION_CHANGED"));
+	assert.equal(auth.state.get().user?.id, "carol");
 });
 
 test("sessions name the user without tokens; credentials carry the token", async () => {

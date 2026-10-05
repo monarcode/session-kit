@@ -147,10 +147,11 @@ export function createAuth<Src extends UserSource>(
 		version: 0,
 		error: null,
 	});
-	// Lifecycle. `epoch` increments whenever the session is replaced or pending
-	// work is cancelled; async work captures it and stops once it changes, and
-	// `controller` aborts that work. Timers and the storage watch run only
-	// while `mounts`, the number of Router connections, is above zero.
+	// Lifecycle. `epoch` increments whenever the session is replaced; async
+	// work captures it and stops once it changes, and `controller` aborts that
+	// work. Timers and the storage watch run only while `mounts`, the number
+	// of connections, is above zero. Unmounting cancels neither: a restore or
+	// refresh already started finishes, and a remount joins it.
 	let epoch = 0;
 	let controller = new AbortController();
 	let mounts = 0;
@@ -184,6 +185,13 @@ export function createAuth<Src extends UserSource>(
 	// overlapping `updateUser` calls; only the latest commits.
 	let profileVersion = 0;
 	let profileIntent = 0;
+
+	// Sign-in. A pending sign-in is cancelled only by a newer `signIn` or by
+	// `signOut()`, through `signInController`; `signInIntent` identifies the
+	// latest call. Expiry and other tabs do not cancel it: it replaces
+	// whatever session they leave.
+	let signInIntent = 0;
+	let signInController = new AbortController();
 
 	const valid = () =>
 		session !== null &&
@@ -549,9 +557,22 @@ export function createAuth<Src extends UserSource>(
 		return promise;
 	}
 
+	function cancelSignIn() {
+		signInIntent++;
+		signInController.abort(sessionChanged());
+		signInController = new AbortController();
+	}
+
+	/**
+	 * Validates `input`, then replaces the session with it. Validation leaves
+	 * the current session alone, so a sign-in that fails cancels no restore or
+	 * refresh. A newer `signIn` or `signOut()` during validation makes this
+	 * one reject with `SESSION_CHANGED`.
+	 */
 	async function signIn(input: SignInInput<I>) {
-		advanceEpoch();
-		const expected = epoch;
+		cancelSignIn();
+		const intent = signInIntent;
+		const signal = signInController.signal;
 		try {
 			const tokens = receiveTokens(input);
 			if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now()) {
@@ -566,9 +587,9 @@ export function createAuth<Src extends UserSource>(
 						tokens.accessToken,
 						(input as { user?: unknown }).user,
 					),
-				controller.signal,
+				signal,
 			);
-			assertEpoch(expected);
+			if (intent !== signInIntent) throw sessionChanged();
 			if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now()) {
 				throw new AuthError(
 					"INVALID_SESSION",
@@ -586,14 +607,6 @@ export function createAuth<Src extends UserSource>(
 				"Could not accept the user",
 				cause,
 			);
-		} finally {
-			if (epoch === expected) {
-				schedule();
-				if (session && !valid()) {
-					if (mounts) inBackground(resolveSession());
-					else publish(store.get().error);
-				}
-			}
 		}
 	}
 
@@ -885,12 +898,13 @@ export function createAuth<Src extends UserSource>(
 		return () => {
 			if (!active) return;
 			active = false;
+			// Work in progress continues. A refresh the backend already answered
+			// may have rotated the refresh token, so cancelling it would lose the
+			// new one and send the spent one next time.
 			if (--mounts === 0) {
 				unwatch?.();
 				unwatch = undefined;
 				stopTimers();
-				advanceEpoch();
-				if (session && !valid()) publish(store.get().error);
 			}
 		};
 	}
@@ -914,7 +928,10 @@ export function createAuth<Src extends UserSource>(
 			}),
 		},
 		signIn,
-		signOut: () => signOut(true),
+		signOut: () => {
+			cancelSignIn();
+			return signOut(true);
+		},
 		getSession: async () => toSession(await resolveSession()),
 		retry: async () => toSession(await resume(true)),
 		refresh: async () => toSession(await refreshNow()),

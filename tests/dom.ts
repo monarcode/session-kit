@@ -3,14 +3,12 @@ import { afterEach, beforeEach } from "node:test";
 import * as React from "react";
 import { createElement, Fragment, StrictMode, type ReactNode } from "react";
 
-import {
-	createAuth,
-	webStorage,
-	type AuthClient,
-} from "@monarcode/session-kit";
+import { createAuth, type AuthClient } from "@monarcode/session-kit";
 import { JSDOM } from "jsdom";
 import type { Root } from "react-dom/client";
 import { z } from "zod";
+
+import { testStorage } from "./deferred-storage.ts";
 
 export const userSchema = z.object({ id: z.string(), email: z.string() });
 type TestUser = z.infer<typeof userSchema>;
@@ -25,9 +23,46 @@ export const newClient = (
 	createAuth({
 		name: "react-test",
 		user: userSchema,
-		storage: webStorage(),
+		storage: testStorage(),
 		...options,
 	});
+
+/**
+ * Saves a session whose access token has expired, so restoring it needs a
+ * refresh.
+ */
+export async function saveExpiredSession() {
+	await newClient().signIn({
+		accessToken: "access-1",
+		refreshToken: "refresh-1",
+		user,
+	});
+	const key = "react-test:auth:session";
+	const entry = JSON.parse(localStorage.getItem(key) ?? "null");
+	localStorage.setItem(
+		key,
+		JSON.stringify({ ...entry, expiresAt: Date.now() - 1_000 }),
+	);
+}
+
+/**
+ * A refresh callback that records each refresh token it sends and answers
+ * once `respond` is called.
+ */
+export function heldRefresh() {
+	let respond!: () => void;
+	const answered = new Promise<void>((resolve) => (respond = resolve));
+	const held = {
+		sent: [] as string[],
+		respond,
+		refresh: async ({ refreshToken }: { refreshToken: string }) => {
+			held.sent.push(refreshToken);
+			await answered;
+			return { accessToken: "access-2", expiresIn: 3_600 };
+		},
+	};
+	return held;
+}
 
 /** React's `act`, which React 18.0–18.2 exported only from test utilities. */
 export let act: (callback: () => unknown) => Promise<void>;

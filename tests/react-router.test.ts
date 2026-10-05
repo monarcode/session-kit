@@ -7,8 +7,10 @@ import { AuthError } from "@monarcode/session-kit";
 
 import {
 	act,
+	heldRefresh,
 	newClient,
 	render,
+	saveExpiredSession,
 	settle,
 	signIn,
 	user,
@@ -146,6 +148,86 @@ test("declarative mode: SessionOutlet shows pending while restoring", async () =
 	release();
 	await settle();
 	assert.equal(view.container.textContent, "private");
+});
+
+test("declarative mode: StrictMode keeps the route while an expired session refreshes once", async () => {
+	await saveExpiredSession();
+	const held = heldRefresh();
+	const auth = newClient({ refresh: held.refresh });
+	const statuses: string[] = [];
+	auth.state.subscribe((state) => statuses.push(state.status));
+	const { AuthProvider } = hooks.createAuthHooks<Client>();
+	const { MemoryRouter, Routes, Route } = router;
+	const view = await render(
+		h(
+			AuthProvider,
+			{ client: auth },
+			h(
+				MemoryRouter,
+				{ initialEntries: ["/private"] },
+				h(
+					Routes,
+					null,
+					h(
+						Route,
+						{
+							element: h(binding.SessionOutlet, {
+								loginPath: "/login",
+								pending: "checking",
+							}),
+						},
+						h(Route, { path: "/private", element: "private" }),
+					),
+				),
+			),
+		),
+		{ strict: true },
+	);
+	await act(async () => held.respond());
+	await settle();
+	assert.equal(view.container.textContent, "private");
+	assert.deepEqual(held.sent, ["refresh-1"]);
+	assert.equal(statuses.includes("unavailable"), false);
+});
+
+test("data mode: StrictMode lets a loader's refresh finish and sends the token once", async () => {
+	await saveExpiredSession();
+	const held = heldRefresh();
+	const auth = newClient({ refresh: held.refresh });
+	const { AuthProvider } = hooks.createAuthHooks<Client>();
+	const { createMemoryRouter, RouterProvider, Outlet } = router;
+	function Root() {
+		binding.useAuthRevalidation();
+		return h(Outlet);
+	}
+	const memory = createMemoryRouter(
+		[
+			{
+				element: h(Root),
+				errorElement: h("output", null, "error"),
+				children: [
+					{
+						loader: ({ request }: { request: Request }) =>
+							binding.requireSession(auth, {
+								request,
+								loginPath: "/login",
+							}),
+						element: h(binding.SessionOutlet, { loginPath: "/login" }),
+						children: [{ index: true, element: "home" }],
+					},
+				],
+			},
+		],
+		{ initialEntries: ["/"] },
+	);
+	const view = await render(
+		h(AuthProvider, { client: auth }, h(RouterProvider, { router: memory })),
+		{ strict: true },
+	);
+	await act(async () => held.respond());
+	await settle();
+	assert.equal(view.container.textContent, "home");
+	assert.deepEqual(held.sent, ["refresh-1"]);
 });
 
 test("declarative mode: SessionOutlet sends signed-out users to sign in", async () => {

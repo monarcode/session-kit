@@ -3,12 +3,10 @@ import { afterEach, beforeEach } from "node:test";
 
 import {
 	createAuth,
-	webStorage,
 	type AuthClient,
 	type AuthErrorCode,
 	type AuthOptions,
 	type AuthState,
-	type AuthStorage,
 	type Credentials,
 	type Session,
 	type Tokens,
@@ -16,6 +14,10 @@ import {
 } from "@monarcode/session-kit";
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { z } from "zod";
+
+import { deferredStorage, testStorage } from "./deferred-storage.ts";
+
+export { deferredStorage };
 
 export const userSchema = z.object({
 	id: z.string(),
@@ -94,39 +96,6 @@ export const input = <I = UserInput>(
 	...overrides,
 });
 
-/**
- * Settles every operation after some microtasks, removals last by default, as
- * asynchronous storage can. Operations issued in order would then complete
- * out of order unless auth waits for each one.
- */
-export const deferredStorage = (
-	inner: AuthStorage,
-	delays: Partial<Record<"get" | "set" | "remove", number>> = {},
-): AuthStorage => {
-	const ticks = { get: 1, set: 2, remove: 3, ...delays };
-	const after = async <T>(
-		count: number,
-		operation: () => T | Promise<T>,
-	): Promise<T> => {
-		for (let tick = 0; tick < count; tick++) await Promise.resolve();
-		return operation();
-	};
-	return {
-		get: (key) => after(ticks.get, () => inner.get(key)),
-		set: (key, value, meta) =>
-			after(ticks.set, () => inner.set(key, value, meta)),
-		remove: (key) => after(ticks.remove, () => inner.remove(key)),
-		subscribe: inner.subscribe,
-		lock: inner.lock,
-	};
-};
-
-/**
- * `pnpm test` runs the suite twice: with the default synchronous storage, and
- * with `async-storage.env` setting this so every client defers its storage.
- */
-const asyncStorage = process.env.SESSION_KIT_TEST_STORAGE === "async";
-
 export type TestClient = ReturnType<typeof createAuth<typeof userSchema>>;
 
 /**
@@ -143,7 +112,7 @@ export function client(options: object = {}) {
 	return createAuth({
 		name: "test",
 		user: userSchema,
-		storage: asyncStorage ? deferredStorage(webStorage()) : webStorage(),
+		storage: testStorage(),
 		...(options as Partial<AuthOptions<typeof userSchema>>),
 	});
 }

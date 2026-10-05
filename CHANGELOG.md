@@ -104,6 +104,20 @@
   users sign in once after upgrading.
 - A refresh that returns a user equal to the current one keeps the same user
   object and does not change `version`, so guards do not run again.
+- Unmounting stops timers and the storage watch but no longer cancels a
+  restore or refresh in progress; mounting again joins it. React's StrictMode
+  remount used to show an expired session as `unavailable`, reject loaders
+  waiting on `getSession()` with `SESSION_CHANGED`, and send the same refresh
+  token twice. With refresh token rotation, the second send could sign the
+  user out.
+- A `signIn` whose validation fails no longer disturbs the current session.
+  It used to cancel a restore in progress, leaving `status` at
+  `initializing`, and abort a refresh in flight. While a sign-in validates,
+  only a newer `signIn` or `signOut()` cancels it; expiry and other tabs do
+  not.
+- Route guards read the session again when `getSession()` rejects with
+  `SESSION_CHANGED`, as they already did when it resolved a session that was
+  no longer current.
 
 ## 0.1.0-alpha.3
 

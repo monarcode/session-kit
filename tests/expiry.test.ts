@@ -9,6 +9,7 @@ import {
 	client,
 	code,
 	recordStates,
+	saved,
 	credentialsOf,
 	useBrowserMocks,
 } from "./helpers.ts";
@@ -61,13 +62,14 @@ test("proactive failure keeps unexpired access but expiry hides the user", async
 	t.mock.timers.reset();
 });
 
-test("a proactive refresh cancelled by unmount is attempted again after remount", async (t) => {
+test("unmount keeps a refresh in flight, so a rotated refresh token is saved and sent once", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
-	let calls = 0;
+	const sent: Array<string> = [];
+	const response = deferred();
 	const auth = client({
-		refresh: async () => {
-			calls++;
-			return new Promise(() => {});
+		refresh: async ({ refreshToken }) => {
+			sent.push(refreshToken);
+			return response.promise;
 		},
 	});
 	await auth.signIn(input({ expiresAt: 1_020_000 }));
@@ -75,14 +77,50 @@ test("a proactive refresh cancelled by unmount is attempted again after remount"
 	await flush();
 	t.mock.timers.tick(10_000);
 	await flush();
-	assert.equal(calls, 1);
+	assert.deepEqual(sent, ["refresh-1"]);
+	// The backend has rotated the refresh token by the time this tab unmounts.
 	unmount();
 	await flush();
 	cleanups.push(auth.mount());
 	await flush();
-	t.mock.timers.tick(5_000);
+	response.resolve({
+		accessToken: "access-2",
+		refreshToken: "refresh-2",
+		expiresAt: 1_100_000,
+	});
 	await flush();
-	assert.equal(calls, 2);
+	assert.deepEqual(sent, ["refresh-1"]);
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(saved().refreshToken, "refresh-2");
+	t.mock.timers.tick(60_000);
+	await flush();
+	assert.deepEqual(sent, ["refresh-1", "refresh-2"]);
+	cleanups.pop()!();
+	t.mock.timers.reset();
+});
+
+test("a remount while an expired session refreshes neither shows it unavailable nor rejects waiting guards", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	await client().signIn(input({ expiresAt: 1_001_000 }));
+	t.mock.timers.tick(2_000);
+	const sent: Array<string> = [];
+	const response = deferred();
+	const auth = client({
+		refresh: async ({ refreshToken }) => {
+			sent.push(refreshToken);
+			return response.promise;
+		},
+	});
+	const states = recordStates(auth);
+	const waiting = auth.getSession();
+	// StrictMode mounts, unmounts, and mounts again at once.
+	auth.mount()();
+	cleanups.push(auth.mount());
+	await flush();
+	response.resolve({ accessToken: "access-2", expiresAt: 1_100_000 });
+	assert.equal((await waiting)?.user.id, "alice");
+	assert.deepEqual(sent, ["refresh-1"]);
+	assert.ok(states.every((state) => state.status !== "unavailable"));
 	assert.equal(auth.state.get().status, "authenticated");
 	cleanups.pop()!();
 	t.mock.timers.reset();
