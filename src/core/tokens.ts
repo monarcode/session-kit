@@ -14,25 +14,36 @@ export function tokensOf(saved: SessionTokens): SessionTokens {
 	};
 }
 
-function jwtClaims(token: string): { exp?: number; iat?: number } {
+/**
+ * A JWT's payload, decoded without verifying its signature, or `undefined`
+ * when `token` is not a JWT with a JSON object payload.
+ */
+export function decodeJwtPayload(
+	token: string,
+): Record<string, unknown> | undefined {
 	try {
 		const parts = token.split(".");
-		if (parts.length !== 3) return {};
+		if (parts.length !== 3) return undefined;
 		const encoded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
 		const bytes = Uint8Array.from(
 			atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=")),
 			(c) => c.charCodeAt(0),
 		);
 		const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
-		if (!isRecord(payload)) return {};
-		const seconds = (value: unknown) =>
-			typeof value === "number" && Number.isFinite(value * 1000)
-				? value
-				: undefined;
-		return { exp: seconds(payload.exp), iat: seconds(payload.iat) };
+		return isRecord(payload) ? payload : undefined;
 	} catch {
-		return {};
+		return undefined;
 	}
+}
+
+function jwtClaims(token: string): { exp?: number; iat?: number } {
+	const payload = decodeJwtPayload(token);
+	if (!payload) return {};
+	const seconds = (value: unknown) =>
+		typeof value === "number" && Number.isFinite(value * 1000)
+			? value
+			: undefined;
+	return { exp: seconds(payload.exp), iat: seconds(payload.iat) };
 }
 
 function positive(value: unknown, message: string): number | undefined {

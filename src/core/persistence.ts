@@ -1,15 +1,28 @@
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
+import { isThenable, type MaybePromise } from "./maybe.js";
+import type { AuthStorage } from "./storage.js";
 import { validateTokens, type SessionTokens } from "./tokens.js";
 
-export type StoredSession = SessionTokens & { id: string; user: unknown };
+/** A saved session. `user` is absent when the user comes from the access token. */
+export type StoredSession = SessionTokens & { id: string; user?: unknown };
 
 /** Format of the saved entry; entries in any other format are not restored. */
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
 /** Thirty days. */
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
+/** Reports a storage failure, keeping auth's own errors as they are. */
+function storageError(cause: unknown): AuthError {
+	return cause instanceof AuthError
+		? cause
+		: new AuthError("PERSISTENCE_FAILED", "Auth storage is unavailable", {
+				cause,
+			});
+}
+
 export function createPersistence(
+	storage: AuthStorage,
 	name: string,
 	maxAge = DEFAULT_MAX_AGE_SECONDS,
 ) {
@@ -23,116 +36,107 @@ export function createPersistence(
 		);
 	}
 	const key = `${name}:auth:session`;
-	const legacyKeys = [`${name}:auth:tokens`, `${name}:auth:user`];
 	const lockName = `${name}:auth:refresh`;
 
-	function storageOperation<T>(work: () => T): T {
+	// Operations run one at a time, in the order requested. Storage that settles
+	// out of order still ends up holding the latest write, and a read sees every
+	// write requested before it.
+	let queue: Promise<unknown> = Promise.resolve();
+	let pending = 0;
+	function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+		pending++;
+		const result = queue.then(operation).catch((cause: unknown) => {
+			throw storageError(cause);
+		});
+		queue = result.catch(() => {}).finally(() => pending--);
+		return result;
+	}
+
+	function clear(): Promise<void> {
+		return enqueue(async () => {
+			await storage.remove(key);
+		});
+	}
+
+	/** Parses a saved entry, rejecting other formats and expired entries. */
+	function parse(text: string | null): StoredSession | null {
+		if (!text) return null;
 		try {
-			return work();
+			const saved: unknown = JSON.parse(text);
+			if (
+				!isRecord(saved) ||
+				saved.v !== STORAGE_VERSION ||
+				typeof saved.id !== "string" ||
+				!saved.id ||
+				typeof saved.persistUntil !== "number" ||
+				!Number.isFinite(saved.persistUntil) ||
+				saved.persistUntil <= Date.now()
+			) {
+				throw new Error("Missing, expired, or malformed auth data");
+			}
+			return {
+				...validateTokens(saved),
+				id: saved.id,
+				user: saved.user,
+			};
 		} catch (cause) {
-			if (cause instanceof AuthError) throw cause;
 			throw new AuthError(
-				"PERSISTENCE_FAILED",
-				"Auth storage is unavailable",
-				{
-					cause,
-				},
+				"INVALID_SESSION",
+				"Saved session cannot be restored",
+				{ cause },
 			);
 		}
 	}
 
-	function clear() {
-		storageOperation(() => {
-			const failures: unknown[] = [];
-			for (const entry of [key, ...legacyKeys]) {
-				try {
-					localStorage.removeItem(entry);
-				} catch (error) {
-					failures.push(error);
-				}
-			}
-			if (failures.length)
-				throw new AggregateError(failures, "Could not clear auth storage");
-		});
+	/**
+	 * Reads the saved session. With nothing queued, storage is asked at once,
+	 * and a synchronous answer is returned synchronously, so a session can be
+	 * restored before the first render. Otherwise the read waits its turn.
+	 */
+	function read(): MaybePromise<StoredSession | null> {
+		if (pending) return enqueue(async () => parse(await storage.get(key)));
+		let text: ReturnType<AuthStorage["get"]>;
+		try {
+			text = storage.get(key);
+		} catch (cause) {
+			throw storageError(cause);
+		}
+		if (!isThenable(text)) return parse(text);
+		// Queued, so operations requested meanwhile wait for this read.
+		return enqueue(async () => parse(await text));
 	}
 
-	function read(): StoredSession | null {
-		return storageOperation(() => {
-			const text = localStorage.getItem(key);
-			if (!text) {
-				for (const entry of legacyKeys) localStorage.removeItem(entry);
-				return null;
-			}
-			try {
-				const saved: unknown = JSON.parse(text);
-				if (
-					!isRecord(saved) ||
-					saved.v !== STORAGE_VERSION ||
-					typeof saved.id !== "string" ||
-					!saved.id ||
-					!("user" in saved) ||
-					typeof saved.persistUntil !== "number" ||
-					!Number.isFinite(saved.persistUntil) ||
-					saved.persistUntil <= Date.now()
-				) {
-					throw new Error("Missing, expired, or malformed auth data");
-				}
-				return {
-					...validateTokens(saved),
-					id: saved.id,
-					user: saved.user,
-				};
-			} catch (cause) {
-				throw new AuthError(
-					"INVALID_SESSION",
-					"Saved session cannot be restored",
-					{ cause },
-				);
-			}
-		});
-	}
-
-	function write(session: StoredSession) {
-		storageOperation(() => {
-			localStorage.setItem(
+	function write(session: StoredSession): Promise<void> {
+		return enqueue(async () => {
+			const persistUntil = Date.now() + maxAge * 1000;
+			await storage.set(
 				key,
-				JSON.stringify({
-					v: STORAGE_VERSION,
-					...session,
-					persistUntil: Date.now() + maxAge * 1000,
-				}),
+				JSON.stringify({ v: STORAGE_VERSION, ...session, persistUntil }),
+				{ expiresAt: persistUntil },
 			);
 		});
 	}
 
 	/**
-	 * Runs `work` while holding this auth name's lock, shared by every tab, so
-	 * only one tab at a time spends a refresh token. Without Web Locks it runs
-	 * directly. Aborting `signal` stops waiting for the lock. Once granted, the
-	 * lock is held until `work` settles, so `work` must bound its own duration.
+	 * Runs `work` while holding this auth name's lock, shared by every context
+	 * using the storage, so only one at a time spends a refresh token. Without a
+	 * lock it runs directly. Aborting `signal` stops waiting for the lock. Once
+	 * granted, the lock is held until `work` settles, so `work` must bound its
+	 * own duration.
 	 */
 	function exclusive<T>(
 		signal: AbortSignal,
 		work: () => Promise<T>,
 	): Promise<T> {
-		const locks = globalThis.navigator?.locks;
-		if (!locks) return work();
-		return locks.request(lockName, { signal }, work);
+		return storage.lock ? storage.lock(lockName, signal, work) : work();
 	}
 
 	/**
-	 * Calls `listener` when another tab saves or clears the session. Browsers
-	 * fire `storage` events only in other tabs, never in the tab that wrote.
-	 * Returns a function that stops listening.
+	 * Calls `listener` when another context saves or clears the session, and
+	 * returns a function that stops listening.
 	 */
 	function watch(listener: () => void): () => void {
-		if (typeof globalThis.addEventListener !== "function") return () => {};
-		const onStorage = (event: Event) => {
-			const changed = (event as StorageEvent).key;
-			if (changed === key || changed === null) listener();
-		};
-		globalThis.addEventListener("storage", onStorage);
-		return () => globalThis.removeEventListener("storage", onStorage);
+		return storage.subscribe?.(key, listener) ?? (() => {});
 	}
 
 	return { read, write, clear, exclusive, watch };

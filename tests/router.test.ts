@@ -2,10 +2,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { AuthError } from "@monarcode/session-kit";
-import { connectAuth } from "@monarcode/session-kit/react";
+import {
+	connectAuth,
+	redirectIfSignedIn,
+	requireSession,
+} from "@monarcode/session-kit/tanstack-router";
 
 import {
 	user,
+	userSchema,
 	cleanups,
 	deferred,
 	flush,
@@ -14,7 +19,7 @@ import {
 	code,
 	connectCounting,
 	recordStates,
-	sessionOf,
+	credentialsOf,
 	setGlobal,
 	type TestClient,
 	useBrowserMocks,
@@ -90,7 +95,7 @@ test("401-triggered token-only refresh keeps the user and does not invalidate", 
 	await flush();
 	const before = { ...auth.state.get(), invalidations: router.invalidations };
 	const states = recordStates(auth);
-	const pending = auth.refresh(await sessionOf(auth));
+	const pending = auth.credentials.renew(await credentialsOf(auth));
 	await flush();
 	assert.equal(auth.state.get().status, "refreshing");
 	assert.equal(auth.state.get().user?.id, "alice");
@@ -112,7 +117,7 @@ test("refresh failure after rejection becomes unavailable and invalidates once",
 	await flush();
 	const before = router.invalidations;
 	const states = recordStates(auth);
-	const pending = auth.refresh(await sessionOf(auth));
+	const pending = auth.credentials.renew(await credentialsOf(auth));
 	const checked = assert.rejects(pending, code("REFRESH_FAILED"));
 	await flush();
 	assert.equal(auth.state.get().status, "refreshing");
@@ -135,7 +140,7 @@ test("terminal refresh rejection signs out with one invalidation", async () => {
 	await auth.signIn(input());
 	await flush();
 	const before = router.invalidations;
-	assert.equal(await auth.refresh(await sessionOf(auth)), null);
+	assert.equal(await auth.credentials.renew(await credentialsOf(auth)), null);
 	await flush();
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(router.invalidations, before + 1);
@@ -146,6 +151,8 @@ const realRouter = async (auth: TestClient) => {
 	setGlobal("self", globalThis);
 	setGlobal("scrollTo", () => {});
 	setGlobal("window", {
+		// Router 1.132 and later resolve locations against `window.origin`.
+		origin: "https://example.com",
 		location: new URL("https://example.com/private"),
 		addEventListener() {},
 		removeEventListener() {},
@@ -223,7 +230,7 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 	const router = await realRouter(auth);
 	const guardCalls = router.counts.guardCalls;
 	await assert.rejects(
-		auth.refresh(await sessionOf(auth)),
+		auth.credentials.renew(await credentialsOf(auth)),
 		code("REFRESH_FAILED"),
 	);
 	await settle();
@@ -239,9 +246,184 @@ test("a failed refresh reruns real Router guards once without retrying until ret
 	assert.equal(refreshes, 1);
 
 	offline = false;
-	assert.equal((await auth.retry())?.accessToken, "access-2");
+	assert.equal((await auth.retry())?.user.id, "alice");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	await settle();
 	assert.equal(refreshes, 2);
 	assert.equal(auth.state.get().status, "authenticated");
 	assert.equal(privateMatch(router)?.status, "success");
+});
+
+/** A real Router whose `/private` uses `requireSession` and `/login` `redirectIfSignedIn`. */
+const guardedRouter = async (
+	auth: TestClient,
+	path: string,
+	{ basepath }: { basepath?: string } = {},
+) => {
+	setGlobal("self", globalThis);
+	setGlobal("scrollTo", () => {});
+	setGlobal("window", {
+		// Router 1.132 and later resolve locations against `window.origin`.
+		origin: "https://example.com",
+		location: new URL(`https://example.com${path}`),
+		addEventListener() {},
+		removeEventListener() {},
+	});
+	const {
+		createRouter,
+		createRootRouteWithContext,
+		createRoute,
+		createMemoryHistory,
+	} = await import("@tanstack/react-router");
+	const root = createRootRouteWithContext<{ auth: TestClient }>()({});
+	const login = createRoute({
+		getParentRoute: () => root,
+		path: "/login",
+		validateSearch: (search: Record<string, unknown>) => ({
+			redirectTo: search.redirectTo,
+		}),
+		beforeLoad: ({ context, search }) =>
+			redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
+	});
+	const privateRoute = createRoute({
+		getParentRoute: () => root,
+		path: "/private",
+		beforeLoad: ({ context, location }) =>
+			requireSession(context.auth, { location, loginPath: "/login" }),
+	});
+	const router = createRouter({
+		routeTree: root.addChildren([login, privateRoute]),
+		context: { auth },
+		history: createMemoryHistory({ initialEntries: [path] }),
+		isServer: false,
+		basepath,
+	});
+	router.startTransition = (async (fn: () => void) => {
+		fn();
+		return true;
+	}) as unknown as typeof router.startTransition;
+	await router.load();
+	return router;
+};
+
+test("guards keep a basepath out of redirectTo and in every redirect", async () => {
+	const auth = client();
+	await auth.getSession();
+	const router = await guardedRouter(auth, "/app/private?tab=2", {
+		basepath: "/app",
+	});
+	const where = () =>
+		router.history.location.pathname + router.history.location.search;
+	assert.equal(where(), "/app/login?redirectTo=%2Fprivate%3Ftab%3D2");
+	const { redirectTo } = router.state.location.search as {
+		redirectTo?: unknown;
+	};
+	assert.equal(redirectTo, "/private?tab=2");
+	await auth.signIn(input());
+	await router.navigate({ to: "/login", search: { redirectTo } });
+	assert.equal(where(), "/app/private?tab=2");
+});
+
+test("requireSession sends signed-out users to sign in, then back", async () => {
+	const auth = client();
+	await auth.getSession();
+	const router = await guardedRouter(auth, "/private?tab=2");
+	assert.equal(router.state.location.pathname, "/login");
+	const { redirectTo } = router.state.location.search as {
+		redirectTo?: unknown;
+	};
+	assert.equal(redirectTo, "/private?tab=2");
+	await auth.signIn(input());
+	await router.navigate({ to: "/login", search: { redirectTo } });
+	assert.equal(router.state.location.href, "/private?tab=2");
+});
+
+test("requireSession puts the session, without tokens, in route context", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const router = await guardedRouter(auth, "/private");
+	const match = router.state.matches.find(
+		(candidate) => candidate.routeId === "/private",
+	);
+	const session = (
+		match?.context as { session?: Record<string, unknown> } | undefined
+	)?.session;
+	assert.deepEqual(session, await auth.getSession());
+	assert.equal("accessToken" in (session ?? {}), false);
+});
+
+test("redirectIfSignedIn never returns to sign-in or leaves the site", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	for (const redirectTo of [
+		"https://evil.example/",
+		"/.//evil.example",
+		"/login",
+	]) {
+		const router = await guardedRouter(
+			auth,
+			`/login?redirectTo=${encodeURIComponent(redirectTo)}`,
+		);
+		assert.equal(router.state.location.pathname, "/");
+	}
+});
+
+test("requireSession reads a session that changes mid-check again", async () => {
+	const session = { sessionId: "a", user };
+	let checks = 0;
+	const settling = {
+		getSession: async () => session,
+		isCurrent: () => ++checks > 1,
+	};
+	const options = { location: { href: "/private" }, loginPath: "/login" };
+	assert.deepEqual(await requireSession(settling, options), { session });
+	const churning = { getSession: async () => session, isCurrent: () => false };
+	await assert.rejects(
+		requireSession(churning, options),
+		code("SESSION_CHANGED"),
+	);
+	await assert.rejects(
+		requireSession(churning, { ...options, loginPath: "login" }),
+		/loginPath must start with/,
+	);
+});
+
+test("requireSession reads again when a sign-in replaces the session it was restoring", async () => {
+	await client().signIn(input());
+	const restoring = deferred();
+	const auth = client({
+		user: userSchema.refine(async (value) =>
+			value.id === "alice" ? restoring.promise : true,
+		),
+	});
+	const guarding = requireSession(auth, {
+		location: { href: "/private" },
+		loginPath: "/login",
+	});
+	await flush();
+	await auth.signIn(
+		input({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+	);
+	restoring.resolve(true);
+	const { session } = await guarding;
+	assert.equal(session.user.id, "bob");
+	assert.equal(auth.isCurrent(session), true);
+});
+
+test("connectAuth does nothing while a Router renders on a server", () => {
+	const auth = client();
+	let mounted = 0;
+	auth.mount = () => {
+		mounted++;
+		return () => {};
+	};
+	const disconnect = connectAuth({
+		isServer: true,
+		options: { context: { auth } },
+		clearCache() {},
+		async invalidate() {},
+	});
+	disconnect();
+	assert.equal(mounted, 0);
+	assert.equal(auth.state.get().status, "initializing");
 });

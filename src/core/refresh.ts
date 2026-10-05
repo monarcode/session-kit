@@ -1,21 +1,12 @@
-import type { StandardSchemaV1 } from "@standard-schema/spec";
-
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
 import type { StoredSession } from "./persistence.js";
+import type { UserResolver } from "./sources.js";
 import { receiveTokens, tokensOf, type SessionTokens } from "./tokens.js";
-import type { RefreshFn, User, UserInput } from "./types.js";
-import { sameUser, validateUser } from "./user.js";
+import type { RefreshFn } from "./types.js";
 
 /** The shortest remaining lifetime worth installing or adopting a token for. */
 const MIN_TOKEN_LIFETIME_MS = 5_000;
-
-/** Types a refresh callback against a user schema before passing it to `createAuth`. */
-export function createRefreshFn<I = never>(
-	handler: RefreshFn<I>,
-): RefreshFn<I> {
-	return handler;
-}
 
 export type ObtainedTokens<U> = {
 	tokens: SessionTokens;
@@ -30,22 +21,19 @@ export type ObtainedTokens<U> = {
  * they stay usable, otherwise the refresh callback's. Resolves `null` when the
  * backend rejected the refresh token.
  */
-export async function obtainTokens<S extends StandardSchemaV1>(input: {
-	current: SessionTokens & { user: User<S> };
+export async function obtainTokens<U>(input: {
+	current: SessionTokens & { user: U };
 	/** What storage holds for this session; `undefined` when unreadable. */
 	stored: StoredSession | undefined;
-	refresh: RefreshFn<UserInput<S>>;
-	userSchema: S;
+	refresh: RefreshFn<unknown>;
+	users: UserResolver<U>;
 	/** An access token the backend refused, which must not be adopted. */
 	rejectedToken: string | undefined;
 	signal: AbortSignal;
-}): Promise<ObtainedTokens<User<S>> | null> {
-	const { current, stored, refresh, userSchema, rejectedToken, signal } =
-		input;
-	const savedUser = (saved: StoredSession) =>
-		sameUser(saved.user, current.user)
-			? current.user
-			: validateUser(userSchema, saved.user);
+}): Promise<ObtainedTokens<U> | null> {
+	const { current, stored, refresh, users, rejectedToken, signal } = input;
+	const savedUser = async (saved: StoredSession) =>
+		users.unchanged(saved, current) ? current.user : users.restore(saved);
 	if (
 		stored &&
 		stored.accessToken !== current.accessToken &&
@@ -72,12 +60,12 @@ export async function obtainTokens<S extends StandardSchemaV1>(input: {
 			"Refreshed access token must last at least five seconds",
 		);
 	}
-	const user =
-		isRecord(value) && value.user !== undefined
-			? await validateUser(userSchema, value.user)
-			: stored
-				? await savedUser(stored)
-				: undefined;
+	let user: U | undefined;
+	// A derived user always follows the new token.
+	if (!users.saved) user = await users.receive(tokens.accessToken, undefined);
+	else if (isRecord(value) && value.user !== undefined)
+		user = await users.receive(tokens.accessToken, value.user);
+	else if (stored) user = await savedUser(stored);
 	return {
 		tokens: { ...tokens, refreshToken: tokens.refreshToken ?? refreshToken },
 		user,

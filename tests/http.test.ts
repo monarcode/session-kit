@@ -7,7 +7,7 @@ import {
 	input,
 	client,
 	code,
-	sessionOf,
+	credentialsOf,
 	setGlobal,
 	useBrowserMocks,
 } from "./helpers.ts";
@@ -74,7 +74,7 @@ test("a repeated 401 can keep the session when configured", async () => {
 		signOutOnRepeated401: false,
 	});
 	assert.equal((await request("/me")).status, 401);
-	assert.equal((await sessionOf(auth)).accessToken, "access-2");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 });
 
 test("a failed refresh after a 401 releases the 401 response body", async () => {

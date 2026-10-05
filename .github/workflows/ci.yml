@@ -66,12 +66,43 @@ jobs:
            run: pnpm install --frozen-lockfile
 
          # Keep these at the lower bounds of peerDependencies in package.json.
+         # Type packages are not peers: these are the first releases whose
+         # react/jsx-runtime and react-dom/client types resolve under NodeNext.
+         # The override stops @types/react-dom pulling in newer React types.
          - name: Install oldest supported peers
-           run: >-
-              pnpm add --save-dev --save-exact
-              react@19.0.0 react-dom@19.0.0
-              @types/react@19.0.0 @types/react-dom@19.0.0
-              @tanstack/react-router@1.127.0
+           run: |
+              npm pkg set 'pnpm.overrides.@types/react=18.0.2'
+              pnpm add --workspace-root --save-dev --save-exact \
+                react@18.0.0 react-dom@18.0.0 \
+                @types/react@18.0.2 @types/react-dom@18.0.3 \
+                @tanstack/react-router@1.132.0 react-router@7.0.0
 
          - name: Build and test
            run: pnpm run build && pnpm test && pnpm run test:types
+
+   examples:
+      name: build example apps
+      runs-on: ubuntu-latest
+      timeout-minutes: 10
+      steps:
+         - name: Check out repository
+           uses: actions/checkout@v7
+
+         - name: Set up pnpm
+           uses: pnpm/action-setup@v6
+           with:
+              version: 10.12.1
+
+         - name: Set up Node.js
+           uses: actions/setup-node@v7
+           with:
+              node-version: 24
+              cache: pnpm
+
+         - name: Install dependencies
+           run: pnpm install --frozen-lockfile
+
+         # Each app builds and type-checks against the package built here.
+         # Builds never call DummyJSON; only the running apps do.
+         - name: Build the package and the example apps
+           run: pnpm run build:examples

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { safeReturnTo } from "@monarcode/session-kit/react";
+import { safeReturnTo } from "@monarcode/session-kit";
 
 import { useBrowserMocks } from "./helpers.ts";
 
@@ -21,6 +21,21 @@ test("return URL rejects external origins, backslashes, controls, and login loop
 		safeReturnTo("/dashboard?tab=one#title"),
 		"/dashboard?tab=one#title",
 	);
+});
+
+test("return URL rejects paths whose dot segments resolve to another origin", () => {
+	for (const value of [
+		"/.//evil.com",
+		"/a/..//evil.com",
+		"/a/b/../..//evil.com",
+		"/%2e//evil.com",
+		"/%2E%2E//evil.com",
+		"/a/%2e%2e//evil.com?x=1#y",
+		"/.///evil.com",
+	])
+		assert.equal(safeReturnTo(value), "/", value);
+	assert.equal(safeReturnTo("/a/../b?x=1"), "/b?x=1");
+	assert.equal(safeReturnTo("/a/.//b"), "/a//b");
 });
 
 test("return URL treats login path variants and custom login paths as loops", () => {

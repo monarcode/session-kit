@@ -7,11 +7,17 @@ import {
 	type AuthErrorCode,
 	type AuthOptions,
 	type AuthState,
-	type SignInInput,
+	type Credentials,
+	type Session,
+	type Tokens,
+	type UserSource,
 } from "@monarcode/session-kit";
-import { connectAuth } from "@monarcode/session-kit/react";
-import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { z } from "zod";
+
+import { deferredStorage, testStorage } from "./deferred-storage.ts";
+
+export { deferredStorage };
 
 export const userSchema = z.object({
 	id: z.string(),
@@ -41,9 +47,11 @@ let locks: ReturnType<typeof createLocks>;
 let storageEvents: EventTarget;
 let originalGlobals: Map<string, PropertyDescriptor | undefined>;
 const browserGlobals = [
+	"crypto",
 	"location",
 	"document",
 	"localStorage",
+	"sessionStorage",
 	"fetch",
 	"self",
 	"scrollTo",
@@ -80,8 +88,8 @@ export const flush = async () => {
 
 /** Sign-in input for `user`; override `user` when a test uses another schema. */
 export const input = <I = UserInput>(
-	overrides: Partial<SignInInput<I>> = {},
-): SignInInput<I> => ({
+	overrides: Partial<Tokens & { user: I }> = {},
+): Tokens & { user: I } => ({
 	accessToken: "access-1",
 	refreshToken: "refresh-1",
 	user: user as I,
@@ -90,17 +98,21 @@ export const input = <I = UserInput>(
 
 export type TestClient = ReturnType<typeof createAuth<typeof userSchema>>;
 
-/** A client named `test`, using `userSchema` unless another schema is given. */
+/**
+ * A client named `test` with web storage, using `userSchema` unless another
+ * user source is given.
+ */
 export function client(
 	options?: Partial<AuthOptions<typeof userSchema>>,
 ): TestClient;
-export function client<S extends StandardSchemaV1>(
-	options: Partial<AuthOptions<S>> & { userSchema: S },
+export function client<S extends UserSource>(
+	options: Partial<AuthOptions<S>> & { user: S },
 ): ReturnType<typeof createAuth<S>>;
 export function client(options: object = {}) {
 	return createAuth({
 		name: "test",
-		userSchema,
+		user: userSchema,
+		storage: testStorage(),
 		...(options as Partial<AuthOptions<typeof userSchema>>),
 	});
 }
@@ -109,11 +121,26 @@ export function client(options: object = {}) {
 export const saved = () => JSON.parse(values.get(SESSION) ?? "null");
 
 /** The current session, failing the test when there is none. */
-export const sessionOf = async <I, U>(auth: AuthClient<I, U>) => {
+export const sessionOf = async <U>(auth: {
+	getSession: () => Promise<Session<U> | null>;
+}) => {
 	const session = await auth.getSession();
 	assert.ok(session, "Expected a current session");
 	return session;
 };
+
+/** The current credentials, failing the test when there are none. */
+export const credentialsOf = async (
+	auth: Pick<AuthClient<unknown, unknown>, "credentials">,
+) => {
+	const credentials: Credentials | null = await auth.credentials.get();
+	assert.ok(credentials, "Expected current credentials");
+	return credentials;
+};
+
+/** An unsigned JWT carrying `claims`, as auth only decodes access tokens. */
+export const jwt = (claims: object) =>
+	`e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.x`;
 
 /** Matches an `AuthError` with `expected` for `assert.rejects`. */
 export const code = (expected: AuthErrorCode) => (error: unknown) =>
@@ -227,7 +254,9 @@ export const broadcast = async (key = SESSION) => {
 };
 
 /** A Router stand-in that counts invalidations. */
-export const connectCounting = <I, U>(auth: AuthClient<I, U>) => {
+export const connectCounting = (
+	auth: Pick<AuthClient<unknown, unknown>, "state" | "mount">,
+) => {
 	const router = {
 		invalidations: 0,
 		options: { context: { auth } },
@@ -241,7 +270,9 @@ export const connectCounting = <I, U>(auth: AuthClient<I, U>) => {
 };
 
 /** Records every state the client publishes from now on. */
-export const recordStates = <I, U>(auth: AuthClient<I, U>) => {
+export const recordStates = <U>(
+	auth: Pick<AuthClient<U, unknown>, "state">,
+) => {
 	const states: AuthState<U>[] = [];
 	const subscription = auth.state.subscribe((state) => states.push(state));
 	cleanups.push(() => subscription.unsubscribe());

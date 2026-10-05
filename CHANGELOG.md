@@ -1,5 +1,155 @@
 # Changelog
 
+## 0.1.0-alpha.4
+
+### Security
+
+- `safeReturnTo` no longer returns paths whose dot segments resolve to
+  another origin. Earlier versions turned inputs such as `/.//evil.com` and
+  `/%2e//evil.com` into `//evil.com`, which browsers and routers follow to
+  `evil.com`. Apps that pass `safeReturnTo`'s result to a redirect on alpha.3
+  or earlier should upgrade. The new `redirectIfSignedIn` guards use the fixed
+  check.
+
+### Added
+
+#### Storage
+
+- `createAuth` takes a `storage` adapter. `webStorage()` saves the session in
+  `localStorage`; `webStorage({ area: "session" })` uses `sessionStorage`, so
+  each tab has its own session that ends with the tab. `memoryStorage()` keeps
+  the session in memory only. Custom storage implements the new `AuthStorage`
+  type, and its operations may return promises.
+- Auth applies storage operations one at a time, in the order it issued them,
+  and re-checks its own session after every read. Storage that settles late or
+  out of order cannot erase a newer sign-in, and a profile update cannot
+  restore tokens this tab refreshed meanwhile.
+- `webStorage()` explains when browser storage does not exist at all, as on a
+  server, instead of reporting a bare `TypeError`.
+
+#### Users and sessions
+
+- `fromAccessToken(claims, map?)` reads the user from a JWT access token. Its
+  claims are validated by a Standard Schema and `map` turns them into the user.
+  `signIn` and the refresh callback then take tokens only, the user is not
+  saved, and it changes whenever the token does. A `decode` option replaces the
+  default, which decodes the JWT without verifying its signature.
+- `auth.refresh()` refreshes immediately, even while the access token is still
+  usable, for example to pick up a changed user.
+- An optional `revoke` callback receives the ended tokens after `signOut()`
+  clears the session. A failed revocation does not undo the sign-out; it is
+  published as the new `REVOKE_FAILED` error code.
+- Checking `state.status` narrows `state.user`: `AuthState` is now a
+  discriminated union in which `user` is set exactly while `authenticated` or
+  `refreshing`.
+- Mounting restores the saved session at once when storage and the user
+  source both answer synchronously, as with `webStorage()` and a synchronous
+  schema. `AuthProvider` mounts in a layout effect, so the browser's first
+  paint shows the restored session rather than `initializing`, although
+  components may render once with `initializing` before that paint. A saved
+  session that cannot be restored signs out at once. Asynchronous storage,
+  schemas, or token decoding restore as before, and validate the saved user
+  once.
+- Session IDs no longer require `crypto.randomUUID`, and user validation no
+  longer requires `structuredClone`, for environments such as React Native.
+
+#### React and routers
+
+- A new `/tanstack-router` entry point holds the Router integration:
+  `connectAuth`, plus guards that replace the protected-layout code apps used
+  to copy. `requireSession` redirects signed-out users with a `redirectTo`
+  search param and puts `{ session }` in route context; `SessionOutlet` renders
+  child routes only while that session is current, remounting them for a new
+  account; `redirectIfSignedIn` sends signed-in users away from the sign-in
+  page; `useRouterAuth` reads the client from Router context. Guards read the
+  session again when it changes while they check it.
+- A new `/react-router` entry point supports React Router 7 and 8 in
+  declarative mode, data mode, and framework mode with `ssr: false`. React
+  Router is an optional peer dependency.
+  - In declarative mode, `SessionOutlet` is the guard: it shows `pending`
+    while restoring, sends signed-out users to `loginPath` with `redirectTo`,
+    and offers a retry through `unavailable` after a failed refresh.
+  - In data and framework mode, `requireSession` and `redirectIfSignedIn`
+    guard loaders, and `useAuthRevalidation` re-runs loaders when auth
+    changes. `SessionOutlet`, rendered by the guarded route, shows child
+    routes only while the session its loader accepted is still the signed-in
+    one, so they never see the previous account's loader data. Pass the
+    router's `basename` to `requireSession`, which leaves it out of
+    `redirectTo`.
+- TanStack Start in SPA mode is supported. `connectAuth` does nothing while
+  the Router renders on a server, so Start's build-time shell shows the pending
+  UI instead of a storage error. Apps served by Start's own server should set
+  `defaultSsr: false`, so guards run in the browser.
+- React 18 is supported (`^18.0.0 || ^19.0.0`). CI tests React 18.0.0 as the
+  oldest version.
+
+#### Documentation
+
+- The README's quick start signs in against DummyJSON with TanStack Router,
+  and links to an example app for every other supported setup.
+- `examples/` holds one app per supported setup, built in CI, all signing in
+  against DummyJSON's auth API.
+
+### Changed
+
+- **Breaking:** `createAuth` takes the user schema as `user` instead of
+  `userSchema`, and `storage` is required. Pass `storage: webStorage()` to keep
+  the previous behavior.
+- **Breaking:** `getSession()` and `retry()` resolve `{ sessionId, user }`
+  without tokens, so a session is safe in route context. Access tokens come
+  from `auth.credentials.get()`, which resolves
+  `{ sessionId, accessToken, expiresAt }`. `auth.refresh(session)` is now
+  `auth.credentials.renew(credentials)`, `auth.rejectSession(session)` is now
+  `auth.credentials.reject(credentials)`, and `isCurrent` takes any object
+  with a `sessionId`. `auth.refresh()` still exists but now takes no argument
+  and forces a refresh; TypeScript flags calls that still pass a session.
+- **Breaking:** `createRefreshFn` is removed. Pass the refresh callback inline,
+  or type a standalone one with `RefreshFn<UserInput<typeof schema>>`.
+- **Breaking:** `AuthClient` takes the user type first and requires both type
+  arguments: `AuthClient<User, Input>`, with `never` as the input when the user
+  comes from the access token. Leaving out the input used to drop
+  `updateUser` silently. Prefer `typeof auth`.
+- **Breaking:** `/react` no longer depends on TanStack Router and exports only
+  `createAuthHooks`, which returns `useAuth`, `useAuthClient`, and an
+  `AuthProvider` typed for one client. With TanStack Router, keep the
+  provider-free setup with
+  `createAuthHooks({ useClient: useRouterAuth })`; elsewhere, render
+  `AuthProvider`, which also mounts the client. `connectAuth` moved to
+  `/tanstack-router`, and `safeReturnTo` to the package root.
+- **Breaking:** TanStack React Router `^1.132.0` is required (was
+  `^1.127.0`). Earlier versions include the router's `basepath` in
+  `location.href`, so `requireSession` would put it in `redirectTo` and users
+  came back to a path with the `basepath` twice. CI tests 1.132.0 as the
+  oldest version.
+- **Breaking:** both peer dependencies are optional, and React DOM is no longer
+  one. Install TanStack Router only for `/tanstack-router`, and React only for
+  the React entry points.
+- **Breaking:** sign-in, `updateUser`, and a refresh that returns a user reject
+  with `USER_VALIDATION_FAILED` when the user schema does not accept its own
+  output unchanged. Such a schema used to pass sign-in, then fail restoration
+  and sign users out on their next reload.
+- **Breaking:** sessions are saved in a new format. Sessions saved by earlier
+  alphas, including the two-key format of 0.1.0-alpha.1, are not restored, so
+  users sign in once after upgrading.
+- A refresh that returns a user equal to the current one keeps the same user
+  object and does not change `version`, so guards do not run again.
+
+### Fixed
+
+- Unmounting, as React's StrictMode does after the first mount, no longer
+  cancels a restore or refresh in progress; mounting again joins it. It used
+  to show an expired session as `unavailable`, reject callers waiting on
+  `getSession()` with `SESSION_CHANGED`, and send the same refresh token
+  twice, which signed the user out when the backend rotates refresh tokens.
+- A `signIn` whose validation fails no longer disturbs the current session.
+  It used to cancel a restore in progress, leaving `status` at
+  `initializing`, and abort a refresh in flight. While a sign-in validates,
+  only a newer `signIn` or `signOut()` cancels it; expiry and other tabs do
+  not.
+- Mounting again after an unmount applies what another tab saved meanwhile,
+  such as a sign-out. Changes made while nothing was mounted used to go
+  unnoticed until the next one.
+
 ## 0.1.0-alpha.3
 
 ### Added

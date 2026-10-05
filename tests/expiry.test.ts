@@ -9,7 +9,8 @@ import {
 	client,
 	code,
 	recordStates,
-	sessionOf,
+	saved,
+	credentialsOf,
 	useBrowserMocks,
 } from "./helpers.ts";
 
@@ -36,7 +37,7 @@ test("timers longer than setTimeout's limit neither fire early nor get lost", as
 	t.mock.timers.tick(10 * day - 60_000);
 	await flush();
 	assert.equal(refreshes, 1);
-	assert.equal((await sessionOf(auth)).accessToken, "access-2");
+	assert.equal((await credentialsOf(auth)).accessToken, "access-2");
 	cleanups.pop()!();
 	t.mock.timers.reset();
 });
@@ -61,13 +62,14 @@ test("proactive failure keeps unexpired access but expiry hides the user", async
 	t.mock.timers.reset();
 });
 
-test("a proactive refresh cancelled by unmount is attempted again after remount", async (t) => {
+test("unmount keeps a refresh in flight, so a rotated refresh token is saved and sent once", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
-	let calls = 0;
+	const sent: Array<string> = [];
+	const response = deferred();
 	const auth = client({
-		refresh: async () => {
-			calls++;
-			return new Promise(() => {});
+		refresh: async ({ refreshToken }) => {
+			sent.push(refreshToken);
+			return response.promise;
 		},
 	});
 	await auth.signIn(input({ expiresAt: 1_020_000 }));
@@ -75,14 +77,50 @@ test("a proactive refresh cancelled by unmount is attempted again after remount"
 	await flush();
 	t.mock.timers.tick(10_000);
 	await flush();
-	assert.equal(calls, 1);
+	assert.deepEqual(sent, ["refresh-1"]);
+	// The backend has rotated the refresh token by the time this tab unmounts.
 	unmount();
 	await flush();
 	cleanups.push(auth.mount());
 	await flush();
-	t.mock.timers.tick(5_000);
+	response.resolve({
+		accessToken: "access-2",
+		refreshToken: "refresh-2",
+		expiresAt: 1_100_000,
+	});
 	await flush();
-	assert.equal(calls, 2);
+	assert.deepEqual(sent, ["refresh-1"]);
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(saved().refreshToken, "refresh-2");
+	t.mock.timers.tick(60_000);
+	await flush();
+	assert.deepEqual(sent, ["refresh-1", "refresh-2"]);
+	cleanups.pop()!();
+	t.mock.timers.reset();
+});
+
+test("a remount while an expired session refreshes neither shows it unavailable nor rejects waiting guards", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	await client().signIn(input({ expiresAt: 1_001_000 }));
+	t.mock.timers.tick(2_000);
+	const sent: Array<string> = [];
+	const response = deferred();
+	const auth = client({
+		refresh: async ({ refreshToken }) => {
+			sent.push(refreshToken);
+			return response.promise;
+		},
+	});
+	const states = recordStates(auth);
+	const waiting = auth.getSession();
+	// StrictMode mounts, unmounts, and mounts again at once.
+	auth.mount()();
+	cleanups.push(auth.mount());
+	await flush();
+	response.resolve({ accessToken: "access-2", expiresAt: 1_100_000 });
+	assert.equal((await waiting)?.user.id, "alice");
+	assert.deepEqual(sent, ["refresh-1"]);
+	assert.ok(states.every((state) => state.status !== "unavailable"));
 	assert.equal(auth.state.get().status, "authenticated");
 	cleanups.pop()!();
 	t.mock.timers.reset();
@@ -100,12 +138,12 @@ test("expiry without a refresh handler signs out", async (t) => {
 test("opaque tokens work and explicit expiry wins over JWT exp", async () => {
 	const auth = client();
 	await auth.signIn(input());
-	assert.equal((await sessionOf(auth)).expiresAt, undefined);
+	assert.equal((await credentialsOf(auth)).expiresAt, undefined);
 	const jwt = `e30.${Buffer.from(JSON.stringify({ exp: 1 })).toString("base64url")}.x`;
 	await auth.signIn(
 		input({ accessToken: jwt, expiresAt: Date.now() + 60_000 }),
 	);
-	assert.ok(((await sessionOf(auth)).expiresAt ?? 0) > Date.now());
+	assert.ok(((await credentialsOf(auth)).expiresAt ?? 0) > Date.now());
 });
 
 const jwt = (claims: object) =>
@@ -121,7 +159,7 @@ test("JWT lifetime is measured from receipt when the browser clock runs fast", a
 	await auth.signIn(
 		input({ accessToken: jwt({ iat: serverNow, exp: serverNow + 300 }) }),
 	);
-	assert.equal((await sessionOf(auth)).expiresAt, Date.now() + 300_000);
+	assert.equal((await credentialsOf(auth)).expiresAt, Date.now() + 300_000);
 	t.mock.timers.reset();
 });
 
@@ -129,7 +167,7 @@ test("JWT exp without iat stays absolute", async () => {
 	const auth = client();
 	const exp = Math.floor(Date.now() / 1000) + 300;
 	await auth.signIn(input({ accessToken: jwt({ exp }) }));
-	assert.equal((await sessionOf(auth)).expiresAt, exp * 1000);
+	assert.equal((await credentialsOf(auth)).expiresAt, exp * 1000);
 	await assert.rejects(
 		auth.signIn(input({ accessToken: jwt({ exp: 1 }) })),
 		code("INVALID_SESSION"),
@@ -142,9 +180,9 @@ test("expiresIn seconds are measured from receipt for sign-in and refresh", asyn
 		refresh: async () => ({ accessToken: "access-2", expiresIn: 120 }),
 	});
 	await auth.signIn(input({ expiresIn: 60 }));
-	assert.equal((await sessionOf(auth)).expiresAt, 1_060_000);
+	assert.equal((await credentialsOf(auth)).expiresAt, 1_060_000);
 	t.mock.timers.tick(10_000);
-	const refreshed = await auth.refresh(await sessionOf(auth));
+	const refreshed = await auth.credentials.renew(await credentialsOf(auth));
 	assert.equal(refreshed?.expiresAt, 1_130_000);
 	t.mock.timers.reset();
 });
@@ -169,7 +207,7 @@ test("restoration keeps the saved expiry instead of re-deriving JWT lifetime", a
 	const iat = 1_000_000;
 	await client().signIn(input({ accessToken: jwt({ iat, exp: iat + 300 }) }));
 	t.mock.timers.tick(200_000);
-	const restored = await sessionOf(client());
+	const restored = await credentialsOf(client());
 	assert.equal(restored.expiresAt, 1_000_300_000);
 	t.mock.timers.reset();
 });

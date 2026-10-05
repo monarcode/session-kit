@@ -1,10 +1,11 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.3",
-	"description": "Schema-driven browser sessions for React and TanStack Router",
+	"version": "0.1.0-alpha.4",
+	"description": "Schema-driven browser sessions for React, with TanStack Router and React Router support",
 	"keywords": [
 		"auth",
 		"react",
+		"react-router",
 		"router",
 		"standard-schema",
 		"tanstack"
@@ -37,6 +38,14 @@
 			"types": "./dist/react/index.d.ts",
 			"import": "./dist/react/index.js"
 		},
+		"./tanstack-router": {
+			"types": "./dist/tanstack-router/index.d.ts",
+			"import": "./dist/tanstack-router/index.js"
+		},
+		"./react-router": {
+			"types": "./dist/react-router/index.d.ts",
+			"import": "./dist/react-router/index.js"
+		},
 		"./http": {
 			"types": "./dist/http/index.d.ts",
 			"import": "./dist/http/index.js"
@@ -55,9 +64,12 @@
 		"format:check": "oxfmt --check .",
 		"clean": "node scripts/clean.mjs",
 		"build": "pnpm run clean && tsc -p tsconfig.json",
+		"build:examples": "pnpm run build && pnpm --filter \"./examples/*\" run build",
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
-		"test": "node --conditions=development --test tests/*.test.ts",
+		"test": "pnpm run test:sync && pnpm run test:async",
+		"test:sync": "node --conditions=development --test tests/*.test.ts",
+		"test:async": "node --env-file=tests/async-storage.env --conditions=development --test tests/*.test.ts",
 		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
 		"test:docs": "node scripts/check-readme.mjs",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
@@ -69,7 +81,7 @@
 		"use-sync-external-store": "^1.6.0"
 	},
 	"devDependencies": {
-		"@tanstack/react-router": "1.170.38",
+		"@tanstack/react-router": "1.170.41",
 		"@types/jsdom": "21.1.7",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
@@ -81,13 +93,25 @@
 		"oxlint": "1.86.0",
 		"react": "19.3.0",
 		"react-dom": "19.3.0",
+		"react-router": "8.4.0",
 		"typescript": "6.0.3",
 		"zod": "4.4.3"
 	},
 	"peerDependencies": {
-		"@tanstack/react-router": "^1.127.0",
-		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"@tanstack/react-router": "^1.132.0",
+		"react": "^18.0.0 || ^19.0.0",
+		"react-router": "^7.0.0 || ^8.0.0"
+	},
+	"peerDependenciesMeta": {
+		"@tanstack/react-router": {
+			"optional": true
+		},
+		"react": {
+			"optional": true
+		},
+		"react-router": {
+			"optional": true
+		}
 	},
 	"devEngines": {
 		"runtime": {
