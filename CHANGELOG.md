@@ -51,6 +51,8 @@
   `defaultSsr: false`, so guards run in the browser.
 - `webStorage()` explains when browser storage does not exist at all, as on a
   server, instead of reporting a bare `TypeError`.
+- `examples/` holds one app per supported setup, built in CI, all signing in
+  against DummyJSON's auth API.
 - Mounting restores the saved session at once when storage and the user
   source both answer synchronously, as with `webStorage()` and a synchronous
   schema, so `initializing` is never rendered. `AuthProvider` mounts in a

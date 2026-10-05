@@ -64,6 +64,7 @@
 		"format:check": "oxfmt --check .",
 		"clean": "node scripts/clean.mjs",
 		"build": "pnpm run clean && tsc -p tsconfig.json",
+		"build:examples": "pnpm run build && pnpm --filter \"./examples/*\" run build",
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "pnpm run test:sync && pnpm run test:async",
@@ -80,7 +81,7 @@
 		"use-sync-external-store": "^1.6.0"
 	},
 	"devDependencies": {
-		"@tanstack/react-router": "1.170.38",
+		"@tanstack/react-router": "1.170.41",
 		"@types/jsdom": "21.1.7",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",

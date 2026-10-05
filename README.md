@@ -824,6 +824,13 @@ the remaining data after storage becomes available.
   React Router framework mode works with `ssr: false`. Never put tokens in
   route loader results or hydrated page data.
 
+## Examples
+
+[`examples/`](./examples) has one small app per supported setup: TanStack
+Router, TanStack Start in SPA mode, and React Router in declarative, data, and
+framework mode. All sign in against DummyJSON's auth API. `pnpm run
+build:examples` builds the package and every app.
+
 ## Entry points
 
 | Import                                   | Exports                                                                                                        |

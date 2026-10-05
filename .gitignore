@@ -2,3 +2,12 @@
 
 node_modules
 dist
+
+.idea
+
+# Example apps
+build
+.react-router
+.tanstack
+.output
+routeTree.gen.ts

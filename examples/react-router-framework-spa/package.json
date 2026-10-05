@@ -1,0 +1,26 @@
+{
+	"name": "session-kit-example-react-router-framework-spa",
+	"private": true,
+	"description": "session-kit with React Router (framework mode, ssr: false), against DummyJSON's auth API",
+	"type": "module",
+	"scripts": {
+		"dev": "react-router dev",
+		"build": "react-router build && tsc --noEmit",
+		"preview": "vite preview --outDir build/client"
+	},
+	"dependencies": {
+		"@monarcode/session-kit": "workspace:*",
+		"isbot": "^5",
+		"react": "19.3.0",
+		"react-dom": "19.3.0",
+		"react-router": "8.4.0",
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@react-router/dev": "8.4.0",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"typescript": "6.0.3",
+		"vite": "8.3.2"
+	}
+}
