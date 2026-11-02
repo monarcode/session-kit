@@ -248,6 +248,36 @@ for (const synchronous of [true, false]) {
 	});
 }
 
+test("without a document, as on React Native, AuthProvider restores in a layout effect", async () => {
+	await signIn(newClient());
+	const auth = newClient({ storage: webStorage() });
+	const { AuthProvider } = binding.createAuthHooks<Client>();
+	// Every layout effect runs before any passive effect, and a child's
+	// passive effect runs before its parent's. So this child sees the
+	// restored session only if AuthProvider mounted in a layout effect.
+	let seen: string | undefined;
+	function Probe() {
+		useEffect(() => {
+			seen = auth.state.get().status;
+		}, []);
+		return null;
+	}
+	// The root is made first: without a document, `render` couldn't make one.
+	const { createRoot } = await import("react-dom/client");
+	const root = createRoot(dom.window.document.createElement("div"));
+	const document = Object.getOwnPropertyDescriptor(globalThis, "document")!;
+	delete (globalThis as { document?: unknown }).document;
+	try {
+		await act(async () =>
+			root.render(h(AuthProvider, { client: auth }, h(Probe))),
+		);
+	} finally {
+		Object.defineProperty(globalThis, "document", document);
+	}
+	await act(async () => root.unmount());
+	assert.equal(seen, "authenticated");
+});
+
 test("AuthProvider mounts its client while rendered", async () => {
 	const auth = newClient();
 	const mount = auth.mount;

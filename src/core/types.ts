@@ -222,7 +222,13 @@ type AuthClientBase<U, I> = {
 	refresh: () => Promise<Session<U> | null>;
 	/** Whether this snapshot belongs to the current session (same `sessionId`). */
 	isCurrent: (session: { sessionId: string }) => boolean;
-	/** Called by the Router connector. Cleanup stops background timers. */
+	/**
+	 * Starts background work: expiry timers and cross-tab sync. Called by
+	 * `AuthProvider` and the router adapters; mounts are counted, and the last
+	 * cleanup stops the work. Every call also re-checks the session against
+	 * the current clock: it restores the session if that is still to do or
+	 * failed, refreshes access that has expired, and re-arms the timers.
+	 */
 	mount: () => () => void;
 	/** Access tokens, for code that attaches them to requests, such as `createAuthFetch`. */
 	credentials: {

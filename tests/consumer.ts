@@ -2,8 +2,10 @@ import {
 	createRootRouteWithContext,
 	createRouter,
 } from "@tanstack/react-router";
+import * as SecureStore from "expo-secure-store";
 import { z } from "zod";
 
+import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
 	createAuth,
@@ -219,3 +221,32 @@ void typed.updateUser;
 const tokenTyped: AuthClient<{ id: string; admin: boolean }, never> = tokenAuth;
 // @ts-expect-error A token user has no `updateUser`.
 void tokenTyped.updateUser;
+
+// Expo: `secureStorage()` is an `AuthStorage`, and `SessionGate` takes the
+// same `unavailable` render prop as `SessionOutlet`.
+const expoAuth = createAuth({
+	name: "expo",
+	user: userSchema,
+	storage: expo.secureStorage({
+		keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK,
+		clearOnReinstall: false,
+	}),
+});
+// @ts-expect-error `keychainAccessible` takes one of SecureStore's constants.
+expo.secureStorage({ keychainAccessible: "afterFirstUnlock" });
+const unavailableProps: expo.UnavailableProps = {
+	error: null,
+	retry: () => {},
+};
+void unavailableProps;
+expo.SessionGate({
+	unavailable: ({ error, retry }) => `${error?.code}${String(retry)}`,
+	client: expoAuth,
+	children: null,
+});
+expo.SessionGate({});
+// @ts-expect-error The gate retries through the client, so it needs `retry`.
+expo.SessionGate({ client: { state: expoAuth.state, mount: expoAuth.mount } });
+expo.rememberDeepLink(expoAuth, "myapp://orders/42", { loginPath: "/sign-in" });
+// @ts-expect-error The deep link is kept for one client.
+expo.rememberDeepLink("myapp://orders/42");

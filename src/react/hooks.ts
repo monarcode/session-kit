@@ -2,8 +2,6 @@ import {
 	createContext,
 	createElement,
 	useContext,
-	useEffect,
-	useLayoutEffect,
 	type ReactElement,
 	type ReactNode,
 } from "react";
@@ -12,15 +10,10 @@ import {
 	assertAuthSource,
 	ClientContext,
 	useAuthState,
+	useMountEffect,
 	type AuthSource,
 	type StateOf,
 } from "./context.js";
-
-// Layout effects run before the browser paints, so a session restored at mount
-// replaces the "initializing" state before anyone sees it. React warns about
-// layout effects on a server, where neither kind of effect runs.
-const useMountEffect =
-	typeof document === "undefined" ? useEffect : useLayoutEffect;
 
 export type AuthHooksOptions<Client extends AuthSource> = {
 	/**

@@ -69,13 +69,17 @@ jobs:
          # Type packages are not peers: these are the first releases whose
          # react/jsx-runtime and react-dom/client types resolve under NodeNext.
          # The override stops @types/react-dom pulling in newer React types.
+         # Expo peers are SDK 53's. expo-file-system stays at the dev version:
+         # SDK 53's has no `exports`, so `expo-file-system/next` resolves only
+         # in Metro, not under NodeNext. The `/next` API used is the same.
          - name: Install oldest supported peers
            run: |
               npm pkg set 'pnpm.overrides.@types/react=18.0.2'
               pnpm add --workspace-root --save-dev --save-exact \
                 react@18.0.0 react-dom@18.0.0 \
                 @types/react@18.0.2 @types/react-dom@18.0.3 \
-                @tanstack/react-router@1.132.0 react-router@7.0.0
+                @tanstack/react-router@1.132.0 react-router@7.0.0 \
+                expo-router@5.0.2 expo-secure-store@14.2.0 react-native@0.79.0
 
          - name: Build and test
            run: pnpm run build && pnpm test && pnpm run test:types
@@ -102,7 +106,15 @@ jobs:
          - name: Install dependencies
            run: pnpm install --frozen-lockfile
 
-         # Each app builds and type-checks against the package built here.
-         # Builds never call DummyJSON; only the running apps do.
+         # Builds never call DummyJSON; only the running apps do. Pointing it
+         # at an unroutable address makes a build that tried fail.
+         - name: Block DummyJSON
+           run: echo "0.0.0.0 dummyjson.com" | sudo tee -a /etc/hosts
+
+         # Each app builds and type-checks against the package built here. The
+         # Expo app is bundled for iOS and Android with `expo export`, offline.
          - name: Build the package and the example apps
            run: pnpm run build:examples
+           env:
+              EXPO_OFFLINE: 1
+              EXPO_NO_TELEMETRY: 1

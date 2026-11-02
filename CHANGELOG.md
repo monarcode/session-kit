@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.1.0-alpha.5
+
+### Added
+
+- `secureStorage()` from the new `@monarcode/session-kit/expo` entry point
+  saves the session with `expo-secure-store`. It encodes keys for
+  SecureStore, splits values over its 2048-byte limit across keys without
+  ever leaving a half-written value, and reads synchronously. By default it
+  removes a session that iOS kept in the keychain from an earlier install;
+  `clearOnReinstall: false` keeps it. Data Android can't decrypt, as after a
+  backup restored onto another device, reads as signed out.
+  `keychainAccessible` is passed to SecureStore.
+- `SessionGate` from `@monarcode/session-kit/expo` wraps the root navigator
+  of an Expo Router app and adds what `Stack.Protected` lacks. It keeps the
+  splash screen up while the session is restored, renders an
+  `unavailable({ error, retry })` fallback, re-checks the session when the
+  app returns to the foreground, and remounts screens when one account
+  replaces another.
+- `rememberDeepLink(auth, url)`, called from `redirectSystemPath` in
+  `+native-intent.tsx`, keeps a deep link that `Stack.Protected` would drop
+  while the user is signed out. `SessionGate` opens it after the sign-in.
+- `UnavailableProps`, the type of `SessionOutlet`'s and `SessionGate`'s
+  `unavailable` render prop, is exported from `/react-router` and `/expo`.
+- Optional peer dependencies for Expo SDK 53 and later: `expo-router`,
+  `expo-secure-store`, `expo-file-system`, and `react-native`.
+- An [Expo Router guide](./docs/expo.md) and an
+  [`expo-router` example app](./examples/expo-router) for iOS and Android.
+
+### Fixed
+
+- JWT access tokens decode where the runtime has no `TextDecoder`, as in
+  older Hermes builds of React Native, or one that rejects the `fatal`
+  option, as some polyfills do. Before, decoding failed silently there:
+  expiry from `exp` and `iat` was ignored, and `fromAccessToken` rejected
+  every token.
+- React Router's `SessionOutlet` given a `client` and rendered without
+  `AuthProvider` now mounts that client. Before, nothing restored the saved
+  session in declarative mode, so the outlet showed `pending` for good.
+- `AuthProvider` mounts its client in a layout effect on React Native, as in
+  browsers, so a synchronous restore happens before the first frame. It used a
+  passive effect wherever `document` was missing.
+
+### Changed
+
+- A JWT payload that is not valid UTF-8 is no longer read. Malformed bytes
+  used to become replacement characters; now `fromAccessToken` rejects the
+  token with `USER_VALIDATION_FAILED`, and expiry is not taken from it. JWTs
+  must be UTF-8, so tokens from a working backend are unaffected.
+
 ## 0.1.0-alpha.4
 
 ### Security

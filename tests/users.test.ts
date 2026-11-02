@@ -128,6 +128,78 @@ test("access tokens that are not JWTs, or whose claims fail the schema, are reje
 	assert.equal(values.size, 0);
 });
 
+/**
+ * Runs `work` with `TextDecoder` replaced: removed, as on older Hermes, or by
+ * a polyfill that rejects the `fatal` option.
+ */
+async function withTextDecoder(
+	replacement: unknown,
+	work: () => Promise<void>,
+) {
+	const descriptor = Object.getOwnPropertyDescriptor(
+		globalThis,
+		"TextDecoder",
+	);
+	if (replacement)
+		Object.defineProperty(globalThis, "TextDecoder", {
+			configurable: true,
+			value: replacement,
+		});
+	else delete (globalThis as { TextDecoder?: unknown }).TextDecoder;
+	try {
+		await work();
+	} finally {
+		if (descriptor)
+			Object.defineProperty(globalThis, "TextDecoder", descriptor);
+	}
+}
+
+class WithoutFatal extends TextDecoder {
+	constructor(label?: string, options?: TextDecoderOptions) {
+		if (options?.fatal) throw new RangeError("fatal is not supported");
+		super(label, options);
+	}
+}
+
+for (const [decoder, replacement] of [
+	["TextDecoder", TextDecoder],
+	["the fallback", undefined],
+	["a TextDecoder without fatal", WithoutFatal],
+] as const) {
+	const run = (work: () => Promise<void>) =>
+		replacement === TextDecoder ? work() : withTextDecoder(replacement, work);
+
+	test(`access token claims decode as UTF-8 with ${decoder}`, () =>
+		run(async () => {
+			const zoe = { sub: "zoë", email: "zoë@例え.jp 🙂", role: "admin" };
+			const auth = client({ user: tokenUser });
+			await auth.signIn({ accessToken: jwt({ ...zoe, exp: 9e9 }) });
+			assert.deepEqual(auth.state.get().user, {
+				id: "zoë",
+				email: "zoë@例え.jp 🙂",
+				admin: true,
+			});
+			assert.equal((await credentialsOf(auth)).expiresAt, 9e12);
+		}));
+
+	test(`access tokens whose payload is not UTF-8 are rejected with ${decoder}`, () =>
+		run(async () => {
+			const payload = Buffer.concat([
+				Buffer.from('{"sub":"'),
+				// A lone continuation byte and an overlong "/": both malformed.
+				Buffer.from([0x80, 0xc0, 0xaf]),
+				Buffer.from('","email":"a@example.com","role":"member"}'),
+			]);
+			const auth = client({ user: tokenUser });
+			await assert.rejects(
+				auth.signIn({
+					accessToken: `e30.${payload.toString("base64url")}.x`,
+				}),
+				code("USER_VALIDATION_FAILED"),
+			);
+		}));
+}
+
 test("a saved token whose claims no longer validate signs out", async () => {
 	await client({ user: tokenUser }).signIn({ accessToken: jwt(alice) });
 	const stricter = fromAccessToken(

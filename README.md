@@ -1,9 +1,9 @@
 # @monarcode/session-kit
 
-Schema-driven browser sessions for React, with TanStack Router and React Router
-support.
+Schema-driven sessions for React, with TanStack Router, React Router, and Expo
+Router support.
 
-**Version: 0.1.0-alpha.4. Early development; not ready for production.**
+**Version: 0.1.0-alpha.5. Early development; not ready for production.**
 
 session-kit keeps the tokens your backend issues and manages the session around
 them. Your backend does the authentication; session-kit does the rest:
@@ -17,6 +17,9 @@ them. Your backend does the authentication; session-kit does the rest:
   and "try again later".
 - **Tabs that agree.** Sign-in, sign-out, account switches, profile updates,
   and refreshes reach every open tab.
+- **Expo apps too.** Sessions saved in the iOS keychain or Android Keystore,
+  the splash screen held while restoring, and deep links kept across the
+  sign-in.
 - **Router guards.** Redirect signed-out users with a return URL, keep guarded
   pages in sync with the session, and re-run guards when auth changes.
 - **Tokens stay out of reach.** Reactive state and sessions hold no tokens, so
@@ -29,6 +32,7 @@ them. Your backend does the authentication; session-kit does the rest:
 - [Installation](#installation)
 - [Quick start: TanStack Router](#quick-start-tanstack-router)
 - [Other setups](#other-setups)
+- [Expo Router](./docs/expo.md)
 - [Using the client](#using-the-client)
   - [State](#state)
   - [Sessions and credentials](#sessions-and-credentials)
@@ -58,19 +62,18 @@ in against DummyJSON's public test API.
 | React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [`react-router-declarative`](./examples/react-router-declarative)     |
 | React Router, data mode                    | `@monarcode/session-kit/react-router`    | [`react-router-data`](./examples/react-router-data)                   |
 | React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
+| Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [`expo-router`](./examples/expo-router)                               |
 | React without a router                     | `@monarcode/session-kit/react`           | None                                                                  |
 
 Storage adapters: `webStorage()` for `localStorage` or `sessionStorage`,
-`memoryStorage()`, or your own [`AuthStorage`](#storage), which may be
-asynchronous.
+`secureStorage()` for `expo-secure-store`, `memoryStorage()`, or your own
+[`AuthStorage`](#storage), which may be asynchronous.
 
 Planned for releases after 0.1.0, not yet available:
 
 - **Server rendering:** TanStack Start with SSR, and React Router framework
   mode with SSR, keeping tokens in an encrypted `httpOnly` cookie on the server.
   A `cookieStorage()` adapter would read and write that cookie.
-- **Expo (React Native):** a `secureStorage()` adapter for
-  `expo-secure-store`, and refreshing when the app returns to the foreground.
 
 ## Installation
 
@@ -80,20 +83,28 @@ Alpha releases are published to the `latest` distribution tag:
 pnpm add @monarcode/session-kit
 ```
 
-Pin `@monarcode/session-kit@0.1.0-alpha.4` to use this exact version. Alpha
+Pin `@monarcode/session-kit@0.1.0-alpha.5` to use this exact version. Alpha
 releases may change the public API; see the [release notes](./CHANGELOG.md).
 
 All peer dependencies are optional, so install only what you use:
 
-| Peer                     | Range                  | Needed for                                    |
-| ------------------------ | ---------------------- | --------------------------------------------- |
-| `react`                  | `^18.0.0 \|\| ^19.0.0` | `/react`, `/tanstack-router`, `/react-router` |
-| `@tanstack/react-router` | `^1.132.0`             | `/tanstack-router`                            |
-| `react-router`           | `^7.0.0 \|\| ^8.0.0`   | `/react-router`                               |
+| Peer                     | Range                   | Needed for                                             |
+| ------------------------ | ----------------------- | ------------------------------------------------------ |
+| `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/react-router`, `/expo` |
+| `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
+| `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
+| `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
+| `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
+| `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
+| `react-native`           | `>=0.79.0`              | `/expo`                                                |
 
-CI tests the oldest and newest versions in each range. session-kit never
-imports React DOM. Any Standard Schema V1 library describes users; the
-examples use Zod:
+The Expo ranges cover Expo SDK 53 and newer; install them with
+`npx expo install` so they match your SDK, as the
+[Expo guide](./docs/expo.md#installation) shows. CI tests the oldest and newest
+versions in each range, except that `expo-file-system` is tested only at its
+newest: 18.1 publishes no `exports` map, so its types don't resolve under
+NodeNext. session-kit never imports React DOM. Any Standard Schema V1 library
+describes users; the examples use Zod:
 
 ```sh
 pnpm add react react-dom @tanstack/react-router zod
@@ -453,6 +464,7 @@ one uses:
 | React Router, declarative mode             | `SessionOutlet` alone                                                      |
 | React Router, data mode                    | `requireSession` in loaders, `SessionOutlet`, `useAuthRevalidation`        |
 | React Router, framework mode, `ssr: false` | `requireSession` in `clientLoader`, `SessionOutlet`, `useAuthRevalidation` |
+| Expo Router                                | `Stack.Protected`, `SessionGate`, `rememberDeepLink`                       |
 
 **TanStack Start in SPA mode.** Create the client and call `connectAuth` inside
 `getRouter()`. Set `defaultSsr: false` in `src/start.ts`: Start's own server
@@ -478,6 +490,15 @@ happens before the first paint, and never on a server.
   another account signs in, it shows `pending` until the loader accepts the
   new session, so child routes never see the previous account's loader data.
   With a router `basename`, pass the same `basename` to `requireSession`.
+
+**Expo Router.** Save the session with `secureStorage()` from
+`@monarcode/session-kit/expo`, guard screens with Expo Router's
+`Stack.Protected`, and wrap the root navigator in `SessionGate`, which holds
+the splash screen while restoring, renders `unavailable({ error, retry })`
+after a failed refresh, and re-checks the session when the app returns to the
+foreground. `rememberDeepLink` in `+native-intent.tsx` keeps a deep link for
+after the sign-in. The [Expo guide](./docs/expo.md) walks through the whole
+app.
 
 **Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
 in any React app.
@@ -644,6 +665,10 @@ The required `storage` option chooses where the session is saved:
   refresh tokens, whichever tab refreshes second sends a spent token and is
   signed out, or, with reuse detection, both are. Prefer `localStorage` with
   rotating refresh tokens.
+- `secureStorage()`, from `@monarcode/session-kit/expo`, uses
+  `expo-secure-store` on iOS and Android. It splits sessions over
+  SecureStore's 2048-byte limit across keys and reads synchronously; see the
+  [Expo guide](./docs/expo.md#secure-storage).
 - `memoryStorage()` never persists the session.
 - Any object implementing `AuthStorage` works, including one whose operations
   return promises, such as a native secure store. Auth applies operations one
@@ -663,7 +688,8 @@ updates and refreshes appear everywhere. Refresh runs under the
 `<name>:auth:refresh` Web Lock, so one tab at a time spends the refresh token
 and the others reuse what it saved; rotating refresh tokens work with several
 tabs open. Without Web Locks, two tabs refreshing at the same instant can both
-spend the token; a short reuse window on the backend covers that.
+spend the token; a short reuse window on the backend covers that. An Expo app
+has one JavaScript context, so it has no tabs to follow and needs no lock.
 
 ### Errors
 
@@ -681,9 +707,13 @@ available, because undeleted credentials could survive a reload.
 
 ## Security notes
 
-- Tokens and users are readable by same-origin JavaScript, as with any
-  browser-stored credential. Your backend must authenticate every request and
-  authorize private operations; route guards and local user fields do not.
+- In browsers, tokens and users are readable by same-origin JavaScript, as
+  with any browser-stored credential. In Expo apps, `secureStorage()` keeps
+  them in the iOS keychain or encrypted with an Android Keystore key, out of
+  Android backups with the `expo-secure-store` config plugin, and removes a
+  session an earlier install left in the iOS keychain. Either way, your
+  backend must authenticate every request and authorize private operations;
+  route guards, screen guards, and local user fields do not.
 - Tokens never go in cookies, so browsers do not send them automatically.
 - Server rendering is not supported yet: sessions live in the browser. Never put
   tokens in loader results or hydrated page data.
@@ -696,6 +726,7 @@ available, because undeleted credentials could survive a reload.
 | `@monarcode/session-kit/react`           | `createAuthHooks`, hook types                                                                             |
 | `@monarcode/session-kit/tanstack-router` | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth` |
 | `@monarcode/session-kit/react-router`    | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                            |
+| `@monarcode/session-kit/expo`            | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                 |
 | `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                         |
 
 Do not import internal `dist` paths.
@@ -710,19 +741,23 @@ pnpm install
 pnpm run check
 ```
 
-`check` runs Oxlint and Oxfmt, builds the package, runs the tests, type-checks
-the tests, the consumer declarations, and every TypeScript example in this
-README marked with a `file:` comment, under NodeNext and Bundler resolution.
-`pnpm test` runs the runtime tests twice: with synchronous storage, and with
-storage that settles every operation late, removals last, to catch ordering
-bugs. `pnpm run build:examples` builds the package and every example app.
+`check` runs Oxlint and Oxfmt, builds the package, runs the tests, and
+type-checks the tests, the consumer declarations, and every TypeScript example
+marked with a `file:` comment: this README's under NodeNext and Bundler
+resolution, and the [Expo guide](./docs/expo.md)'s under Bundler resolution,
+as Metro resolves, without DOM types. `pnpm test` runs the runtime tests
+twice: with synchronous storage, and with storage that settles every operation
+late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
+the package and every example app.
 
 Tests are TypeScript files that Node runs directly. Behavior tests are split by
 area and share the browser mocks in `tests/helpers.ts`; React tests mount real
-React DOM, TanStack Router, and React Router in jsdom. CI also runs the tests
-and type tests against the oldest supported peers, and builds the examples.
-Before each commit, Husky runs the lint and format checks. The manual alpha
-release workflow is documented in [RELEASING.md](./RELEASING.md).
+React DOM, TanStack Router, and React Router in jsdom. Expo tests replace
+`expo-secure-store`, `expo-file-system`, `expo-router`, and `react-native` with
+the mocks in `tests/mocks/`. CI also runs the tests and type tests against the
+oldest supported peers, and builds the examples. Before each commit, Husky runs
+the lint and format checks. The manual alpha release workflow is documented in
+[RELEASING.md](./RELEASING.md).
 
 ### Try a local build
 
