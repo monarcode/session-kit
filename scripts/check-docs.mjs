@@ -4,53 +4,8 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/**
- * TypeScript examples marked with a `<!-- file: path -->` comment. Each
- * document's examples are written out and type-checked as one project, under
- * each listed module resolution.
- */
-const documents = [
-	{ path: "README.md", resolutions: ["NodeNext", "Bundler"] },
-	// Metro resolves like a bundler, and Expo apps import without extensions.
-	{ path: "docs/expo.md", resolutions: ["Bundler"] },
-];
-
-const root = fileURLToPath(new URL("../", import.meta.url));
-const require = createRequire(import.meta.url);
-const compiler = require.resolve("typescript/bin/tsc");
-
-for (const document of documents) await check(document);
-
-async function check({ path: documentPath, resolutions }) {
-	const text = await readFile(join(root, documentPath), "utf8");
-	const examples = [
-		...text.matchAll(
-			/<!-- file: ((?:src|app)\/[\w/()+.-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
-		),
-	];
-	if (!examples.length)
-		throw new Error(`No TypeScript examples found in ${documentPath}`);
-	const directory = await mkdtemp(join(root, "tests", ".docs-"));
-	try {
-		const paths = new Set();
-		for (const [, path, code] of examples) {
-			if (paths.has(path))
-				throw new Error(`Duplicate example in ${documentPath}: ${path}`);
-			paths.add(path);
-			const target = join(directory, path);
-			await mkdir(dirname(target), { recursive: true });
-			await writeFile(target, code);
-		}
-		const fileRoutePaths = [
-			"src/routes/__root.tsx",
-			"src/routes/login.tsx",
-			"src/routes/_authenticated.tsx",
-			"src/routes/_authenticated/index.tsx",
-		];
-		if (fileRoutePaths.every((path) => paths.has(path))) {
-			await writeFile(
-				join(directory, "src/routeTree.gen.ts"),
-				`
+/** What TanStack Router's generator would write for the README's routes. */
+const ROUTE_TREE = `
 import { Route as rootRoute } from "./routes/__root.js";
 import { Route as loginRouteImport } from "./routes/login.js";
 import { Route as authenticatedRouteImport } from "./routes/_authenticated.js";
@@ -101,20 +56,71 @@ declare module "@tanstack/react-router" {
     };
   }
 }
-`,
-			);
+`;
+
+/**
+ * Documents whose TypeScript examples, marked with a `<!-- file: path -->`
+ * comment, are written out and type-checked as one project per document:
+ * under each listed module resolution, with `lib`, and with `fixtures`, the
+ * generated files the examples import.
+ */
+const documents = [
+	{
+		path: "README.md",
+		resolutions: ["NodeNext", "Bundler"],
+		lib: ["ES2022", "DOM", "DOM.Iterable"],
+		fixtures: { "src/routeTree.gen.ts": ROUTE_TREE },
+	},
+	{
+		path: "docs/expo.md",
+		// Metro resolves like a bundler, and Expo apps import without extensions.
+		resolutions: ["Bundler"],
+		// No DOM, so browser-only code fails as it would on a device.
+		lib: ["ES2022"],
+		fixtures: {},
+	},
+];
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+const require = createRequire(import.meta.url);
+const compiler = require.resolve("typescript/bin/tsc");
+
+for (const document of documents) await check(document);
+
+async function check({ path: documentPath, resolutions, lib, fixtures }) {
+	const text = await readFile(join(root, documentPath), "utf8");
+	const examples = [
+		...text.matchAll(
+			/<!-- file: ([\w/()+.-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+		),
+	];
+	if (!examples.length)
+		throw new Error(`No TypeScript examples found in ${documentPath}`);
+	const directory = await mkdtemp(join(root, "tests", ".docs-"));
+	try {
+		const files = { ...fixtures };
+		for (const [, path, code] of examples) {
+			if (path in files)
+				throw new Error(`Duplicate example in ${documentPath}: ${path}`);
+			files[path] = code;
+		}
+		for (const [path, code] of Object.entries(files)) {
+			const target = join(directory, path);
+			await mkdir(dirname(target), { recursive: true });
+			await writeFile(target, code);
 		}
 		for (const moduleResolution of resolutions) {
-			const module =
-				moduleResolution === "Bundler" ? "ESNext" : moduleResolution;
 			const config = join(directory, "tsconfig.json");
 			await writeFile(
 				config,
 				JSON.stringify({
 					compilerOptions: {
 						target: "ES2022",
-						lib: ["ES2022", "DOM", "DOM.Iterable"],
-						module,
+						lib,
+						module:
+							moduleResolution === "Bundler"
+								? "ESNext"
+								: moduleResolution,
 						moduleResolution,
 						jsx: "react-jsx",
 						strict: true,
@@ -122,12 +128,7 @@ declare module "@tanstack/react-router" {
 						skipLibCheck: true,
 						types: [],
 					},
-					include: [
-						"src/**/*.ts",
-						"src/**/*.tsx",
-						"app/**/*.ts",
-						"app/**/*.tsx",
-					],
+					files: Object.keys(files),
 				}),
 			);
 			const result = spawnSync(process.execPath, [compiler, "-p", config], {

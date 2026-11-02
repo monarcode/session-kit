@@ -4,12 +4,9 @@ import { beforeEach, test } from "node:test";
 import { AuthError, createAuth } from "@monarcode/session-kit";
 import { z } from "zod";
 
-import "./expo-modules.ts";
+import { secureStorage } from "./expo-modules.ts";
 import { fileSystem } from "./mocks/expo-file-system.ts";
 import { AFTER_FIRST_UNLOCK, secureStore } from "./mocks/expo-secure-store.ts";
-
-// After expo-modules.ts, so SecureStore and the file system are the mocks.
-const { secureStorage } = await import("@monarcode/session-kit/expo");
 
 const KEY = "my-app:auth:session";
 const BASE = "my-app_3Aauth_3Asession";
@@ -18,9 +15,6 @@ beforeEach(() => {
 	secureStore.reset();
 	fileSystem.reset();
 });
-
-/** Lets queued writes and removals finish. */
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** What deleting and reinstalling the app does: files go, the keychain stays. */
 const reinstall = () => fileSystem.files.clear();
@@ -123,6 +117,19 @@ test("remove deletes every key of a split value", async () => {
 	assert.equal(storage.get(KEY), null);
 });
 
+test("a removal cut short leaves nothing the next one misses", async () => {
+	const storage = await saved(valueOf(8_000));
+	assert.equal(secureStore.items.get(BASE), "1:a:4");
+	// One chunk was removed, then the app died.
+	secureStore.fails = (operation, key) =>
+		operation === "delete" && key === `${BASE}.a2`;
+	await assert.rejects(async () => storage.remove(KEY));
+	secureStore.fails = () => false;
+	// The head still names four chunks, so the next launch reads a gap.
+	assert.equal(await secureStorage().get(KEY), null);
+	assert.equal(secureStore.items.size, 0);
+});
+
 test("a value longer than 64 keys can hold is rejected", async () => {
 	await assert.rejects(
 		async () =>
@@ -182,8 +189,7 @@ for (const part of ["head", "chunk"]) {
 	test(`a ${part} Android can't decrypt reads as signed out and is removed`, async () => {
 		const storage = await saved(valueOf(5_000));
 		secureStore.undecryptable.add(part === "head" ? BASE : `${BASE}.a1`);
-		assert.equal(storage.get(KEY), null);
-		await flush();
+		assert.equal(await storage.get(KEY), null);
 		assert.equal(secureStore.items.size, 0);
 	});
 }

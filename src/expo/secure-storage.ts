@@ -120,18 +120,9 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			? {}
 			: { keychainAccessible: options.keychainAccessible };
 
-	// Writes and removals run one at a time, in order, including the cleanup
-	// this adapter starts itself. Reads wait while any is queued.
-	let queue: Promise<unknown> = Promise.resolve();
-	let pending = 0;
-	function enqueue<T>(work: () => Promise<T>): Promise<T> {
-		pending++;
-		// Counted down before callers resume, so a read right after an awaited
-		// write is synchronous again.
-		const result = queue.then(work).finally(() => pending--);
-		queue = result.catch(() => {});
-		return result;
-	}
+	// Auth runs storage operations one at a time, in order, and waits for a
+	// read that returns a promise. So cleanup this adapter needs is returned
+	// from the operation that finds it, never left running beside the next.
 
 	/** An item, `null` when absent, or `undefined` when it can't be decrypted. */
 	function readItem(key: string): string | null | undefined {
@@ -156,13 +147,18 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			: undefined;
 	}
 
-	/** Removes chunks of `slot` from `from` on, up to the first one missing. */
+	/**
+	 * Removes chunks of `slot` from `from` on. A slot's chunks are written
+	 * first to last and removed last to first, so the ones present always
+	 * start at index 0 with no gap, and whatever a write or removal cut short
+	 * left behind, the scan up to the first missing one finds.
+	 */
 	async function removeChunks(base: string, slot: Slot, from: number) {
-		for (let index = from; index < MAX_CHUNKS; index++) {
-			const key = chunkKey(base, slot, index);
-			if (readItem(key) === null) return;
-			await deleteItemAsync(key, store);
-		}
+		let end = from;
+		while (end < MAX_CHUNKS && readItem(chunkKey(base, slot, end)) !== null)
+			end++;
+		for (let index = end - 1; index >= from; index--)
+			await deleteItemAsync(chunkKey(base, slot, index), store);
 	}
 
 	/** Chunks first, so a removal cut short leaves no head pointing at them. */
@@ -172,17 +168,20 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		await deleteItemAsync(base, store);
 	}
 
-	function discard(base: string) {
-		// Best effort: the next write replaces whatever this leaves.
-		enqueue(() => removeAll(base)).catch(() => {});
+	/**
+	 * Reads as signed out once the unreadable value is removed. A failed
+	 * removal reads as signed out too: the next write replaces what is left.
+	 */
+	function discard(base: string): Promise<null> {
+		return removeAll(base).then(
+			() => null,
+			() => null,
+		);
 	}
 
-	function readValue(base: string): string | null {
+	function readValue(base: string): string | null | Promise<null> {
 		const head = readItem(base);
-		if (head === undefined) {
-			discard(base);
-			return null;
-		}
+		if (head === undefined) return discard(base);
 		if (head === null) return null;
 		if (head.startsWith("0:")) return head.slice(2);
 		const layout = layoutOf(head);
@@ -191,10 +190,7 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		let value = "";
 		for (let index = 0; index < layout.count; index++) {
 			const chunk = readItem(chunkKey(base, layout.slot, index));
-			if (chunk == null) {
-				discard(base);
-				return null;
-			}
+			if (chunk == null) return discard(base);
 			value += chunk;
 		}
 		return value;
@@ -225,10 +221,9 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		if (previous) await removeChunks(base, previous.slot, 0).catch(() => {});
 	}
 
-	// Keys checked for a session left by an earlier install, and checks in
-	// progress. A failed check is tried again by the next operation.
+	// Keys checked for a session left by an earlier install. A failed check
+	// is tried again by the next operation.
 	const checked = new Set<string>();
-	const checks = new Map<string, Promise<void>>();
 
 	/**
 	 * Resolves once `base` holds nothing an earlier install left, or
@@ -236,8 +231,6 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	 */
 	function ready(base: string): Promise<void> | undefined {
 		if (!clearOnReinstall || checked.has(base)) return undefined;
-		const running = checks.get(base);
-		if (running) return running;
 		const marker = new File(Paths.document, `.session-kit-${base}`);
 		if (marker.exists) {
 			checked.add(base);
@@ -245,42 +238,27 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		}
 		// The marker is created only after the removal, so an install cut short
 		// before then removes again on the next launch.
-		const check = enqueue(async () => {
-			await removeAll(base);
+		return removeAll(base).then(() => {
 			if (!marker.exists) marker.create();
 			checked.add(base);
 		});
-		checks.set(base, check);
-		const settled = () => checks.delete(base);
-		check.then(settled, settled);
-		return check;
 	}
 
 	return {
 		get(key) {
 			const base = encodeKey(key);
 			const check = ready(base);
-			if (!check && !pending) return readValue(base);
-			return enqueue(async () => {
-				await check;
-				return readValue(base);
-			});
+			return check ? check.then(() => readValue(base)) : readValue(base);
 		},
-		set(key, value) {
+		async set(key, value) {
 			const base = encodeKey(key);
-			const check = ready(base);
-			return enqueue(async () => {
-				await check;
-				await writeValue(base, value);
-			});
+			await ready(base);
+			await writeValue(base, value);
 		},
-		remove(key) {
+		async remove(key) {
 			const base = encodeKey(key);
-			const check = ready(base);
-			return enqueue(async () => {
-				await check;
-				await removeAll(base);
-			});
+			await ready(base);
+			await removeAll(base);
 		},
 	};
 }

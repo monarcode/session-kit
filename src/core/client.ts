@@ -884,7 +884,9 @@ export function createAuth<Src extends UserSource>(
 			// Another tab may have changed the session while nothing watched.
 			if (initialized) inBackground(sync());
 		}
-		// Restores synchronously when it can, before returning.
+		// Restores synchronously when it can, before returning. On every call,
+		// not only the first: a re-check after timers were suspended, as in a
+		// backgrounded app, relies on it.
 		inBackground(resolveSession());
 		schedule();
 		let active = true;

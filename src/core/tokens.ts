@@ -16,11 +16,17 @@ export function tokensOf(saved: SessionTokens): SessionTokens {
 
 /**
  * Decodes UTF-8, throwing on malformed input. Uses `TextDecoder` where the
- * runtime has one; older Hermes builds in React Native do not.
+ * runtime has one that supports `fatal`; older Hermes builds in React Native
+ * have none, and some polyfills reject the option.
  */
 function decodeUtf8(bytes: Uint8Array): string {
-	if (typeof globalThis.TextDecoder === "function")
-		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+	let decoder: TextDecoder | undefined;
+	try {
+		decoder = new globalThis.TextDecoder("utf-8", { fatal: true });
+	} catch {
+		// No TextDecoder, or one without `fatal`: decode below instead.
+	}
+	if (decoder) return decoder.decode(bytes);
 	// `decodeURIComponent` rejects malformed UTF-8 the same way.
 	return decodeURIComponent(
 		Array.from(

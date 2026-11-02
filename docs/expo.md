@@ -337,7 +337,9 @@ export function Unavailable({ error, retry }: UnavailableProps) {
 ```
 
 Without `unavailable`, `SessionGate` hides the splash screen and throws the
-error to the root layout's `ErrorBoundary`.
+error to the root layout's `ErrorBoundary`. The boundary's `retry` only
+renders again, and a failed refresh stays failed until `auth.retry()`, so
+have the boundary call both.
 
 ## Secure storage
 
@@ -393,7 +395,8 @@ keychain, and encrypted with an Android Keystore key.
   state. The screens that were open stay open, as the URL does on the web. A
   sign-out already removes the guarded screens.
 
-It takes the nearest `AuthProvider`'s client, or a `client` prop.
+It takes the nearest `AuthProvider`'s client, or a `client` prop, and mounts
+it, so it also works without `AuthProvider`.
 
 ## Deep links
 

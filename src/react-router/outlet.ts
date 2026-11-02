@@ -13,23 +13,14 @@ import {
 	useLocation,
 } from "react-router";
 
-import { AuthError } from "../core/errors.js";
 import { loginHref } from "../core/return-to.js";
-import type { AuthClient } from "../core/types.js";
 import {
-	assertAuthSource,
+	renderUnavailable,
+	useAdapterClient,
 	useAuthState,
-	useProvidedClient,
-	type AuthSource,
+	type RetryableSource,
+	type UnavailableProps,
 } from "../react/context.js";
-
-type OutletClient = AuthSource & Pick<AuthClient<unknown, unknown>, "retry">;
-
-type OutletState = {
-	status: string;
-	sessionId: string | null;
-	error: AuthError | null;
-};
 
 export type SessionOutletProps = {
 	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
@@ -44,12 +35,9 @@ export type SessionOutletProps = {
 	 * tries again; a repeated failure stays in `state.error`. Without it, the
 	 * error is thrown to the nearest error boundary or error element.
 	 */
-	unavailable?: (props: {
-		error: AuthError | null;
-		retry: () => void;
-	}) => ReactNode;
+	unavailable?: (props: UnavailableProps) => ReactNode;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
-	client?: OutletClient;
+	client?: RetryableSource;
 };
 
 /**
@@ -95,13 +83,9 @@ export function SessionOutlet({
 	unavailable,
 	client,
 }: SessionOutletProps): ReactElement {
-	const auth = useProvidedClient(client);
-	assertAuthSource(
-		auth,
-		"Render AuthProvider, or pass a client, before rendering SessionOutlet",
-	);
+	const auth = useAdapterClient(client, "SessionOutlet");
 	const location = useLocation();
-	const state = useAuthState(auth, (value) => value as OutletState);
+	const state = useAuthState(auth, (value) => value);
 	const guarded = useGuardedSessionId();
 	switch (state.status) {
 		case "authenticated":
@@ -117,21 +101,9 @@ export function SessionOutlet({
 				),
 				replace: true,
 			});
-		case "unavailable": {
-			const error =
-				state.error ??
-				new AuthError("REFRESH_FAILED", "Access is unavailable");
-			if (!unavailable) throw error;
-			const retry = () => {
-				void (auth as OutletClient).retry().catch(() => {});
-			};
-			return createElement(
-				Fragment,
-				null,
-				unavailable({ error: state.error, retry }),
-			);
-		}
-		default:
+		case "unavailable":
+			return renderUnavailable(auth, state, unavailable);
+		case "initializing":
 			// An element, not a bare node, so React 18 type definitions accept it.
 			return createElement(Fragment, null, pending);
 	}

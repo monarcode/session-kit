@@ -745,10 +745,10 @@ pnpm run check
 type-checks the tests, the consumer declarations, and every TypeScript example
 marked with a `file:` comment: this README's under NodeNext and Bundler
 resolution, and the [Expo guide](./docs/expo.md)'s under Bundler resolution,
-as Metro resolves. `pnpm test` runs the runtime tests twice: with synchronous
-storage, and with storage that settles every operation late, removals last, to
-catch ordering bugs. `pnpm run build:examples` builds the package and every
-example app.
+as Metro resolves, without DOM types. `pnpm test` runs the runtime tests
+twice: with synchronous storage, and with storage that settles every operation
+late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
+the package and every example app.
 
 Tests are TypeScript files that Node runs directly. Behavior tests are split by
 area and share the browser mocks in `tests/helpers.ts`; React tests mount real

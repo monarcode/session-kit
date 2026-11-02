@@ -3,10 +3,12 @@ import { afterEach, beforeEach } from "node:test";
 
 import {
 	createAuth,
+	memoryStorage,
 	type AuthClient,
 	type AuthErrorCode,
 	type AuthOptions,
 	type AuthState,
+	type AuthStorage,
 	type Credentials,
 	type Session,
 	type Tokens,
@@ -278,3 +280,18 @@ export const recordStates = <U>(
 	cleanups.push(() => subscription.unsubscribe());
 	return states;
 };
+
+/** Storage whose reads fail while `locked`, as a locked iOS keychain does. */
+export function lockable(inner: AuthStorage = memoryStorage()) {
+	const lock = {
+		locked: true,
+		storage: {
+			...inner,
+			get(key: string) {
+				if (lock.locked) throw new Error("User interaction is not allowed");
+				return inner.get(key);
+			},
+		} satisfies AuthStorage,
+	};
+	return lock;
+}

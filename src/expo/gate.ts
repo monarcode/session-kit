@@ -1,41 +1,25 @@
 import {
 	createElement,
 	Fragment,
-	useCallback,
 	useEffect,
 	useState,
-	useSyncExternalStore,
 	type ReactElement,
 	type ReactNode,
 } from "react";
 
-import { SplashScreen, usePathname, useRouter } from "expo-router";
+import { SplashScreen } from "expo-router";
 
-import { AuthError } from "../core/errors.js";
-import type { AuthClient } from "../core/types.js";
 import {
-	assertAuthSource,
+	renderUnavailable,
+	useAdapterClient,
 	useAuthState,
-	useProvidedClient,
-	type AuthSource,
+	type RetryableSource,
+	type UnavailableProps,
 } from "../react/context.js";
-import { rememberedLink, subscribeLinks, updateLink } from "./deep-link.js";
+import { useRememberedLink } from "./deep-link.js";
 import { watchForeground } from "./foreground.js";
 
-type GateClient = AuthSource & Pick<AuthClient<unknown, unknown>, "retry">;
-
-type GateState = {
-	status: string;
-	sessionId: string | null;
-	error: AuthError | null;
-};
-
-export type UnavailableProps = {
-	/** Why access is unavailable, such as a failed refresh or a locked keychain. */
-	error: AuthError | null;
-	/** Tries again. A repeated failure stays in `state.error`. */
-	retry: () => void;
-};
+export type { UnavailableProps };
 
 export type SessionGateProps = {
 	/** The root navigator, usually a `Stack` guarded with `Stack.Protected`. */
@@ -43,26 +27,38 @@ export type SessionGateProps = {
 	/**
 	 * Shown instead of the navigator while access is unavailable, such as
 	 * after a failed refresh. Without it, the error is thrown to the root
-	 * layout's `ErrorBoundary`.
+	 * layout's `ErrorBoundary`. That boundary's `retry` only renders again,
+	 * and a failed refresh stays failed until `auth.retry()`, so call both.
 	 */
 	unavailable?: (props: UnavailableProps) => ReactNode;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
-	client?: GateClient;
+	client?: RetryableSource;
 };
 
 function hideSplash() {
 	void SplashScreen.hideAsync().catch(() => {});
 }
 
-/** Whether `pathname` is the path part of `path`, ignoring a trailing slash. */
-function samePath(pathname: string, path: string) {
-	const trim = (value: string) => value.replace(/\/+$/, "") || "/";
-	return trim(pathname) === trim(path.split(/[?#]/)[0]!);
+/**
+ * A key that changes only when one account replaces another without a
+ * sign-out between them. Not the `sessionId` itself, as `SessionOutlet`
+ * uses: on a sign-in or sign-out, `Stack.Protected` already swaps the
+ * screens, so remounting the whole navigator as well would only rebuild it
+ * while it opens the screens it now admits. Updated during render, so the
+ * account swap and the remount land in the same commit.
+ */
+function useAccountKey(sessionId: string | null): number {
+	const [account, setAccount] = useState({ sessionId, key: 0 });
+	if (account.sessionId !== sessionId) {
+		const switched = account.sessionId !== null && sessionId !== null;
+		setAccount({ sessionId, key: account.key + (switched ? 1 : 0) });
+	}
+	return account.key;
 }
 
 /**
- * Wraps the root navigator in `app/_layout.tsx`, inside `AuthProvider`, and
- * adds what Expo Router's `Stack.Protected` lacks:
+ * Wraps the root navigator in `app/_layout.tsx`, inside `AuthProvider` or
+ * with a `client`, and adds what Expo Router's `Stack.Protected` lacks:
  *
  * - **While the session is restored** it renders nothing, so the splash
  *   screen stays up, and hides the splash screen once restoring is done. The
@@ -92,83 +88,27 @@ export function SessionGate({
 	unavailable,
 	client,
 }: SessionGateProps): ReactElement {
-	const provided = useProvidedClient(client);
-	assertAuthSource(
-		provided,
-		"Render AuthProvider, or pass a client, before rendering SessionGate",
-	);
-	const auth = provided as GateClient;
-	const state = useAuthState(auth, (value) => value as GateState);
+	const auth = useAdapterClient(client, "SessionGate");
+	const state = useAuthState(auth, (value) => value);
 	const restoring = state.status === "initializing";
-	const signedIn =
-		state.status === "authenticated" || state.status === "refreshing";
 
 	useEffect(() => {
 		if (!restoring) hideSplash();
 	}, [restoring]);
-
 	useEffect(() => watchForeground(auth), [auth]);
-
-	// Counts accounts that replaced another without a sign-out between them,
-	// updated during render so the swap and the remount land together.
-	const [account, setAccount] = useState({
-		sessionId: state.sessionId,
-		key: 0,
-	});
-	if (account.sessionId !== state.sessionId) {
-		const switched = account.sessionId !== null && state.sessionId !== null;
-		setAccount({
-			sessionId: state.sessionId,
-			key: account.key + (switched ? 1 : 0),
-		});
-	}
-
-	const link = useSyncExternalStore(
-		useCallback(
-			(onChange: () => void) => subscribeLinks(auth, onChange),
-			[auth],
-		),
-		() => rememberedLink(auth),
-	);
-	const router = useRouter();
-	const pathname = usePathname();
-	useEffect(() => {
-		if (!link) return;
-		if (signedIn) {
-			// After a sign-in. In an effect, so the navigator has committed the
-			// guard that now admits the link's screen.
-			updateLink(auth, link, undefined);
-			if (link.waiting) router.replace(link.path);
-		} else if (state.status === "unauthenticated") {
-			// The link opened a screen anyone may see, so nothing is owed.
-			if (samePath(pathname, link.path)) updateLink(auth, link, undefined);
-			else if (!link.waiting)
-				updateLink(auth, link, { ...link, waiting: true });
-		}
-	}, [auth, link, signedIn, state.status, pathname, router]);
+	useRememberedLink(auth, state.status);
+	const accountKey = useAccountKey(state.sessionId);
 
 	switch (state.status) {
 		case "initializing":
 			return createElement(Fragment);
-		case "unavailable": {
-			if (!unavailable) {
-				// The effect that would hide it never runs for a thrown render.
-				hideSplash();
-				throw (
-					state.error ??
-					new AuthError("REFRESH_FAILED", "Access is unavailable")
-				);
-			}
-			const retry = () => {
-				void auth.retry().catch(() => {});
-			};
-			return createElement(
-				Fragment,
-				null,
-				unavailable({ error: state.error, retry }),
-			);
-		}
-		default:
-			return createElement(Fragment, { key: account.key }, children);
+		case "unavailable":
+			// The effect that would hide it never runs for a thrown render.
+			if (!unavailable) hideSplash();
+			return renderUnavailable(auth, state, unavailable);
+		case "authenticated":
+		case "refreshing":
+		case "unauthenticated":
+			return createElement(Fragment, { key: accountKey }, children);
 	}
 }

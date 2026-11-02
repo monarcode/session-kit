@@ -1,8 +1,35 @@
-import { createContext, useCallback, useContext } from "react";
+import {
+	createContext,
+	createElement,
+	Fragment,
+	useCallback,
+	useContext,
+	useEffect,
+	useLayoutEffect,
+	type ReactElement,
+	type ReactNode,
+} from "react";
 
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/with-selector";
 
-import type { AuthClient } from "../core/types.js";
+import { AuthError } from "../core/errors.js";
+import type { AuthClient, AuthState } from "../core/types.js";
+
+/**
+ * A layout effect where there is a screen, otherwise a passive one. Layout
+ * effects run before the screen paints, so a session restored at mount
+ * replaces the "initializing" state before anyone sees it. React warns about
+ * layout effects on a server, where neither kind of effect runs. Browsers and
+ * React Native define `window`; servers don't.
+ */
+export function useMountEffect(
+	effect: () => void | (() => void),
+	deps: readonly unknown[],
+): void {
+	// The runtime never changes, so every render calls the same hook.
+	const useMount = typeof window === "undefined" ? useEffect : useLayoutEffect;
+	useMount(effect, deps);
+}
 
 /**
  * What React bindings need from an auth client: reactive state, and `mount`
@@ -63,5 +90,61 @@ export function useAuthState<Client extends AuthSource, T>(
 		getSnapshot,
 		getSnapshot,
 		(value) => selector(value as StateOf<Client>),
+	);
+}
+
+/** What adapter components need from a client: state, `mount`, and `retry`. */
+export type RetryableSource = AuthSource &
+	Pick<AuthClient<unknown, unknown>, "retry">;
+
+/** What an adapter component's `unavailable` render prop receives. */
+export type UnavailableProps = {
+	/** Why access is unavailable, such as a failed refresh or a locked keychain. */
+	error: AuthError | null;
+	/** Tries again. A repeated failure stays in `state.error`. */
+	retry: () => void;
+};
+
+/**
+ * The client an adapter component watches: `client`, or the nearest
+ * `AuthProvider`'s. Throws, naming `component`, when there is neither. Keeps
+ * the client mounted while rendered, so a component given only a `client`
+ * restores the session too; mounts are counted, so this is harmless under
+ * `AuthProvider`.
+ */
+export function useAdapterClient(
+	client: RetryableSource | undefined,
+	component: string,
+): RetryableSource {
+	const provided = useProvidedClient(client);
+	assertAuthSource(
+		provided,
+		`Render AuthProvider, or pass a client, before rendering ${component}`,
+	);
+	const auth = provided as RetryableSource;
+	useMountEffect(() => auth.mount(), [auth]);
+	return auth;
+}
+
+/**
+ * Renders `unavailable` for an `unavailable` state, or throws the state's
+ * error to the nearest error boundary when there is no `unavailable`.
+ */
+export function renderUnavailable(
+	auth: RetryableSource,
+	state: AuthState<unknown> & { status: "unavailable" },
+	unavailable: ((props: UnavailableProps) => ReactNode) | undefined,
+): ReactElement {
+	if (!unavailable)
+		throw (
+			state.error ?? new AuthError("REFRESH_FAILED", "Access is unavailable")
+		);
+	const retry = () => {
+		void auth.retry().catch(() => {});
+	};
+	return createElement(
+		Fragment,
+		null,
+		unavailable({ error: state.error, retry }),
 	);
 }

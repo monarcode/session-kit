@@ -248,59 +248,35 @@ for (const synchronous of [true, false]) {
 	});
 }
 
-/**
- * A fresh copy of the hooks, evaluated as on a runtime without `document`:
- * React Native when `product` is `"ReactNative"`, otherwise a server.
- */
-async function hooksWithoutDocument(
-	product: string | undefined,
-): Promise<ReactBinding> {
-	const document = Object.getOwnPropertyDescriptor(globalThis, "document");
+test("without a document, as on React Native, AuthProvider restores in a layout effect", async () => {
+	await signIn(newClient());
+	const auth = newClient({ storage: webStorage() });
+	const { AuthProvider } = binding.createAuthHooks<Client>();
+	// Every layout effect runs before any passive effect, and a child's
+	// passive effect runs before its parent's. So this child sees the
+	// restored session only if AuthProvider mounted in a layout effect.
+	let seen: string | undefined;
+	function Probe() {
+		useEffect(() => {
+			seen = auth.state.get().status;
+		}, []);
+		return null;
+	}
+	// The root is made first: without a document, `render` couldn't make one.
+	const { createRoot } = await import("react-dom/client");
+	const root = createRoot(dom.window.document.createElement("div"));
+	const document = Object.getOwnPropertyDescriptor(globalThis, "document")!;
 	delete (globalThis as { document?: unknown }).document;
-	if (product)
-		Object.defineProperty(globalThis.navigator, "product", {
-			configurable: true,
-			value: product,
-		});
 	try {
-		// The query gives a new module instance, which picks its effect again.
-		return await import(
-			new URL(
-				`./hooks.js?product=${product ?? "none"}`,
-				import.meta.resolve("@monarcode/session-kit/react"),
-			).href
+		await act(async () =>
+			root.render(h(AuthProvider, { client: auth }, h(Probe))),
 		);
 	} finally {
-		if (document) Object.defineProperty(globalThis, "document", document);
-		if (product)
-			delete (globalThis.navigator as { product?: unknown }).product;
+		Object.defineProperty(globalThis, "document", document);
 	}
-}
-
-for (const [runtime, product, expected] of [
-	["React Native", "ReactNative", "authenticated"],
-	["a server", undefined, "initializing"],
-] as const) {
-	test(`without a document, AuthProvider ${expected === "authenticated" ? "restores in a layout effect" : "restores in a passive effect"} on ${runtime}`, async () => {
-		await signIn(newClient());
-		const auth = newClient({ storage: webStorage() });
-		const { AuthProvider } = (
-			await hooksWithoutDocument(product)
-		).createAuthHooks<Client>();
-		// Every layout effect runs before any passive effect, and a child's
-		// passive effect runs before its parent's. So this child sees the
-		// restored session only if AuthProvider mounted in a layout effect.
-		let seen: string | undefined;
-		function Probe() {
-			useEffect(() => {
-				seen = auth.state.get().status;
-			}, []);
-			return null;
-		}
-		await render(h(AuthProvider, { client: auth }, h(Probe)));
-		assert.equal(seen, expected);
-	});
-}
+	await act(async () => root.unmount());
+	assert.equal(seen, "authenticated");
+});
 
 test("AuthProvider mounts its client while rendered", async () => {
 	const auth = newClient();

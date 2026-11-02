@@ -1,19 +1,35 @@
-import { safeReturnTo, type SafeReturnToOptions } from "../core/return-to.js";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+
+import { usePathname, useRouter } from "expo-router";
+import { atom, type WritableAtom } from "nanostores";
+
+import {
+	safeReturnTo,
+	sameRoute,
+	type SafeReturnToOptions,
+} from "../core/return-to.js";
+import type { AuthStatus } from "../core/types.js";
 import type { AuthSource } from "../react/context.js";
 
 export type RememberDeepLinkOptions = SafeReturnToOptions;
 
 /**
- * A link kept for after sign-in. `waiting` is set once `SessionGate` saw it
- * while signed out, so it opens after the next sign-in.
+ * A link kept for after sign-in. `waiting` is set once it was seen while
+ * signed out, so it opens after the next sign-in.
  */
-export type RememberedLink = Readonly<{ path: string; waiting: boolean }>;
+type RememberedLink = Readonly<{ path: string; waiting: boolean }>;
 
-const links = new WeakMap<object, RememberedLink>();
-const listeners = new WeakMap<object, Set<() => void>>();
+// Per client, because `redirectSystemPath` runs outside React, often before
+// `AuthProvider` has rendered, and has only the client to go by.
+const links = new WeakMap<
+	AuthSource,
+	WritableAtom<RememberedLink | undefined>
+>();
 
-function notify(auth: object) {
-	for (const listener of listeners.get(auth) ?? []) listener();
+function linkOf(auth: AuthSource) {
+	let link = links.get(auth);
+	if (!link) links.set(auth, (link = atom(undefined)));
+	return link;
 }
 
 /**
@@ -36,6 +52,8 @@ export function deepLinkPath(url: string): string {
 	if (name === "http" || name === "https") {
 		try {
 			const parsed = new URL(url);
+			// Expo Router reads links to Expo's own hosts as launch URLs, even
+			// with `/--/`; only Expo Go's `exp` and `exps` keep what follows it.
 			if (/^(exp\.host|u\.expo\.dev)$/i.test(parsed.hostname)) return "/";
 			return parsed.pathname + parsed.search + parsed.hash;
 		} catch {
@@ -71,33 +89,51 @@ export function rememberDeepLink(
 	options: RememberDeepLinkOptions = {},
 ): void {
 	const path = safeReturnTo(deepLinkPath(url), options);
-	if (path === "/") return;
-	links.set(auth, { path, waiting: false });
-	notify(auth);
+	if (sameRoute(path, "/")) return;
+	linkOf(auth).set({ path, waiting: false });
 }
 
-/** The link remembered for `auth`, if any. */
-export function rememberedLink(auth: object): RememberedLink | undefined {
-	return links.get(auth);
+/**
+ * What a change of status or screen does to a remembered link: a sign-in
+ * opens it if it was waiting and forgets it; while signed out, it waits,
+ * unless the screen it names is already showing, since anyone may see that
+ * one. Restoring and unavailable access leave it as it is.
+ */
+function nextLink(
+	link: RememberedLink,
+	status: AuthStatus,
+	pathname: string,
+): { link: RememberedLink | undefined; open?: string } {
+	switch (status) {
+		case "authenticated":
+		case "refreshing":
+			return { link: undefined, open: link.waiting ? link.path : undefined };
+		case "unauthenticated":
+			if (sameRoute(pathname, link.path)) return { link: undefined };
+			return { link: link.waiting ? link : { ...link, waiting: true } };
+		default:
+			return { link };
+	}
 }
 
-/** Replaces or forgets `auth`'s remembered link, if it is still `expected`. */
-export function updateLink(
-	auth: object,
-	expected: RememberedLink,
-	next: RememberedLink | undefined,
-): void {
-	if (links.get(auth) !== expected) return;
-	if (next) links.set(auth, next);
-	else links.delete(auth);
-	notify(auth);
-}
-
-export function subscribeLinks(auth: object, listener: () => void) {
-	let set = listeners.get(auth);
-	if (!set) listeners.set(auth, (set = new Set()));
-	set.add(listener);
-	return () => {
-		set.delete(listener);
-	};
+/**
+ * Opens `auth`'s remembered link with `router.replace` after a sign-in. In
+ * an effect, so the navigator has committed the guard that now admits the
+ * link's screen.
+ */
+export function useRememberedLink(auth: AuthSource, status: AuthStatus): void {
+	const store = linkOf(auth);
+	const link = useSyncExternalStore(
+		useCallback((onChange: () => void) => store.listen(onChange), [store]),
+		() => store.get(),
+	);
+	const router = useRouter();
+	const pathname = usePathname();
+	useEffect(() => {
+		// A newer link arrived meanwhile; the effect runs again for it.
+		if (!link || store.get() !== link) return;
+		const next = nextLink(link, status, pathname);
+		if (next.link !== link) store.set(next.link);
+		if (next.open) router.replace(next.open);
+	}, [store, link, status, pathname, router]);
 }

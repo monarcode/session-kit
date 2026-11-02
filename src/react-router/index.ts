@@ -7,3 +7,4 @@ export type {
 	RequireSessionOptions,
 } from "./guards.js";
 export type { SessionOutletProps } from "./outlet.js";
+export type { UnavailableProps } from "../react/context.js";

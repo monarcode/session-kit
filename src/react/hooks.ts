@@ -2,8 +2,6 @@ import {
 	createContext,
 	createElement,
 	useContext,
-	useEffect,
-	useLayoutEffect,
 	type ReactElement,
 	type ReactNode,
 } from "react";
@@ -12,19 +10,10 @@ import {
 	assertAuthSource,
 	ClientContext,
 	useAuthState,
+	useMountEffect,
 	type AuthSource,
 	type StateOf,
 } from "./context.js";
-
-// Layout effects run before the screen paints, so a session restored at mount
-// replaces the "initializing" state before anyone sees it. React warns about
-// layout effects on a server, where neither kind of effect runs. React Native
-// has no `document` but is not a server; it identifies itself in `navigator`.
-const useMountEffect =
-	typeof document !== "undefined" ||
-	globalThis.navigator?.product === "ReactNative"
-		? useLayoutEffect
-		: useEffect;
 
 export type AuthHooksOptions<Client extends AuthSource> = {
 	/**

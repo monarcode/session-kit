@@ -106,6 +106,37 @@ test("declarative mode: SessionOutlet guards, keeps, and swaps child routes", as
 	assert.equal(view.container.textContent, "login?redirectTo=%2F");
 });
 
+test("declarative mode: SessionOutlet given only a client restores the session itself", async () => {
+	await signIn(newClient());
+	const auth = newClient();
+	const { MemoryRouter, Routes, Route } = router;
+	const view = await render(
+		h(
+			MemoryRouter,
+			{ initialEntries: ["/"] },
+			h(
+				Routes,
+				null,
+				h(Route, { path: "/login", element: h(Where) }),
+				h(
+					Route,
+					{
+						element: h(binding.SessionOutlet, {
+							client: auth,
+							loginPath: "/login",
+							pending: "checking",
+						}),
+					},
+					h(Route, { index: true, element: h("output", null, "home") }),
+				),
+			),
+		),
+	);
+	await settle();
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(view.container.textContent, "home");
+});
+
 test("declarative mode: SessionOutlet shows pending while restoring", async () => {
 	await signIn(newClient());
 	let release!: () => void;

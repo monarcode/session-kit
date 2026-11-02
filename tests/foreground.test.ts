@@ -10,10 +10,12 @@ import {
 import { z } from "zod";
 
 import "./expo-modules.ts";
+import { lockable } from "./helpers.ts";
 import { appState } from "./mocks/react-native.ts";
 
-// After expo-modules.ts, so `react-native` is the mock. Foreground handling
-// is internal; SessionGate uses it.
+// Foreground handling is internal, so it comes from the build. After
+// expo-modules.ts, so `react-native` is the mock. SessionGate's own test
+// checks that it is wired up.
 const { watchForeground }: typeof import("../dist/expo/foreground.js") =
 	await import(
 		new URL(
@@ -160,28 +162,22 @@ test("a failed refresh is not retried on return, and retry() still works", async
 });
 
 test("a restore that failed while the keychain was locked runs again on return", async (t) => {
-	const inner = memoryStorage();
-	let locked = false;
-	const storage: AuthStorage = {
-		...inner,
-		get(key) {
-			if (locked) throw new Error("User interaction is not allowed");
-			return inner.get(key);
-		},
-	};
+	const lock = lockable();
+	const { storage } = lock;
+	lock.locked = false;
 	await createAuth({ name: "foreground", user: userSchema, storage }).signIn({
 		accessToken: "access-1",
 		user,
 	});
 	// Launched in the background before the first unlock.
-	locked = true;
+	lock.locked = true;
 	appState.reset("background");
 	const { auth } = setup(t, { storage });
 	const unmount = auth.mount();
 	const stop = watchForeground(auth);
 	await flush();
 	assert.equal(auth.state.get().status, "unavailable");
-	locked = false;
+	lock.locked = false;
 	appState.change("active");
 	await flush();
 	assert.equal(auth.state.get().status, "authenticated");

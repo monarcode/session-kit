@@ -21,6 +21,8 @@
 - `rememberDeepLink(auth, url)`, called from `redirectSystemPath` in
   `+native-intent.tsx`, keeps a deep link that `Stack.Protected` would drop
   while the user is signed out. `SessionGate` opens it after the sign-in.
+- `UnavailableProps`, the type of `SessionOutlet`'s and `SessionGate`'s
+  `unavailable` render prop, is exported from `/react-router` and `/expo`.
 - Optional peer dependencies for Expo SDK 53 and later: `expo-router`,
   `expo-secure-store`, `expo-file-system`, and `react-native`.
 - An [Expo Router guide](./docs/expo.md) and an
@@ -29,9 +31,13 @@
 ### Fixed
 
 - JWT access tokens decode where the runtime has no `TextDecoder`, as in
-  older Hermes builds of React Native. Before, decoding failed silently there:
+  older Hermes builds of React Native, or one that rejects the `fatal`
+  option, as some polyfills do. Before, decoding failed silently there:
   expiry from `exp` and `iat` was ignored, and `fromAccessToken` rejected
   every token.
+- React Router's `SessionOutlet` given a `client` and rendered without
+  `AuthProvider` now mounts that client. Before, nothing restored the saved
+  session in declarative mode, so the outlet showed `pending` for good.
 - `AuthProvider` mounts its client in a layout effect on React Native, as in
   browsers, so a synchronous restore happens before the first frame. It used a
   passive effect wherever `document` was missing.

@@ -13,25 +13,17 @@ import {
 	memoryStorage,
 	type AuthError,
 	type AuthStorage,
+	type RefreshFn,
 } from "@monarcode/session-kit";
+import type { UnavailableProps } from "@monarcode/session-kit/expo";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 
 import { deferredStorage } from "./deferred-storage.ts";
 import { act, render, settle, user, userSchema, useDom } from "./dom.ts";
-import "./expo-modules.ts";
+import { rememberDeepLink, SessionGate } from "./expo-modules.ts";
+import { lockable } from "./helpers.ts";
 import { navigation } from "./mocks/expo-router.ts";
 import { appState } from "./mocks/react-native.ts";
-
-// After expo-modules.ts, so Expo Router and React Native are the mocks.
-const { rememberDeepLink, SessionGate } =
-	await import("@monarcode/session-kit/expo");
-const { deepLinkPath }: typeof import("../dist/expo/deep-link.js") =
-	await import(
-		new URL(
-			"./deep-link.js",
-			import.meta.resolve("@monarcode/session-kit/expo"),
-		).href
-	);
 
 useDom();
 beforeEach(() => {
@@ -39,8 +31,10 @@ beforeEach(() => {
 	appState.reset();
 });
 
-const newClient = (storage: AuthStorage = memoryStorage()) =>
-	createAuth({ name: "gate", user: userSchema, storage });
+const newClient = (
+	storage: AuthStorage = memoryStorage(),
+	refresh?: RefreshFn<typeof user>,
+) => createAuth({ name: "gate", user: userSchema, storage, refresh });
 type Client = ReturnType<typeof newClient>;
 
 const { AuthProvider } = createAuthHooks<Client>();
@@ -54,13 +48,7 @@ function Navigator() {
 	return h("main", null, "navigator");
 }
 
-const unavailable = ({
-	error,
-	retry,
-}: {
-	error: AuthError | null;
-	retry: () => void;
-}) => {
+const unavailable = ({ error, retry }: UnavailableProps) => {
 	held.retry = retry;
 	return h("p", { role: "alert" }, `unavailable: ${error?.code}`);
 };
@@ -74,21 +62,6 @@ function renderGate(
 	return render(
 		h(AuthProvider, { client: auth }, h(SessionGate, props, h(Navigator))),
 	);
-}
-
-/** Storage whose reads fail while `locked`, as a locked iOS keychain does. */
-function lockable(inner: AuthStorage = memoryStorage()) {
-	const lock = {
-		locked: true,
-		storage: {
-			...inner,
-			get(key: string) {
-				if (lock.locked) throw new Error("User interaction is not allowed");
-				return inner.get(key);
-			},
-		} satisfies AuthStorage,
-	};
-	return lock;
 }
 
 test("renders nothing and keeps the splash screen while the session is restored", async () => {
@@ -164,22 +137,40 @@ test("without unavailable, the error reaches the error boundary and the splash h
 	assert.ok(navigation.splashHides >= 1);
 });
 
-test("re-checks the session on a return to the foreground, until unmounted", async () => {
-	const auth = newClient();
-	const mount = auth.mount;
-	let calls = 0;
-	auth.mount = () => {
-		calls++;
-		return mount();
-	};
-	const view = await renderGate(auth);
-	const before = calls;
-	assert.equal(appState.listeners, 1);
-	await act(async () => {
-		appState.change("background");
-		appState.change("active");
+test("given a client and no AuthProvider, it restores the session itself", async () => {
+	const storage = memoryStorage();
+	await newClient(storage).signIn({ accessToken: "access-1", user });
+	const auth = newClient(storage);
+	const view = await render(
+		h(SessionGate, { client: auth, unavailable }, h(Navigator)),
+	);
+	await settle();
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(view.container.textContent, "navigator");
+	assert.equal(navigation.splashHides, 1);
+});
+
+test("refreshes on a return to the foreground, until unmounted", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+	let refreshes = 0;
+	const auth = newClient(memoryStorage(), async () => ({
+		accessToken: `access-${++refreshes + 1}`,
+		expiresIn: 600,
+	}));
+	await auth.signIn({
+		accessToken: "access-1",
+		refreshToken: "refresh-1",
+		expiresIn: 600,
+		user,
 	});
-	assert.equal(calls, before + 1);
+	const view = await renderGate(auth);
+	// Two hours in the background, with no timer run, as iOS suspends them.
+	appState.change("background");
+	t.mock.timers.setTime(Date.now() + 2 * 60 * 60 * 1000);
+	await act(async () => appState.change("active"));
+	await settle();
+	assert.equal(refreshes, 1);
+	assert.equal(auth.state.get().status, "authenticated");
 	await view.unmount();
 	assert.equal(appState.listeners, 0);
 });
@@ -271,6 +262,7 @@ test("a newer link replaces an older one, and unsafe links are ignored", async (
 		rememberDeepLink(auth, "https://example.com/.//evil.com");
 		rememberDeepLink(auth, "myapp://login?redirectTo=x");
 		rememberDeepLink(auth, "myapp://");
+		rememberDeepLink(auth, "myapp://?utm=x");
 	});
 	await act(() => auth.signIn({ accessToken: "access-1", user }));
 	assert.deepEqual(navigation.replaced, ["/orders/2"]);
@@ -284,8 +276,8 @@ test("rememberDeepLink checks loginPath like safeReturnTo", () => {
 	);
 });
 
-test("deep links read as Expo Router reads them", () => {
-	const cases: Array<[string, string]> = [
+test("deep links read as Expo Router reads them", async () => {
+	const cases: Array<[string, string | undefined]> = [
 		["myapp://orders/42?x=1#top", "/orders/42?x=1#top"],
 		["myapp:///orders/42", "/orders/42"],
 		["MyApp://Orders", "/Orders"],
@@ -295,13 +287,23 @@ test("deep links read as Expo Router reads them", () => {
 		["exp://192.168.1.2:8081/--/orders/42", "/orders/42"],
 		["exps://u.expo.dev/abc/--/orders/42?x=1", "/orders/42?x=1"],
 		["/orders/42", "/orders/42"],
-		// Launch URLs that name no screen.
-		["exp://192.168.1.2:8081", "/"],
-		["https://u.expo.dev/update/abc", "/"],
-		["https://exp.host/@me/app", "/"],
-		["myapp://expo-development-client/?url=http%3A%2F%2F10.0.0.5", "/"],
-		["myapp://", "/"],
-		["https://[bad", "/"],
+		// Launch URLs that name no screen, so there is nothing to open.
+		["exp://192.168.1.2:8081", undefined],
+		["exp://192.168.1.2:8081/--/?x=1", undefined],
+		["https://u.expo.dev/update/abc", undefined],
+		["https://exp.host/@me/app", undefined],
+		["myapp://expo-development-client/?url=http%3A%2F%2F10.0.0.5", undefined],
+		["myapp://", undefined],
+		["https://[bad", undefined],
 	];
-	for (const [url, path] of cases) assert.equal(deepLinkPath(url), path, url);
+	for (const [url, path] of cases) {
+		const auth = newClient();
+		navigation.reset();
+		navigation.go("/login");
+		const view = await renderGate(auth);
+		await act(async () => rememberDeepLink(auth, url));
+		await act(() => auth.signIn({ accessToken: "access-1", user }));
+		assert.deepEqual(navigation.replaced, path ? [path] : [], url);
+		await view.unmount();
+	}
 });

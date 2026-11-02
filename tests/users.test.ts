@@ -128,13 +128,24 @@ test("access tokens that are not JWTs, or whose claims fail the schema, are reje
 	assert.equal(values.size, 0);
 });
 
-/** Runs `work` as on a runtime without `TextDecoder`, such as older Hermes. */
-async function withoutTextDecoder(work: () => Promise<void>) {
+/**
+ * Runs `work` with `TextDecoder` replaced: removed, as on older Hermes, or by
+ * a polyfill that rejects the `fatal` option.
+ */
+async function withTextDecoder(
+	replacement: unknown,
+	work: () => Promise<void>,
+) {
 	const descriptor = Object.getOwnPropertyDescriptor(
 		globalThis,
 		"TextDecoder",
 	);
-	delete (globalThis as { TextDecoder?: unknown }).TextDecoder;
+	if (replacement)
+		Object.defineProperty(globalThis, "TextDecoder", {
+			configurable: true,
+			value: replacement,
+		});
+	else delete (globalThis as { TextDecoder?: unknown }).TextDecoder;
 	try {
 		await work();
 	} finally {
@@ -143,9 +154,20 @@ async function withoutTextDecoder(work: () => Promise<void>) {
 	}
 }
 
-for (const decoder of ["TextDecoder", "the fallback"]) {
+class WithoutFatal extends TextDecoder {
+	constructor(label?: string, options?: TextDecoderOptions) {
+		if (options?.fatal) throw new RangeError("fatal is not supported");
+		super(label, options);
+	}
+}
+
+for (const [decoder, replacement] of [
+	["TextDecoder", TextDecoder],
+	["the fallback", undefined],
+	["a TextDecoder without fatal", WithoutFatal],
+] as const) {
 	const run = (work: () => Promise<void>) =>
-		decoder === "TextDecoder" ? work() : withoutTextDecoder(work);
+		replacement === TextDecoder ? work() : withTextDecoder(replacement, work);
 
 	test(`access token claims decode as UTF-8 with ${decoder}`, () =>
 		run(async () => {
