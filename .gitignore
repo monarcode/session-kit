@@ -11,3 +11,5 @@ build
 .tanstack
 .output
 routeTree.gen.ts
+
+.stash
