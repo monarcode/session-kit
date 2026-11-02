@@ -15,8 +15,24 @@ export function tokensOf(saved: SessionTokens): SessionTokens {
 }
 
 /**
+ * Decodes UTF-8, throwing on malformed input. Uses `TextDecoder` where the
+ * runtime has one; older Hermes builds in React Native do not.
+ */
+function decodeUtf8(bytes: Uint8Array): string {
+	if (typeof globalThis.TextDecoder === "function")
+		return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+	// `decodeURIComponent` rejects malformed UTF-8 the same way.
+	return decodeURIComponent(
+		Array.from(
+			bytes,
+			(byte) => `%${byte.toString(16).padStart(2, "0")}`,
+		).join(""),
+	);
+}
+
+/**
  * A JWT's payload, decoded without verifying its signature, or `undefined`
- * when `token` is not a JWT with a JSON object payload.
+ * when `token` is not a JWT with a JSON object payload in UTF-8.
  */
 export function decodeJwtPayload(
 	token: string,
@@ -29,7 +45,7 @@ export function decodeJwtPayload(
 			atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, "=")),
 			(c) => c.charCodeAt(0),
 		);
-		const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+		const payload: unknown = JSON.parse(decodeUtf8(bytes));
 		return isRecord(payload) ? payload : undefined;
 	} catch {
 		return undefined;

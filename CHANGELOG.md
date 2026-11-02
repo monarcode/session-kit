@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- JWT access tokens decode where the runtime has no `TextDecoder`, as in
+  older Hermes builds of React Native. Before, decoding failed silently there:
+  expiry from `exp` and `iat` was ignored, and `fromAccessToken` rejected
+  every token.
+- `AuthProvider` mounts its client in a layout effect on React Native, as in
+  browsers, so a synchronous restore happens before the first frame. It used a
+  passive effect wherever `document` was missing.
+
+### Changed
+
+- A JWT payload that is not valid UTF-8 is no longer read. Malformed bytes
+  used to become replacement characters; now `fromAccessToken` rejects the
+  token with `USER_VALIDATION_FAILED`, and expiry is not taken from it. JWTs
+  must be UTF-8, so tokens from a working backend are unaffected.
+
 ## 0.1.0-alpha.4
 
 ### Security
