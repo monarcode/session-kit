@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- `secureStorage()` from the new `@monarcode/session-kit/expo` entry point
+  saves the session with `expo-secure-store`. It encodes keys for
+  SecureStore, splits values over its 2048-byte limit across keys without
+  ever leaving a half-written value, and reads synchronously. By default it
+  removes a session that iOS kept in the keychain from an earlier install;
+  `clearOnReinstall: false` keeps it. Data Android can't decrypt, as after a
+  backup restored onto another device, reads as signed out.
+  `keychainAccessible` is passed to SecureStore.
+
 ### Fixed
 
 - JWT access tokens decode where the runtime has no `TextDecoder`, as in
