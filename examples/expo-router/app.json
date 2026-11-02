@@ -1,0 +1,12 @@
+{
+	"expo": {
+		"name": "session-kit example",
+		"slug": "session-kit-example-expo-router",
+		"version": "1.0.0",
+		"scheme": "sessionkit",
+		"platforms": ["ios", "android"],
+		"ios": { "bundleIdentifier": "dev.monarcode.sessionkit.example" },
+		"android": { "package": "dev.monarcode.sessionkit.example" },
+		"plugins": ["expo-router", "expo-secure-store"]
+	}
+}

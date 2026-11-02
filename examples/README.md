@@ -1,9 +1,12 @@
 # session-kit examples
 
-Five small apps, one per supported setup, all signing in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth). They share the same
-pages: `/login`, prefilled with DummyJSON's test user, and a protected `/`
-that shows the user, calls `auth/me` with the access token, and signs out.
+Six small apps, one per supported setup, all signing in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth). The five web apps
+share the same pages: `/login`, prefilled with DummyJSON's test user, and a
+protected `/` that shows the user, calls `auth/me` with the access token, and
+signs out. The Expo app has the same sign-in screen, and splits the protected
+part into a home screen and a `/profile` screen that calls `auth/me`, so a
+deep link has somewhere to go.
 
 | App                                                          | Setup                                         | User comes from |
 | ------------------------------------------------------------ | --------------------------------------------- | --------------- |
@@ -12,6 +15,7 @@ that shows the user, calls `auth/me` with the access token, and signs out.
 | [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`               | Login response  |
 | [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`           | Access token    |
 | [`react-router-framework-spa`](./react-router-framework-spa) | React Router framework mode with `ssr: false` | Login response  |
+| [`expo-router`](./expo-router)                               | Expo Router on iOS and Android (Expo SDK 58)  | Login response  |
 
 ## Run one
 
@@ -27,6 +31,17 @@ The apps use the package from this repository, so rebuild it after changing
 `src`. `pnpm run build:examples` builds the package and every app, which is
 what CI checks.
 
+The Expo app runs in Expo Go or a development build:
+
+```sh
+pnpm --dir examples/expo-router run start
+```
+
+Open a deep link with `sessionkit://profile` in a development build, or
+`exp://<host>:8081/--/profile` in Expo Go. `pnpm --dir examples/expo-router
+run ios` and `run android` build it natively. In CI it is only bundled, with
+`expo export --platform ios --platform android`.
+
 ## What each app shows
 
 - **`auth.ts`**: the DummyJSON client. Its refresh callback maps both 401 and
@@ -40,13 +55,20 @@ what CI checks.
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
+- **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
+  `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
+  after a failed refresh, and re-checks the session when the app returns to
+  the foreground. `Stack.Protected` guards the screens, and
+  `app/+native-intent.tsx` keeps a deep link for after the sign-in. The
+  `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-every app has the same `ui.tsx` rather than sharing one. The apps differ in
+every web app has the same `ui.tsx` rather than sharing one. The apps differ in
 where the user comes from on purpose, so both user sources appear: the login
 response, validated by a schema, or the access token's claims, read with
 `fromAccessToken`. DummyJSON supports both.
 
 DummyJSON has no logout endpoint, so the apps do not pass `revoke`. Its refresh
 tokens stay valid after rotation, so it cannot show the cross-tab rotation race
-that session-kit's tests cover.
+that session-kit's tests cover. CI never calls DummyJSON: builds don't run the apps,
+and the build job blocks the host to make sure.

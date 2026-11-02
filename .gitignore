@@ -11,5 +11,9 @@ build
 .tanstack
 .output
 routeTree.gen.ts
+.expo
+# Native projects that `expo run:ios` and `expo run:android` generate.
+examples/expo-router/ios
+examples/expo-router/android
 
 .stash
