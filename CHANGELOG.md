@@ -12,6 +12,17 @@
   `clearOnReinstall: false` keeps it. Data Android can't decrypt, as after a
   backup restored onto another device, reads as signed out.
   `keychainAccessible` is passed to SecureStore.
+- `SessionGate` from `@monarcode/session-kit/expo` wraps the root navigator
+  of an Expo Router app and adds what `Stack.Protected` lacks. It keeps the
+  splash screen up while the session is restored, renders an
+  `unavailable({ error, retry })` fallback, re-checks the session when the
+  app returns to the foreground, and remounts screens when one account
+  replaces another.
+- `rememberDeepLink(auth, url)`, called from `redirectSystemPath` in
+  `+native-intent.tsx`, keeps a deep link that `Stack.Protected` would drop
+  while the user is signed out. `SessionGate` opens it after the sign-in.
+- Optional peer dependencies for Expo SDK 53 and later: `expo-router`,
+  `expo-secure-store`, `expo-file-system`, and `react-native`.
 
 ### Fixed
 
