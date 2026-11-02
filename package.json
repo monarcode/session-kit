@@ -1,10 +1,13 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.4",
-	"description": "Schema-driven browser sessions for React, with TanStack Router and React Router support",
+	"version": "0.1.0-alpha.5",
+	"description": "Schema-driven sessions for React, with TanStack Router, React Router, and Expo Router support",
 	"keywords": [
 		"auth",
+		"expo",
+		"expo-router",
 		"react",
+		"react-native",
 		"react-router",
 		"router",
 		"standard-schema",
@@ -75,7 +78,7 @@
 		"test:sync": "node --conditions=development --test tests/*.test.ts",
 		"test:async": "node --env-file=tests/async-storage.env --conditions=development --test tests/*.test.ts",
 		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && pnpm run test:docs",
-		"test:docs": "node scripts/check-readme.mjs",
+		"test:docs": "node scripts/check-docs.mjs",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"
 	},

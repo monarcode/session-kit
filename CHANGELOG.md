@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.5
 
 ### Added
 
@@ -23,6 +23,8 @@
   while the user is signed out. `SessionGate` opens it after the sign-in.
 - Optional peer dependencies for Expo SDK 53 and later: `expo-router`,
   `expo-secure-store`, `expo-file-system`, and `react-native`.
+- An [Expo Router guide](./docs/expo.md) and an
+  [`expo-router` example app](./examples/expo-router) for iOS and Android.
 
 ### Fixed
 
