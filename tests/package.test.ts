@@ -10,7 +10,7 @@ import {
 	webStorage,
 } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
-import { sessionAuth } from "@monarcode/session-kit/effetch";
+import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import {
@@ -46,7 +46,7 @@ test("all public entry points import without browser globals", () => {
 		createAuthFetch,
 		Auth,
 		AuthFailure,
-		sessionAuth,
+		sessionBearer,
 	]) {
 		assert.equal(typeof fn, "function");
 	}

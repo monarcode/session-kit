@@ -16,7 +16,10 @@ import {
 	type AuthFailureCode,
 	type RegisteredSession,
 } from "../dist/effect/index.js";
-import { sessionAuth, type SessionAuthPlugin } from "../dist/effetch/index.js";
+import {
+	sessionBearer,
+	type SessionBearerPlugin,
+} from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
@@ -395,28 +398,30 @@ void [
 ];
 
 // effetch: make needs Auth once; calls fail with AuthFailure and can override.
-const sessionPlugin: SessionAuthPlugin = sessionAuth({
+const sessionPlugin: SessionBearerPlugin = sessionBearer({
 	baseUrl: "https://api.example.com",
+	optional: undefined,
 });
 const makeSessionApi = Fetch.make({
 	baseUrl: "https://api.example.com",
 	plugins: [sessionPlugin],
 });
 const madeWithAuth: Effect.Effect<
-	Fetch.Client<readonly [SessionAuthPlugin]>,
+	Fetch.Client<readonly [SessionBearerPlugin]>,
 	never,
 	HttpClient.HttpClient | Auth
 > = makeSessionApi;
 // @ts-expect-error make needs the Auth service.
 const madeWithoutAuth: Effect.Effect<unknown, never, HttpClient.HttpClient> =
 	makeSessionApi;
-declare const sessionApi: Fetch.Client<readonly [SessionAuthPlugin]>;
+declare const sessionApi: Fetch.Client<readonly [SessionBearerPlugin]>;
 const sessionCall: Effect.Effect<unknown, AuthFailure | Fetch.FetchError> =
 	sessionApi.get("/me");
-sessionApi.get("/public", { plugins: { sessionAuth: false } });
+sessionApi.get("/public", { plugins: { sessionBearer: false } });
 sessionApi.get("/me", {
-	plugins: { sessionAuth: { signOutOnRepeated401: false } },
+	plugins: { sessionBearer: { signOutOnRepeated401: false } },
 });
-// @ts-expect-error Calls can override only signOutOnRepeated401.
-sessionApi.get("/me", { plugins: { sessionAuth: { baseUrl: "x" } } });
+sessionApi.get("/feed", { plugins: { sessionBearer: { optional: true } } });
+// @ts-expect-error Calls can override only optional and signOutOnRepeated401.
+sessionApi.get("/me", { plugins: { sessionBearer: { baseUrl: "x" } } });
 void [madeWithAuth, madeWithoutAuth, sessionCall];

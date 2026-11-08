@@ -6,8 +6,8 @@ import { retry } from "@monarcode/effetch/plugins";
 import { AuthError } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import {
-	sessionAuth,
-	type SessionAuthOptions,
+	sessionBearer,
+	type SessionBearerOptions,
 } from "@monarcode/session-kit/effetch";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -51,14 +51,17 @@ function serve(...statuses: number[]) {
 	return sent;
 }
 
-/** An effetch client with `sessionAuth` last, using `auth`. */
-const makeApi = (auth: TestClient, options: Partial<SessionAuthOptions> = {}) =>
+/** An effetch client with `sessionBearer` last, using `auth`. */
+const makeApi = (
+	auth: TestClient,
+	options: Partial<SessionBearerOptions> = {},
+) =>
 	Effect.runPromise(
 		Fetch.make({
 			baseUrl,
 			plugins: [
 				retry({ times: 1, schedule: Schedule.spaced("0 millis") }),
-				sessionAuth({ baseUrl, ...options }),
+				sessionBearer({ baseUrl, ...options }),
 			],
 		}).pipe(
 			Effect.provide(
@@ -129,7 +132,7 @@ test("tokens stay on the configured origin", async () => {
 	}
 	assert.equal(sent.length, 0);
 	assert.throws(
-		() => sessionAuth({ baseUrl: "not a url" }),
+		() => sessionBearer({ baseUrl: "not a url" }),
 		code("INVALID_OPTIONS"),
 	);
 });
@@ -156,7 +159,7 @@ test("a second 401 signs out, unless configured or overridden per call", async (
 	assert.equal(
 		await status(
 			api.get("/me", {
-				plugins: { sessionAuth: { signOutOnRepeated401: false } },
+				plugins: { sessionBearer: { signOutOnRepeated401: false } },
 			}),
 		),
 		401,
@@ -188,6 +191,65 @@ test("signed out or locked, calls fail without sending", async () => {
 	assert.equal(sent.length, 0);
 });
 
+test("optional sends signed-out calls without a token, but not locked ones", async () => {
+	let refreshed = 0;
+	const auth = client({
+		locking: true,
+		refresh: async () => {
+			refreshed++;
+			return { accessToken: "access-2" };
+		},
+	});
+	cleanups.push(auth.mount());
+	const api = await makeApi(auth, { optional: true });
+	const sent = serve(200, 401);
+	assert.equal(await status(api.get("/feed")), 200);
+	assert.equal(await status(api.get("/me")), 401);
+	assert.deepEqual(
+		sent.map((request) => request.authorization),
+		[null, null],
+	);
+	assert.equal(refreshed, 0);
+	assert.equal(
+		(
+			await failure(
+				api.get("/me", { plugins: { sessionBearer: { optional: false } } }),
+			)
+		).code,
+		"UNAUTHENTICATED",
+	);
+
+	const strict = await makeApi(auth);
+	assert.equal(
+		await status(
+			strict.get("/feed", {
+				plugins: { sessionBearer: { optional: true } },
+			}),
+		),
+		401,
+	);
+	assert.equal(sent.length, 3);
+
+	await auth.signIn(input({ expiresIn: 600 }));
+	await auth.lock();
+	assert.equal((await failure(api.get("/feed"))).code, "LOCKED");
+	assert.equal(sent.length, 3);
+});
+
+test("a sign-in during an optional signed-out call fails it with SESSION_CHANGED", async () => {
+	const auth = renewing();
+	const api = await makeApi(auth, { optional: true });
+	const sent: RequestInit[] = [];
+	setGlobal("fetch", async (_url: string, init: RequestInit) => {
+		sent.push(init);
+		await auth.signIn(input());
+		return new Response(null, { status: 401 });
+	});
+	assert.equal((await failure(api.get("/me"))).code, "SESSION_CHANGED");
+	assert.equal(sent[0]?.redirect, "error");
+	assert.equal(auth.state.get().status, "authenticated");
+});
+
 test("a session change during a call fails with SESSION_CHANGED", async () => {
 	const auth = renewing();
 	await auth.signIn(input());
@@ -206,7 +268,7 @@ test("a call can skip it, and retries read the token again", async () => {
 	const api = await makeApi(auth);
 	const sent = serve(200);
 	assert.equal(
-		await status(api.get("/public", { plugins: { sessionAuth: false } })),
+		await status(api.get("/public", { plugins: { sessionBearer: false } })),
 		200,
 	);
 	assert.equal(sent[0]?.authorization, null);
@@ -218,6 +280,28 @@ test("a call can skip it, and retries read the token again", async () => {
 		retried.map((request) => request.authorization),
 		["Bearer access-1", "Bearer access-1"],
 	);
+});
+
+test("a request with its own Authorization header is sent as it is", async () => {
+	let refreshed = 0;
+	const auth = client({
+		refresh: async () => {
+			refreshed++;
+			return { accessToken: "access-2" };
+		},
+	});
+	const api = await makeApi(auth);
+	const sent = serve(401);
+	const own = { headers: { Authorization: "Token own" } };
+	assert.equal(await status(api.get("/me", own)), 401);
+	await auth.signIn(input());
+	assert.equal(await status(api.get("/me", own)), 401);
+	assert.deepEqual(
+		sent.map((request) => request.authorization),
+		["Token own", "Token own"],
+	);
+	assert.equal(refreshed, 0);
+	assert.equal(auth.state.get().status, "authenticated");
 });
 
 test("the app's own RequestInit is kept", async () => {

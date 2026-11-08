@@ -1,6 +1,7 @@
 import { plugin, type Plugin } from "@monarcode/effetch";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Headers from "effect/http/Headers";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Option from "effect/Option";
@@ -13,30 +14,38 @@ import {
 	type AuthFailure,
 	fromAuthError,
 	fromPromise,
+	unauthenticated,
 } from "../effect/failure.js";
 
 /**
- * Options for {@link sessionAuth}.
+ * Options for {@link sessionBearer}.
  *
  * @example
  * ```ts
- * import { sessionAuth } from "@monarcode/session-kit/effetch";
+ * import { sessionBearer } from "@monarcode/session-kit/effetch";
  *
- * // Some endpoints answer 401 for missing permissions, not a bad token.
- * export const auth = sessionAuth({
+ * // One client for public and private endpoints.
+ * export const bearer = sessionBearer({
  * 	baseUrl: "https://api.example.com",
- * 	signOutOnRepeated401: false,
+ * 	optional: true,
  * });
  * ```
  *
  * @since 0.1.0
  */
-export interface SessionAuthOptions {
+export interface SessionBearerOptions {
 	/**
 	 * Your API's URL, usually the client's `baseUrl`. The access token goes
 	 * only to requests on its origin.
 	 */
 	baseUrl: string;
+	/**
+	 * Whether a call made while signed out is sent without an `Authorization`
+	 * header, rather than failing with `UNAUTHENTICATED`. Default: `false`.
+	 * Set `true` when one client serves public and private endpoints. A
+	 * locked client still fails with `LOCKED`. Calls can override it.
+	 */
+	optional?: boolean | undefined;
 	/**
 	 * Whether a 401 on the replayed request, after a successful renewal, ends
 	 * the session. Default: `true`. Set `false` when some endpoints answer 401
@@ -46,29 +55,30 @@ export interface SessionAuthOptions {
 }
 
 /**
- * The plugin {@link sessionAuth} makes: calls can fail with `AuthFailure`,
- * and `Fetch.make` needs the `Auth` service. Calls can skip it
- * (`plugins: { sessionAuth: false }`) or override `signOutOnRepeated401`.
+ * The plugin {@link sessionBearer} makes: calls can fail with
+ * `AuthFailure`, and `Fetch.make` needs the `Auth` service. Calls can skip
+ * it (`plugins: { sessionBearer: false }`) or override `optional` and
+ * `signOutOnRepeated401`.
  *
  * @example
  * ```ts
  * import {
- * 	sessionAuth,
- * 	type SessionAuthPlugin,
+ * 	sessionBearer,
+ * 	type SessionBearerPlugin,
  * } from "@monarcode/session-kit/effetch";
  *
- * export const auth: SessionAuthPlugin = sessionAuth({
+ * export const bearer: SessionBearerPlugin = sessionBearer({
  * 	baseUrl: "https://api.example.com",
  * });
  * ```
  *
  * @since 0.1.0
  */
-export type SessionAuthPlugin = Plugin<
-	"sessionAuth",
+export type SessionBearerPlugin = Plugin<
+	"sessionBearer",
 	AuthFailure,
 	Auth,
-	{ readonly signOutOnRepeated401: boolean }
+	{ readonly optional: boolean; readonly signOutOnRepeated401: boolean }
 >;
 
 /** Runs `effect` with `fetch` refusing redirects, so a token never follows one. */
@@ -90,12 +100,16 @@ const refuseRedirects = <A, E, R>(
  * leaves your API. With Effect's `FetchHttpClient`, a redirect fails as a
  * `NetworkError` rather than being followed.
  *
- * Calls fail with `AuthFailure`: `UNAUTHENTICATED` when signed out and
- * `LOCKED` while locked, without sending the request. A 401 response renews
- * the access token once. `GET` and `HEAD` requests are then sent again with
- * the new token; other requests return the 401 for the caller to retry. If
- * the session changes during a call, it fails with `SESSION_CHANGED` rather
- * than return a response for another account.
+ * Calls fail with `AuthFailure`: `UNAUTHENTICATED` when signed out, unless
+ * `optional` sends them without a token, and `LOCKED` while locked, without
+ * sending the request. A 401 response renews the access token once. `GET`
+ * and `HEAD` requests are then sent again with the new token; other requests
+ * return the 401 for the caller to retry. If the session changes during a
+ * call, it fails with `SESSION_CHANGED` rather than return a response for
+ * another account.
+ *
+ * A request that already has an `Authorization` header is sent as it is, as
+ * if the call skipped the plugin, like effetch's `bearer`.
  *
  * Put it last in `plugins`, after `retry`, so each attempt reads the current
  * token. `Fetch.make` then needs the `Auth` service; calls don't.
@@ -106,27 +120,34 @@ const refuseRedirects = <A, E, R>(
  * import * as FetchHttpClient from "effect/http/FetchHttpClient";
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
- * import { sessionAuth } from "@monarcode/session-kit/effetch";
+ * import { sessionBearer } from "@monarcode/session-kit/effetch";
  *
  * const baseUrl = "https://api.example.com";
  *
  * export const makeApi = Fetch.make({
  * 	baseUrl,
- * 	plugins: [retry(), sessionAuth({ baseUrl })],
+ * 	plugins: [retry(), sessionBearer({ baseUrl })],
  * }).pipe(Effect.provide(FetchHttpClient.layer));
- * // Per call: api.post("/auth/login", { body, plugins: { sessionAuth: false } })
+ * // Per call: api.post("/auth/login", { body, plugins: { sessionBearer: false } })
  * ```
  *
  * @since 0.1.0
  */
-export function sessionAuth(options: SessionAuthOptions): SessionAuthPlugin {
+export function sessionBearer(
+	options: SessionBearerOptions,
+): SessionBearerPlugin {
 	const { origin } = parseUrl(options.baseUrl);
 	return plugin({
-		name: "sessionAuth",
-		defaults: { signOutOnRepeated401: options.signOutOnRepeated401 ?? true },
+		name: "sessionBearer",
+		defaults: {
+			optional: options.optional ?? false,
+			signOutOnRepeated401: options.signOutOnRepeated401 ?? true,
+		},
 		wrap: (client, callOptions) =>
 			HttpClient.transform(client, (_response, request) =>
 				Effect.gen(function* () {
+					if (Headers.has(request.headers, "authorization"))
+						return yield* client.execute(request);
 					const url = parseUrl(request.url);
 					if (url.origin !== origin || url.username || url.password)
 						return yield* Effect.die(
@@ -136,6 +157,7 @@ export function sessionAuth(options: SessionAuthOptions): SessionAuthPlugin {
 							),
 						);
 					const auth = yield* Auth;
+					const { optional, signOutOnRepeated401 } = yield* callOptions;
 					const send = (credentials: Credentials) =>
 						Effect.gen(function* () {
 							if (!auth.isCurrent(credentials))
@@ -154,7 +176,23 @@ export function sessionAuth(options: SessionAuthOptions): SessionAuthPlugin {
 							return response;
 						});
 
-					const captured = yield* Auth.credentials;
+					const captured = yield* fromPromise(() =>
+						auth.credentials.get(),
+					);
+					if (!captured) {
+						if (!optional)
+							return yield* Effect.fail(
+								unauthenticated("Sign in is required"),
+							);
+						const response = yield* refuseRedirects(
+							client.execute(request),
+						);
+						// A 401 for the signed-out request must not reach a 401 handler
+						// that would then sign out the account that just signed in.
+						if (auth.state.get().sessionId !== null)
+							return yield* fromAuthError(sessionChanged());
+						return response;
+					}
 					const response = yield* send(captured);
 					if (response.status !== 401) return response;
 
@@ -166,7 +204,6 @@ export function sessionAuth(options: SessionAuthOptions): SessionAuthPlugin {
 						return response;
 
 					const retried = yield* send(fresh);
-					const { signOutOnRepeated401 } = yield* callOptions;
 					if (retried.status === 401 && signOutOnRepeated401)
 						yield* fromPromise(() => auth.credentials.reject(fresh));
 					return retried;

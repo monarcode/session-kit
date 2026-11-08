@@ -510,7 +510,7 @@ in any React app.
 
 **Effect.** `@monarcode/session-kit/effect` provides the client as an Effect
 service, `Auth`, whose Effects fail with a tagged `AuthFailure`, and
-`@monarcode/session-kit/effetch` adds `sessionAuth`, an effetch plugin that
+`@monarcode/session-kit/effetch` adds `sessionBearer`, an effetch plugin that
 sends the access token. The [Effect guide](./docs/effect.md) covers both.
 
 ## Using the client
@@ -815,7 +815,7 @@ of `AuthStorage`, as `secureStorage()` does.
 | `@monarcode/session-kit/expo`            | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                 |
 | `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                         |
 | `@monarcode/session-kit/effect`          | `Auth`, `AuthFailure`, `Register`, types                                                                  |
-| `@monarcode/session-kit/effetch`         | `sessionAuth`, types                                                                                      |
+| `@monarcode/session-kit/effetch`         | `sessionBearer`, types                                                                                    |
 
 Do not import internal `dist` paths.
 

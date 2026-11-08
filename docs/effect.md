@@ -128,7 +128,7 @@ Code outside `Auth` that rejects with an `AuthError`, such as
 
 ## Requests with effetch
 
-With [effetch](https://github.com/monarcode/effetch), the `sessionAuth`
+With [effetch](https://github.com/monarcode/effetch), the `sessionBearer`
 plugin from `@monarcode/session-kit/effetch` sends the access token and
 handles a 401 as `createAuthFetch` does. Install `@monarcode/effetch` too,
 another optional peer dependency. Put the plugin last, so a retry reads the
@@ -144,14 +144,14 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Fetch from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
-import { sessionAuth } from "@monarcode/session-kit/effetch";
+import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { AuthLive } from "./layer.js";
 
 const baseUrl = "https://api.example.com";
 
 const makeApi = Fetch.make({
   baseUrl,
-  plugins: [retry(), sessionAuth({ baseUrl })],
+  plugins: [retry(), sessionBearer({ baseUrl })],
 });
 
 // Made once, when the layer is built.
@@ -167,8 +167,11 @@ export const orders = Api.use((api) => api.get("/orders"));
 ```
 
 Calls can fail with `AuthFailure`, and skip the plugin with
-`plugins: { sessionAuth: false }`, for a public endpoint such as the sign-in
-request.
+`plugins: { sessionBearer: false }`, for a public endpoint such as the sign-in
+request. When one client serves public and private endpoints, give the
+plugin `optional: true`: a call made while signed out is then sent without a
+token, and a private endpoint answers with its own 401. A locked client still
+fails with `LOCKED`.
 
 With another HTTP client, use `Auth.credentials`, the access token, kept apart
 from `Auth.session` so code that only needs the user never holds a token.
