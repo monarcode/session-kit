@@ -1,5 +1,7 @@
 # @monarcode/session-kit
 
+![session-kit](https://raw.githubusercontent.com/monarcode/session-kit/main/assets/sk-banner.png)
+
 Schema-driven sessions for React, with TanStack Router, React Router, and Expo
 Router support.
 
