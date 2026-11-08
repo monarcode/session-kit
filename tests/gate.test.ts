@@ -4,13 +4,16 @@ import { beforeEach, test } from "node:test";
 import {
 	Component,
 	createElement as h,
+	StrictMode,
 	useEffect,
+	useState,
 	type ReactNode,
 } from "react";
 
 import {
 	createAuth,
 	memoryStorage,
+	type AuthDebugEvent,
 	type AuthError,
 	type AuthStorage,
 	type RefreshFn,
@@ -306,4 +309,249 @@ test("deep links read as Expo Router reads them", async () => {
 		assert.deepEqual(navigation.replaced, path ? [path] : [], url);
 		await view.unmount();
 	}
+});
+
+/** Sets the `ready` prop of the gate `renderReady` rendered. */
+const readiness: { set?: (ready: boolean) => void } = {};
+
+function renderReady(auth: Client, initial: boolean, strict = false) {
+	mounts.navigator = 0;
+	function Root() {
+		const [ready, setReady] = useState(initial);
+		useEffect(() => {
+			readiness.set = setReady;
+		}, []);
+		return h(
+			AuthProvider,
+			{ client: auth },
+			h(SessionGate, { ready, unavailable }, h(Navigator)),
+		);
+	}
+	return render(strict ? h(StrictMode, null, h(Root)) : h(Root));
+}
+
+const setReady = (ready: boolean) => act(async () => readiness.set?.(ready));
+
+test("ready: false keeps the splash screen up after the session is restored", async () => {
+	const storage = memoryStorage();
+	await newClient(storage).signIn({ accessToken: "access-1", user });
+	const view = await renderReady(newClient(storage), false);
+	await settle();
+	assert.equal(view.container.textContent, "");
+	assert.equal(navigation.splashHides, 0);
+	assert.equal(mounts.navigator, 0);
+	await setReady(true);
+	assert.equal(view.container.textContent, "navigator");
+	assert.equal(navigation.splashHides, 1);
+});
+
+test("ready going false after the first screen changes nothing on screen", async () => {
+	const view = await renderReady(newClient(), true);
+	await setReady(false);
+	assert.equal(view.container.textContent, "navigator");
+	assert.equal(mounts.navigator, 1);
+	await setReady(true);
+	assert.equal(navigation.splashHides, 1);
+});
+
+test("unavailable access waits for ready too", async () => {
+	const lock = lockable();
+	const view = await renderReady(newClient(lock.storage), false);
+	await settle();
+	assert.equal(view.container.textContent, "");
+	assert.equal(navigation.splashHides, 0);
+	await setReady(true);
+	assert.equal(view.container.textContent, "unavailable: PERSISTENCE_FAILED");
+	assert.equal(navigation.splashHides, 1);
+});
+
+test("the deep link opened after a sign-in waits for ready", async () => {
+	const auth = newClient();
+	navigation.go("/login");
+	await renderReady(auth, true);
+	await act(async () => rememberDeepLink(auth, "myapp://profile"));
+	await setReady(false);
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, []);
+	await setReady(true);
+	assert.deepEqual(navigation.replaced, ["/profile"]);
+});
+
+test("a link isn't judged by the launch URL while the gate is held", async () => {
+	const auth = newClient();
+	// At launch, the pathname is still the link's own.
+	navigation.go("/profile");
+	await renderReady(auth, false);
+	await act(async () => rememberDeepLink(auth, "myapp://profile"));
+	await settle();
+	// Stack.Protected sends the signed-out user to the sign-in screen.
+	await act(async () => navigation.go("/login"));
+	await setReady(true);
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, ["/profile"]);
+});
+
+/** A client whose debug events are collected as `type: message` lines. */
+function debugClient(sensitive = false, storage = memoryStorage()) {
+	const lines: string[] = [];
+	const events: AuthDebugEvent[] = [];
+	const auth = createAuth({
+		name: "gate",
+		user: userSchema,
+		storage,
+		debug: {
+			sensitive,
+			log: (event) => {
+				events.push(event);
+				lines.push(`${event.type}: ${event.message}`);
+			},
+		},
+	});
+	return { auth, lines, events };
+}
+
+test("debug reports why the splash screen is held, and when it hides", async () => {
+	const { auth, lines } = debugClient();
+	await renderReady(auth, false);
+	await settle();
+	await setReady(true);
+	const gate = lines.filter((line) => line.startsWith("gate: "));
+	assert.deepEqual(gate.slice(-2), [
+		"gate: holding the splash screen: waiting for ready",
+		"gate: hid the splash screen",
+	]);
+});
+
+test("debug reports deep links without their query unless sensitive", async () => {
+	for (const sensitive of [false, true]) {
+		navigation.reset();
+		navigation.go("/login");
+		const { auth, lines, events } = debugClient(sensitive);
+		const view = await renderReady(auth, true);
+		await act(async () =>
+			rememberDeepLink(auth, "myapp://reset?token=s3cret"),
+		);
+		await act(() => auth.signIn({ accessToken: "access-1", user }));
+		assert.ok(
+			lines.includes("deep-link: remembered /reset"),
+			lines.join("\n"),
+		);
+		assert.ok(lines.includes("deep-link: /reset: waiting for a sign-in"));
+		assert.ok(
+			lines.includes("deep-link: /reset: opening it after the sign-in"),
+		);
+		const logged = JSON.stringify(events);
+		assert.equal(logged.includes("s3cret"), sensitive);
+		await view.unmount();
+	}
+});
+
+test("debug reports a return to the foreground", async () => {
+	const { auth, lines } = debugClient();
+	await renderReady(auth, true);
+	await act(async () => {
+		appState.change("background");
+		appState.change("active");
+	});
+	assert.ok(
+		lines.includes(
+			"foreground: back in the foreground: re-checking the session",
+		),
+	);
+});
+
+test("a cold-start link isn't dropped while the pathname is still the launch URL's", async () => {
+	for (const ready of [true, false]) {
+		navigation.reset();
+		const auth = newClient();
+		// Expo Router reads the launch URL before the navigator mounts.
+		navigation.go("/profile");
+		rememberDeepLink(auth, "myapp://profile");
+		const view = await renderReady(auth, ready);
+		await settle();
+		// The navigator mounts while the pathname is still the launch URL's.
+		await setReady(true);
+		// Then Stack.Protected sends the signed-out user to the sign-in screen.
+		await act(async () => navigation.go("/login"));
+		await act(() => auth.signIn({ accessToken: "access-1", user }));
+		assert.deepEqual(navigation.replaced, ["/profile"], `ready: ${ready}`);
+		await view.unmount();
+	}
+});
+
+test("a cold-start link to a screen anyone may see isn't opened after a sign-in", async () => {
+	const auth = newClient();
+	navigation.go("/reset");
+	rememberDeepLink(auth, "myapp://reset");
+	await renderGate(auth);
+	await settle();
+	// Nothing guards the screen, so it stays on it.
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, []);
+});
+
+test("a remounted gate doesn't hold again once the first screen was shown", async () => {
+	const auth = newClient();
+	const first = await renderReady(auth, true);
+	assert.equal(first.container.textContent, "navigator");
+	await first.unmount();
+	const second = await renderReady(auth, false);
+	assert.equal(second.container.textContent, "navigator");
+});
+
+test("gate events don't repeat under StrictMode", async () => {
+	const { auth, lines } = debugClient();
+	await renderReady(auth, false, true);
+	await settle();
+	await setReady(true);
+	const gate = lines.filter((line) => line.startsWith("gate: "));
+	assert.deepEqual(gate, [...new Set(gate)], gate.join("\n"));
+	assert.ok(gate.includes("gate: hid the splash screen"));
+});
+
+test("the error boundary path is reported once", async (t) => {
+	t.mock.method(console, "error", () => {});
+	class Boundary extends Component<
+		{ children: ReactNode },
+		{ error: unknown }
+	> {
+		override state = { error: null as unknown };
+		static getDerivedStateFromError(error: unknown) {
+			return { error };
+		}
+		override render() {
+			return this.state.error
+				? h("p", null, "boundary")
+				: this.props.children;
+		}
+	}
+	const { auth, lines } = debugClient(false, lockable().storage);
+	const view = await render(
+		h(
+			Boundary,
+			null,
+			h(AuthProvider, { client: auth }, h(SessionGate, null, h(Navigator))),
+		),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "boundary");
+	assert.equal(
+		lines.filter((line) => line.includes("throwing to the error boundary"))
+			.length,
+		1,
+	);
+});
+
+test("a client passed as a wrapper still reports, and keeps its links", async () => {
+	const { auth, lines } = debugClient();
+	const wrapper = { state: auth.state, mount: auth.mount, retry: auth.retry };
+	navigation.go("/login");
+	await render(h(SessionGate, { client: wrapper }, h(Navigator)));
+	await act(async () => rememberDeepLink(auth, "myapp://profile"));
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, ["/profile"]);
+	assert.ok(lines.includes("gate: hid the splash screen"), lines.join("\n"));
+	assert.ok(
+		lines.includes("deep-link: /profile: opening it after the sign-in"),
+	);
 });

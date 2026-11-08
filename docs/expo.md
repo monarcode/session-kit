@@ -24,6 +24,7 @@ client, refresh, and errors work; this guide covers what differs on Expo.
 - [Secure storage](#secure-storage)
 - [SessionGate](#sessiongate)
 - [Deep links](#deep-links)
+- [Debugging](#debugging)
 - [Not supported](#not-supported)
 
 ## Requirements
@@ -172,6 +173,20 @@ function RootStack() {
 `RootStack` is its own component so that `useAuth` runs inside
 `AuthProvider`. The navigator mounts only once the session is restored, so the
 guards never see `initializing`.
+
+If the first screen needs more than the session, such as fonts, pass `ready`:
+the splash screen then stays up until both are done.
+
+```tsx
+const [fontsLoaded] = useFonts(fonts);
+
+<SessionGate
+  ready={fontsLoaded}
+  unavailable={(props) => <Unavailable {...props} />}
+>
+  <RootStack />
+</SessionGate>;
+```
 
 ## 3. Keep deep links
 
@@ -379,12 +394,13 @@ keychain, and encrypted with an Android Keystore key.
 
 `SessionGate` adds what `Stack.Protected` lacks:
 
-- **While the session is restored** it renders nothing, so the splash screen
-  stays up, then hides the splash screen. Call
+- **While the session is restored**, and until `ready` is `true`, it renders
+  nothing, so the splash screen stays up, then hides the splash screen. Call
   `SplashScreen.preventAutoHideAsync()` at the top of the root layout, or the
   splash screen hides before the session is restored. The navigator mounts
-  only once the session is restored, so a cold-start deep link isn't sent to
-  the sign-in screen first.
+  only then, so a cold-start deep link isn't sent to the sign-in screen
+  first. `ready` defaults to `true`, and counts only until the splash screen
+  is first hidden: setting it to `false` later changes nothing on screen.
 - **While access is unavailable** it renders `unavailable({ error, retry })`
   instead of the navigator.
 - **When the app returns to the foreground** it re-checks the session, because
@@ -404,10 +420,11 @@ it, so it also works without `AuthProvider`.
 decides what to do with it:
 
 - Signed in already: the link is dropped, and Expo Router opens it as usual.
-- Signed out: once the user signs in, `SessionGate` opens it with
-  `router.replace`.
+- Signed out: once the user signs in, and `ready` is `true`, `SessionGate`
+  opens it with `router.replace`.
 - A link to a screen anyone may see, such as the sign-in screen, is dropped
-  once it is shown.
+  once it is shown. If the app launched with it, it is dropped at the sign-in
+  instead, unopened, since the screen was already showing.
 
 Links are checked with `safeReturnTo`, so the root, the sign-in path, and
 anything that could leave the app are ignored. Pass
@@ -416,6 +433,30 @@ screen isn't `/login`. A newer link replaces an older one.
 
 There is no `?redirectTo=` parameter on Expo: the link waits in memory, not in
 the URL, and an app restart forgets it.
+
+## Debugging
+
+Turn on the client's `debug` option to see what session-kit does in Metro's
+logs: restores, refreshes and why they ran, timers, storage operations, state
+changes, and why a session ended.
+
+```ts
+export const auth = createAuth({
+  // ...
+  debug: __DEV__,
+});
+```
+
+`SessionGate` and deep links report through the same option: why the splash
+screen is held (restoring, or waiting for `ready`), when it hides, and what
+happened to a remembered link. `secureStorage()` adds what only it can see,
+such as removing a session an earlier install left, or discarding data
+Android can't decrypt.
+
+Events leave out tokens, saved values, user fields, deep links' query strings,
+and errors' causes. `debug: { sensitive: true }` puts them in, so keep it to development
+builds. A function, `debug: (event) => ...` or `debug: { log }`, receives each
+event instead of the console, for example to add Sentry breadcrumbs.
 
 ## Not supported
 

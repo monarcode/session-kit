@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
+import type { AuthDebug } from "./debug.js";
 import type { AuthError } from "./errors.js";
 import type { AccessTokenUser, UserSource } from "./sources.js";
 import type { AuthStorage } from "./storage.js";
@@ -286,4 +287,15 @@ export type AuthOptions<Src extends UserSource> = {
 	revoke?: RevokeFn;
 	/** Saved-session lifetime in seconds, renewed on successful writes. Default: 30 days. */
 	maxAge?: number;
+	/**
+	 * Reports what auth does, for debugging: restores, refreshes, timers,
+	 * storage operations, and state changes. `true` logs to the console; a
+	 * function receives each `AuthDebugEvent` instead. Tokens, saved values,
+	 * user fields, and errors' causes are left out unless `{ sensitive: true }`.
+	 * Default: off.
+	 *
+	 * @example
+	 * createAuth({ ...options, debug: __DEV__ });
+	 */
+	debug?: AuthDebug;
 };

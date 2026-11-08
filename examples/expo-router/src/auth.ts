@@ -33,6 +33,9 @@ export const auth = createAuth({
 	// across keys. Defaults shown:
 	//   secureStorage({ clearOnReinstall: true, keychainAccessible: undefined })
 	storage: secureStorage(),
+	// Logs restores, refreshes, timers, and the gate's decisions to Metro in
+	// development. Tokens and user fields stay out of the log.
+	debug: __DEV__,
 	/**
 	 * DummyJSON answers 403 for an invalid or expired refresh token and 401
 	 * for a missing one: both mean "sign in again", so return `null`. Other

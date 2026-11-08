@@ -12,18 +12,20 @@ function routeKey(pathname: string): string {
 	return decodeURIComponent(pathname).toLowerCase().replace(/\/+$/, "") || "/";
 }
 
+/** `path` without its query and fragment. */
+export const pathnameOf = (path: string) => path.replace(/[?#].*$/s, "");
+
 /**
  * Whether two in-app paths lead to the same route, by the rule `loginPath`
  * uses: ignoring case, percent-encoding, and trailing slashes. Query and
  * fragment are ignored.
  */
 export function sameRoute(a: string, b: string): boolean {
-	const pathname = (path: string) => path.replace(/[?#].*$/s, "");
 	try {
-		return routeKey(pathname(a)) === routeKey(pathname(b));
+		return routeKey(pathnameOf(a)) === routeKey(pathnameOf(b));
 	} catch {
 		// Malformed percent-encoding.
-		return pathname(a) === pathname(b);
+		return pathnameOf(a) === pathnameOf(b);
 	}
 }
 

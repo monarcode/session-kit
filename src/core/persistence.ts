@@ -1,6 +1,7 @@
+import type { Debugger } from "./debug.js";
 import { AuthError } from "./errors.js";
 import { isRecord } from "./json.js";
-import { isThenable, type MaybePromise } from "./maybe.js";
+import { attempt, chain, isThenable, type MaybePromise } from "./maybe.js";
 import type { AuthStorage } from "./storage.js";
 import { validateTokens, type SessionTokens } from "./tokens.js";
 
@@ -25,6 +26,7 @@ export function createPersistence(
 	storage: AuthStorage,
 	name: string,
 	maxAge = DEFAULT_MAX_AGE_SECONDS,
+	debug: Debugger,
 ) {
 	if (
 		!/^[a-zA-Z0-9_-]{1,64}$/.test(name) ||
@@ -37,6 +39,37 @@ export function createPersistence(
 	}
 	const key = `${name}:auth:session`;
 	const lockName = `${name}:auth:refresh`;
+	if (debug.on)
+		storage.debug?.(
+			key,
+			(message, data) => debug.log("storage", message, data),
+			debug.sensitive,
+		);
+
+	/**
+	 * Runs storage operation `kind` and reports how it went and how long it
+	 * took. `describe` adds details of a successful result.
+	 */
+	function timed<T>(
+		kind: "read" | "write" | "clear",
+		operation: () => MaybePromise<T>,
+		describe: (result: T) => Record<string, unknown> = () => ({}),
+	): MaybePromise<T> {
+		if (!debug.on) return operation();
+		const started = Date.now();
+		const data = () => ({ key, durationMs: Date.now() - started });
+		return attempt(
+			() =>
+				chain(operation(), (result) => {
+					debug.log("storage", kind, { ...data(), ...describe(result) });
+					return result;
+				}),
+			(cause) => {
+				debug.log("storage", `${kind} failed`, data(), storageError(cause));
+				throw cause;
+			},
+		);
+	}
 
 	// Operations run one at a time, in the order requested. Storage that settles
 	// out of order still ends up holding the latest write, and a read sees every
@@ -54,8 +87,16 @@ export function createPersistence(
 
 	function clear(): Promise<void> {
 		return enqueue(async () => {
-			await storage.remove(key);
+			await timed("clear", () => storage.remove(key));
 		});
+	}
+
+	function get(): ReturnType<AuthStorage["get"]> {
+		return timed(
+			"read",
+			() => storage.get(key),
+			(text) => ({ found: text !== null, ...debug.secret({ value: text }) }),
+		);
 	}
 
 	/** Parses a saved entry, rejecting other formats and expired entries. */
@@ -94,10 +135,10 @@ export function createPersistence(
 	 * restored before the first render. Otherwise the read waits its turn.
 	 */
 	function read(): MaybePromise<StoredSession | null> {
-		if (pending) return enqueue(async () => parse(await storage.get(key)));
+		if (pending) return enqueue(async () => parse(await get()));
 		let text: ReturnType<AuthStorage["get"]>;
 		try {
-			text = storage.get(key);
+			text = get();
 		} catch (cause) {
 			throw storageError(cause);
 		}
@@ -109,10 +150,15 @@ export function createPersistence(
 	function write(session: StoredSession): Promise<void> {
 		return enqueue(async () => {
 			const persistUntil = Date.now() + maxAge * 1000;
-			await storage.set(
-				key,
-				JSON.stringify({ v: STORAGE_VERSION, ...session, persistUntil }),
-				{ expiresAt: persistUntil },
+			const value = JSON.stringify({
+				v: STORAGE_VERSION,
+				...session,
+				persistUntil,
+			});
+			await timed(
+				"write",
+				() => storage.set(key, value, { expiresAt: persistUntil }),
+				() => debug.secret({ value }),
 			);
 		});
 	}

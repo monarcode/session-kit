@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- A `debug` option on `createAuth` reports what auth does: restores,
+  refreshes and why they ran, timers, storage operations, other tabs'
+  changes, state changes, and what ended a session. `true` logs to
+  `console.info`; a function, or `{ log }`, receives each `AuthDebugEvent`
+  instead. Tokens, saved values, user fields, and errors' causes are left
+  out unless `{ sensitive: true }`. `SessionGate`, deep links, and
+  foreground handling report through the same option, and storage adapters
+  can add their own events, per key, through the new optional `AuthStorage`
+  member `debug`, as `secureStorage()` does.
+- `SessionGate` takes `ready`, `true` by default. Until it is `true`, as well
+  as while the session is restored, the gate renders nothing and keeps the
+  splash screen up; that applies only until the splash screen is first
+  hidden, even if the gate remounts. The deep link opened after a sign-in
+  waits for `ready` too.
+
+### Fixed
+
+- A cold-start deep link to a guarded screen is no longer dropped as
+  "already showing" while Expo Router's pathname still reads the launch URL,
+  as it can while the gate holds the splash screen and as the navigator
+  first mounts. A cold-start link to a screen anyone may see is dropped at
+  the sign-in instead of once shown.
+- `SessionGate` and `rememberDeepLink` recognise a client passed as a copy,
+  such as `client={{ ...auth }}`, so a remembered link still opens.
+
 ## 0.1.0-alpha.5
 
 ### Added

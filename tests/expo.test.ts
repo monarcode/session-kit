@@ -272,3 +272,103 @@ test("a locked keychain makes the session unavailable until retry", async () => 
 	assert.equal((await auth.retry())?.user.firstName, "Emily");
 	assert.equal(auth.state.get().status, "authenticated");
 });
+
+/** A secureStorage whose own debug events are collected in `messages`. */
+function reporting() {
+	const messages: string[] = [];
+	const storage = secureStorage();
+	storage.debug?.(KEY, (message) => messages.push(message), false);
+	return { storage, messages };
+}
+
+test("debug reports a session an earlier install left, and a first use", async () => {
+	await saved(valueOf(100));
+	reinstall();
+	const leftover = reporting();
+	await leftover.storage.get(KEY);
+	assert.deepEqual(leftover.messages, [
+		"removed a session an earlier install left in the keychain",
+	]);
+	secureStore.reset();
+	fileSystem.reset();
+	const fresh = reporting();
+	await fresh.storage.get(KEY);
+	assert.deepEqual(fresh.messages, [
+		"first use on this install: nothing from an earlier install",
+	]);
+});
+
+test("debug reports split values and why a saved value was discarded", async () => {
+	const { storage, messages } = reporting();
+	await storage.set(KEY, valueOf(5_000), { expiresAt: 0 });
+	assert.ok(
+		messages.includes("split the value across 3 keys"),
+		messages.join(),
+	);
+	secureStore.undecryptable.add(`${BASE}.a1`);
+	await storage.get(KEY);
+	assert.ok(
+		messages.includes(
+			"discarded the saved value: Android can't decrypt a piece of it",
+		),
+	);
+	await storage.set(KEY, valueOf(5_000), { expiresAt: 0 });
+	secureStore.items.delete(`${BASE}.a2`);
+	await storage.get(KEY);
+	assert.ok(
+		messages.includes("discarded the saved value: a piece of it is missing"),
+	);
+});
+
+test("with auth's debug on, secureStorage's events join auth's log", async () => {
+	await saved(valueOf(100));
+	reinstall();
+	const events: string[] = [];
+	const auth = createAuth({
+		name: "my-app",
+		user: userSchema,
+		storage: secureStorage(),
+		debug: (event) => events.push(`${event.type}: ${event.message}`),
+	});
+	await auth.getSession();
+	assert.ok(
+		events.includes(
+			"storage: removed a session an earlier install left in the keychain",
+		),
+		events.join("\n"),
+	);
+});
+
+test("a secureStorage shared by two auth names reports to each one", async () => {
+	const storage = secureStorage();
+	const events: string[] = [];
+	for (const name of ["app", "admin"])
+		createAuth({
+			name,
+			user: userSchema,
+			storage,
+			debug: (event) => events.push(`${event.name}: ${event.message}`),
+		});
+	await storage.set("app:auth:session", valueOf(5_000), { expiresAt: 0 });
+	await storage.set("admin:auth:session", valueOf(100), { expiresAt: 0 });
+	await storage.set("admin:auth:session", valueOf(5_000), { expiresAt: 0 });
+	assert.deepEqual(
+		events.filter((event) => event.includes("split")),
+		[
+			"app: split the value across 3 keys",
+			"admin: split the value across 3 keys",
+		],
+	);
+});
+
+test("without debug, the reinstall check doesn't read the saved value", async () => {
+	await saved(valueOf(100));
+	reinstall();
+	const reads: string[] = [];
+	secureStore.fails = (operation, key) => {
+		if (operation === "get") reads.push(key);
+		return false;
+	};
+	await secureStorage().get(KEY);
+	assert.equal(reads.filter((key) => key === BASE).length, 1);
+});

@@ -1,5 +1,6 @@
 import { atom } from "nanostores";
 
+import { createDebugger, registerDebugger, seconds } from "./debug.js";
 import { AuthError, toAuthError, sessionChanged } from "./errors.js";
 import { createId } from "./id.js";
 import { attempt, chain, isThenable, type MaybePromise } from "./maybe.js";
@@ -28,6 +29,12 @@ import type {
 import { sameUser } from "./user.js";
 
 type InternalSession<U> = SessionTokens & { id: string; user: U };
+
+/**
+ * Why a refresh runs: the early-refresh timer, expired access, a 401 from the
+ * backend, `refresh()`, or `retry()` after a failure.
+ */
+type RefreshReason = "proactive" | "expired" | "rejected" | "manual" | "retry";
 
 /** How a refresh ended, inside the cross-tab lock. */
 type RefreshOutcome<U> =
@@ -136,10 +143,12 @@ export function createAuth<Src extends UserSource>(
 		);
 	}
 	const users = resolveUserSource(options.user) as UserResolver<U>;
+	const debug = createDebugger(options.name, options.debug);
 	const persistence = createPersistence(
 		options.storage,
 		options.name,
 		options.maxAge,
+		debug,
 	);
 	const store = atom<AuthState<U>>({
 		status: "initializing",
@@ -159,6 +168,8 @@ export function createAuth<Src extends UserSource>(
 	let unwatch: (() => void) | undefined;
 	let cancelExpiry: (() => void) | undefined;
 	let cancelProactive: (() => void) | undefined;
+	// The last timer plan reported to `debug`.
+	let reportedPlan: string | undefined;
 
 	// Restoration. `session` is meaningful only once `initialized` is true;
 	// `initialization` is the restore in progress, if any.
@@ -224,6 +235,36 @@ export function createAuth<Src extends UserSource>(
 		return flight ? "refreshing" : "unavailable";
 	}
 
+	/**
+	 * Sets the state, reporting a change of status, session, or error. Reports
+	 * first: listeners run inside `store.set`, and a change they make must
+	 * appear after the one that caused it.
+	 */
+	function setState(next: AuthState<U>) {
+		const previous = store.get();
+		if (
+			debug.on &&
+			(previous.status !== next.status ||
+				previous.sessionId !== next.sessionId ||
+				previous.error !== next.error)
+		)
+			debug.log(
+				"state",
+				previous.status === next.status
+					? next.status
+					: `${previous.status} → ${next.status}`,
+				{
+					status: next.status,
+					previous: previous.status,
+					sessionId: next.sessionId,
+					version: next.version,
+					...debug.secret({ user: next.user }),
+				},
+				next.error ?? undefined,
+			);
+		store.set(next);
+	}
+
 	function publish(error: AuthError | null = null) {
 		const status = deriveStatus();
 		const user = SIGNED_IN[status] ? session!.user : null;
@@ -234,7 +275,7 @@ export function createAuth<Src extends UserSource>(
 			previous.user !== user ||
 			previous.sessionId !== sessionId;
 		// `SIGNED_IN` keeps `user` set exactly for the statuses whose type has one.
-		store.set(
+		setState(
 			Object.freeze({
 				status,
 				user,
@@ -257,14 +298,30 @@ export function createAuth<Src extends UserSource>(
 		const remaining = session.expiresAt - Date.now();
 		if (remaining <= 0) return;
 		cancelExpiry = setLongTimeout(() => {
+			debug.log("timer", "expiry fired");
 			// The browser clock may have moved while the timer waited.
 			if (valid()) schedule();
 			else inBackground(resolveSession());
 		}, remaining);
+		let early: number | undefined;
 		if (options.refresh && session.refreshToken && !refreshAttempted) {
-			cancelProactive = setLongTimeout(
-				() => inBackground(refreshSession(session!, false)),
-				proactiveRefreshDelay(remaining),
+			early = proactiveRefreshDelay(remaining);
+			cancelProactive = setLongTimeout(() => {
+				debug.log("timer", "early refresh fired");
+				inBackground(refreshSession(session!, "proactive"));
+			}, early);
+		}
+		if (!debug.on) return;
+		// Mounting schedules again with nothing changed; report a plan once.
+		const plan = `${session.id}:${session.expiresAt}:${refreshAttempted}`;
+		if (plan !== reportedPlan) {
+			reportedPlan = plan;
+			debug.log(
+				"timer",
+				early === undefined
+					? `expiry in ${seconds(remaining)}`
+					: `expiry in ${seconds(remaining)}, early refresh in ${seconds(early)}`,
+				{ expiresInMs: remaining, earlyRefreshInMs: early },
 			);
 		}
 	}
@@ -429,10 +486,16 @@ export function createAuth<Src extends UserSource>(
 		// than what was read, and storage receives it next.
 		if (revision !== before) return;
 		if (!stored) {
-			if (session) forget();
+			if (session) {
+				debug.log("sync", "another tab signed out");
+				forget();
+			}
 			return;
 		}
-		if (stored.id !== session?.id) return reload();
+		if (stored.id !== session?.id) {
+			debug.log("sync", "another tab signed in", { sessionId: stored.id });
+			return reload();
+		}
 		const userUnchanged = users.unchanged(stored, session);
 		const tokensUnchanged =
 			stored.accessToken === session.accessToken &&
@@ -470,6 +533,12 @@ export function createAuth<Src extends UserSource>(
 					!sameSaved(current, stored)
 				)
 					return;
+				debug.log(
+					"sync",
+					"another tab saved a user this tab rejects; signing out",
+					undefined,
+					error,
+				);
 				await discardSaved(error);
 				return;
 			}
@@ -486,11 +555,19 @@ export function createAuth<Src extends UserSource>(
 		}
 		if (!tokensUnchanged) refreshAttempted = false;
 		if (!sameUser(user, previousUser)) profileVersion++;
+		debug.log(
+			"sync",
+			tokensUnchanged
+				? "applied another tab's profile update"
+				: "applied another tab's new tokens",
+			{ sessionId: stored.id },
+		);
 		install({ ...tokensOf(stored), id: stored.id, user });
 	}
 
 	/**
-	 * Signs out after the backend rejected `accessToken`, session `id`'s token.
+	 * Signs out after the backend rejected `accessToken`, session `id`'s token,
+	 * or it expired with no way to refresh it; `cause` says which.
 	 * If another tab has already replaced that session in storage, keeps the
 	 * replacement. Resolves `undefined`, ending nothing, if this tab replaced
 	 * the token while storage was read.
@@ -498,13 +575,14 @@ export function createAuth<Src extends UserSource>(
 	async function endSession(
 		id: string,
 		accessToken: string,
+		cause: string,
 	): Promise<InternalSession<U> | null | undefined> {
 		const stored = await latest(id);
 		if (!session) return null;
 		if (session.id !== id) throw sessionChanged();
 		if (session.accessToken !== accessToken) return undefined;
 		if (stored === null) return followStorage(id);
-		await signOut(false);
+		await signOut(false, cause);
 		return null;
 	}
 
@@ -521,6 +599,8 @@ export function createAuth<Src extends UserSource>(
 		/** Restoring work that is asynchronous can be aborted and times out. */
 		const bounded = <T>(value: MaybePromise<T>): MaybePromise<T> =>
 			isThenable(value) ? runTask(() => value, controller.signal) : value;
+		const started = Date.now();
+		debug.log("restore", "started");
 		const restored = attempt(
 			() =>
 				chain(persistence.read(), (stored) => {
@@ -537,9 +617,18 @@ export function createAuth<Src extends UserSource>(
 					"Could not restore auth",
 					cause,
 				);
-				if (rejectsSaved(error)) return discardSaved(error);
+				if (rejectsSaved(error)) {
+					debug.log(
+						"restore",
+						"discarded the saved session",
+						undefined,
+						error,
+					);
+					return discardSaved(error);
+				}
+				debug.log("restore", "failed", undefined, error);
 				const previous = store.get();
-				store.set({
+				setState({
 					...previous,
 					status: "unavailable",
 					error,
@@ -556,6 +645,22 @@ export function createAuth<Src extends UserSource>(
 				revision++;
 			}
 			initialized = true;
+			if (debug.on)
+				debug.log(
+					"restore",
+					restoredSession ? "found a saved session" : "no saved session",
+					{
+						durationMs: Date.now() - started,
+						sessionId: restoredSession?.id ?? null,
+						...(restoredSession && {
+							expired: !valid(),
+							...debug.secret({
+								...tokensOf(restoredSession),
+								user: restoredSession.user,
+							}),
+						}),
+					},
+				);
 			// An expired session publishes when its refresh starts.
 			if (!session || valid()) publish();
 			schedule();
@@ -613,13 +718,34 @@ export function createAuth<Src extends UserSource>(
 			rejectedToken = undefined;
 			refreshAttempted = false;
 			profileVersion++;
-			await commit({ ...tokens, id: createId(), user });
+			const next = { ...tokens, id: createId(), user };
+			await commit(next);
+			if (!debug.on) return;
+			// A sign-in or sign-out during the write replaced `next`.
+			if (session !== next)
+				debug.log("sign-in", "superseded by a newer sign-in or sign-out", {
+					sessionId: next.id,
+				});
+			else
+				debug.log("sign-in", "signed in", {
+					sessionId: next.id,
+					...debug.secret({ ...tokensOf(next), user }),
+				});
 		} catch (cause) {
-			throw toAuthError(
+			const error = toAuthError(
 				"USER_VALIDATION_FAILED",
 				"Could not accept the user",
 				cause,
 			);
+			debug.log(
+				"sign-in",
+				error.code === "SESSION_CHANGED"
+					? "superseded by a newer sign-in or sign-out"
+					: "rejected",
+				undefined,
+				error,
+			);
+			throw error;
 		}
 	}
 
@@ -628,8 +754,17 @@ export function createAuth<Src extends UserSource>(
 	 * the user asked to sign out, revokes the ended tokens on the backend. A
 	 * session the backend already rejected is not revoked.
 	 */
-	async function signOut(revoke: boolean) {
+	async function signOut(revoke: boolean, cause: string) {
 		const revokeHandler = options.revoke;
+		// Before restoring finishes, `session` is still unknown, and ending it
+		// is a sign-out too.
+		debug.log(
+			"sign-out",
+			initialized && !session
+				? `nothing to sign out (${cause}); clearing the saved session anyway`
+				: `signed out: ${cause}`,
+			{ sessionId: session?.id ?? null },
+		);
 		const ended =
 			revoke && revokeHandler && session
 				? {
@@ -648,6 +783,12 @@ export function createAuth<Src extends UserSource>(
 				"Could not clear the saved session",
 				cause,
 			);
+			debug.log(
+				"sign-out",
+				"could not clear the saved session",
+				undefined,
+				clearFailure,
+			);
 		}
 		let revokeFailure: AuthError | undefined;
 		if (ended) {
@@ -657,12 +798,14 @@ export function createAuth<Src extends UserSource>(
 					(signal) => revokeHandler!({ ...ended, signal }),
 					new AbortController().signal,
 				);
+				debug.log("sign-out", "revoked the tokens");
 			} catch (cause) {
 				revokeFailure = new AuthError(
 					"REVOKE_FAILED",
 					"Could not revoke the session",
 					{ cause },
 				);
+				debug.log("sign-out", "revoke failed", undefined, revokeFailure);
 			}
 		}
 		// A session started since then is not the one these failures belong to.
@@ -720,18 +863,25 @@ export function createAuth<Src extends UserSource>(
 
 	async function refreshSession(
 		captured: { id: string; accessToken: string },
-		rejected: boolean,
+		reason: RefreshReason,
 	): Promise<InternalSession<U> | null> {
 		if (!session) return null;
 		if (session.id !== captured.id) throw sessionChanged();
 		if (session.accessToken !== captured.accessToken) return resolveSession();
-		if (rejected) rejectedToken = captured.accessToken;
+		if (reason === "rejected") rejectedToken = captured.accessToken;
 		if (flight) {
+			debug.log("refresh", `joined the refresh in progress (${reason})`);
 			if (!valid()) publish(store.get().error);
 			return flight;
 		}
 		if (!options.refresh || !session.refreshToken) {
-			const ended = await endSession(session.id, session.accessToken);
+			const ended = await endSession(
+				session.id,
+				session.accessToken,
+				reason === "rejected"
+					? "the backend rejected the access token, and there is no refresh token or callback"
+					: "access expired, and there is no refresh token or callback",
+			);
 			return ended === undefined ? resolveSession() : ended;
 		}
 		const expected = epoch;
@@ -741,6 +891,11 @@ export function createAuth<Src extends UserSource>(
 		const lifecycle = controller.signal;
 		refreshAttempted = true;
 		failure = undefined;
+		const started = Date.now();
+		debug.log("refresh", `started (${reason})`, {
+			sessionId: current.id,
+			reason,
+		});
 		const promise = (async () => {
 			try {
 				const run = async (): Promise<RefreshOutcome<U>> => {
@@ -770,7 +925,10 @@ export function createAuth<Src extends UserSource>(
 								after.accessToken !== (stored ?? current).accessToken)
 						)
 							return { kind: "stale" };
-						await signOut(false);
+						await signOut(
+							false,
+							"the backend rejected the refresh token",
+						);
 						return { kind: "signedOut" };
 					}
 					if (
@@ -801,17 +959,35 @@ export function createAuth<Src extends UserSource>(
 					rejectedToken = undefined;
 					refreshAttempted = false;
 					const next = { ...result.tokens, id: current.id, user };
+					const installed = (message: string) => {
+						if (debug.on)
+							debug.log("refresh", message, {
+								sessionId: next.id,
+								durationMs: Date.now() - started,
+								expiresInMs:
+									next.expiresAt === undefined
+										? undefined
+										: next.expiresAt - Date.now(),
+								...debug.secret(tokensOf(next)),
+							});
+					};
 					if (result.adopted && profile === profileVersion) {
 						install(next);
+						installed("used the tokens another tab saved");
 						return { kind: "installed", session: next };
 					}
 					await commit(next);
 					assertEpoch(expected);
+					installed("saved new tokens");
 					return { kind: "installed", session: next };
 				};
 				const outcome = await persistence.exclusive(lifecycle, run);
 				switch (outcome.kind) {
 					case "stale":
+						debug.log(
+							"refresh",
+							"another tab replaced the session; following it",
+						);
 						return followStorage(current.id);
 					case "signedOut":
 						return null;
@@ -832,6 +1008,12 @@ export function createAuth<Src extends UserSource>(
 					"REFRESH_FAILED",
 					"Could not refresh the session",
 					cause,
+				);
+				debug.log(
+					"refresh",
+					"failed",
+					{ sessionId: current.id, durationMs: Date.now() - started },
+					error,
 				);
 				if (!valid()) failure = error;
 				publish(error);
@@ -855,7 +1037,7 @@ export function createAuth<Src extends UserSource>(
 		if (!session) return null;
 		if (valid()) return session;
 		if (failure && !retry) throw failure;
-		return refreshSession(session, false);
+		return refreshSession(session, retry ? "retry" : "expired");
 	}
 
 	/** The current session, restored or refreshed if needed. */
@@ -875,11 +1057,15 @@ export function createAuth<Src extends UserSource>(
 				"Refreshing needs a refresh callback and a refresh token",
 			);
 		}
-		return refreshSession(session, false);
+		return refreshSession(session, "manual");
 	}
 
 	function mount() {
+		// Only the first mount and the last unmount start and stop anything.
+		// Later mounts, such as `SessionGate`'s own or a foreground re-check,
+		// would only add noise.
 		if (mounts++ === 0) {
+			debug.log("mount", "mounted: timers running");
 			unwatch = persistence.watch(() => inBackground(sync()));
 			// Another tab may have changed the session while nothing watched.
 			if (initialized) inBackground(sync());
@@ -897,6 +1083,7 @@ export function createAuth<Src extends UserSource>(
 			// may have rotated the refresh token, so cancelling it would lose the
 			// new one and send the spent one next time.
 			if (--mounts === 0) {
+				debug.log("mount", "unmounted: timers stopped");
 				unwatch?.();
 				unwatch = undefined;
 				stopTimers();
@@ -925,7 +1112,7 @@ export function createAuth<Src extends UserSource>(
 		signIn,
 		signOut: () => {
 			cancelSignIn();
-			return signOut(true);
+			return signOut(true, "requested");
 		},
 		getSession: async () => toSession(await resolveSession()),
 		retry: async () => toSession(await resume(true)),
@@ -939,7 +1126,7 @@ export function createAuth<Src extends UserSource>(
 				toCredentials(
 					await refreshSession(
 						{ id: captured.sessionId, accessToken: captured.accessToken },
-						true,
+						"rejected",
 					),
 				),
 			reject: async (captured: Credentials) => {
@@ -947,13 +1134,18 @@ export function createAuth<Src extends UserSource>(
 					session?.id === captured.sessionId &&
 					session.accessToken === captured.accessToken
 				)
-					await endSession(captured.sessionId, captured.accessToken);
+					await endSession(
+						captured.sessionId,
+						captured.accessToken,
+						"the backend rejected the access token",
+					);
 			},
 		},
 	};
 	// A user read from the access token changes only with the token.
-	return (users.saved ? { ...client, updateUser } : client) as AuthClient<
-		U,
-		I
-	>;
+	const result = (
+		users.saved ? { ...client, updateUser } : client
+	) as AuthClient<U, I>;
+	registerDebugger(result, debug);
+	return result;
 }

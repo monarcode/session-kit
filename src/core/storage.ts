@@ -35,6 +35,18 @@ export type AuthStorage = {
 		signal: AbortSignal,
 		work: () => Promise<T>,
 	) => Promise<T>;
+	/**
+	 * Called by each `createAuth` whose `debug` option is on, with the key it
+	 * saves under and a function that adds the adapter's own events about that
+	 * key, such as why it discarded a saved value, to that auth's debug log.
+	 * One adapter can serve several auth names, so keep a function per key.
+	 * `sensitive` says whether saved values may appear in `data`.
+	 */
+	debug?: (
+		key: string,
+		report: (message: string, data?: Record<string, unknown>) => void,
+		sensitive: boolean,
+	) => void;
 };
 
 export type WebStorageOptions = {

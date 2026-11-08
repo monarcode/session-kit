@@ -1,5 +1,6 @@
 import { AppState } from "react-native";
 
+import { debuggerOf } from "../core/debug.js";
 import type { AuthClient } from "../core/types.js";
 
 /**
@@ -18,13 +19,19 @@ import type { AuthClient } from "../core/types.js";
  * every return. Returns a function that stops watching.
  */
 export function watchForeground(
-	client: Pick<AuthClient<unknown, unknown>, "mount">,
+	client: Pick<AuthClient<unknown, unknown>, "mount" | "state">,
 ): () => void {
+	const debug = debuggerOf(client);
 	let current = AppState.currentState;
 	const subscription = AppState.addEventListener("change", (next) => {
 		const returning = next === "active" && current !== "active";
 		current = next;
-		if (returning) client.mount()();
+		if (!returning) return;
+		debug.log(
+			"foreground",
+			"back in the foreground: re-checking the session",
+		);
+		client.mount()();
 	});
 	return () => subscription.remove();
 }

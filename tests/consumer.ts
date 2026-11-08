@@ -13,6 +13,7 @@ import {
 	memoryStorage,
 	webStorage,
 	type AuthClient,
+	type AuthDebugEvent,
 	type AuthState,
 	type AuthStorage,
 	type RefreshFn,
@@ -141,6 +142,30 @@ createAuth({
 // @ts-expect-error Storage is required.
 createAuth({ name: "no-storage", user: userSchema });
 
+// Debugging: on, a function receiving each event, or options.
+const debugBase = { name: "debug", user: userSchema, storage: memoryStorage() };
+createAuth({ ...debugBase, debug: true });
+createAuth({
+	...debugBase,
+	debug: (event: AuthDebugEvent) => {
+		const type: "refresh" | "state" | "gate" | (string & {}) = event.type;
+		void [type, event.name, event.message, event.data, event.error?.code];
+	},
+});
+createAuth({ ...debugBase, debug: { sensitive: true } });
+createAuth({ ...debugBase, debug: { log: () => {}, sensitive: false } });
+// @ts-expect-error Events have a fixed set of types.
+const badType: AuthDebugEvent["type"] = "network";
+void badType;
+// @ts-expect-error `sensitive` is a boolean.
+createAuth({ ...debugBase, debug: { sensitive: "yes" } });
+// A storage adapter can report its own events.
+const reportingStorage: AuthStorage = {
+	...memoryStorage(),
+	debug: (key, report, sensitive) => report("ready", { key, sensitive }),
+};
+void reportingStorage;
+
 // A user read from the access token: tokens only, and no `updateUser`.
 const tokenAuth = createAuth({
 	name: "token-user",
@@ -245,6 +270,9 @@ expo.SessionGate({
 	children: null,
 });
 expo.SessionGate({});
+expo.SessionGate({ ready: false });
+// @ts-expect-error `ready` is a boolean.
+expo.SessionGate({ ready: "yes" });
 // @ts-expect-error The gate retries through the client, so it needs `retry`.
 expo.SessionGate({ client: { state: expoAuth.state, mount: expoAuth.mount } });
 expo.rememberDeepLink(expoAuth, "myapp://orders/42", { loginPath: "/sign-in" });

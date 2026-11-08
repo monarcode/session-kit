@@ -120,6 +120,18 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			? {}
 			: { keychainAccessible: options.keychainAccessible };
 
+	// Set by each auth whose `debug` option is on, per SecureStore key, so an
+	// adapter shared by several auth names reports to the right one.
+	const reporters = new Map<
+		string,
+		(message: string, data?: Record<string, unknown>) => void
+	>();
+	const report = (
+		base: string,
+		message: string,
+		data?: Record<string, unknown>,
+	) => reporters.get(base)?.(message, { entry: base, ...data });
+
 	// Auth runs storage operations one at a time, in order, and waits for a
 	// read that returns a promise. So cleanup this adapter needs is returned
 	// from the operation that finds it, never left running beside the next.
@@ -172,7 +184,8 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	 * Reads as signed out once the unreadable value is removed. A failed
 	 * removal reads as signed out too: the next write replaces what is left.
 	 */
-	function discard(base: string): Promise<null> {
+	function discard(base: string, reason: string): Promise<null> {
+		report(base, `discarded the saved value: ${reason}`);
 		return removeAll(base).then(
 			() => null,
 			() => null,
@@ -181,7 +194,7 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 
 	function readValue(base: string): string | null | Promise<null> {
 		const head = readItem(base);
-		if (head === undefined) return discard(base);
+		if (head === undefined) return discard(base, "Android can't decrypt it");
 		if (head === null) return null;
 		if (head.startsWith("0:")) return head.slice(2);
 		const layout = layoutOf(head);
@@ -190,7 +203,13 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		let value = "";
 		for (let index = 0; index < layout.count; index++) {
 			const chunk = readItem(chunkKey(base, layout.slot, index));
-			if (chunk == null) return discard(base);
+			if (chunk == null)
+				return discard(
+					base,
+					chunk === undefined
+						? "Android can't decrypt a piece of it"
+						: "a piece of it is missing",
+				);
 			value += chunk;
 		}
 		return value;
@@ -215,10 +234,26 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			// Leftovers from a longer write that was cut short.
 			await removeChunks(base, slot, chunks.length);
 			await setItemAsync(base, `1:${slot}:${chunks.length}`, store);
+			report(base, `split the value across ${chunks.length} keys`, {
+				slot,
+				chunks: chunks.length,
+			});
 		}
 		// The previous chunks are unreachable now. Failing to remove them
 		// doesn't undo the write, and the next write to that slot replaces them.
 		if (previous) await removeChunks(base, previous.slot, 0).catch(() => {});
+	}
+
+	/**
+	 * Whether `base` holds anything, read only to report it, and only while
+	 * debugging. A failure here leaves it to the removal, which reports it.
+	 */
+	function hasLeftover(base: string): boolean {
+		try {
+			return readItem(base) !== null;
+		} catch {
+			return false;
+		}
 	}
 
 	// Keys checked for a session left by an earlier install. A failed check
@@ -238,9 +273,16 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		}
 		// The marker is created only after the removal, so an install cut short
 		// before then removes again on the next launch.
+		const leftover = reporters.has(base) && hasLeftover(base);
 		return removeAll(base).then(() => {
 			if (!marker.exists) marker.create();
 			checked.add(base);
+			report(
+				base,
+				leftover
+					? "removed a session an earlier install left in the keychain"
+					: "first use on this install: nothing from an earlier install",
+			);
 		});
 	}
 
@@ -259,6 +301,9 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			const base = encodeKey(key);
 			await ready(base);
 			await removeAll(base);
+		},
+		debug(key, next) {
+			reporters.set(encodeKey(key), next);
 		},
 	};
 }

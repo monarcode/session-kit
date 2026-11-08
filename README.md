@@ -46,6 +46,7 @@ them. Your backend does the authentication; session-kit does the rest:
   - [Storage](#storage)
   - [Tabs](#tabs)
   - [Errors](#errors)
+  - [Debugging](#debugging)
 - [Security notes](#security-notes)
 - [Entry points](#entry-points)
 - [Development](#development)
@@ -704,6 +705,30 @@ If storage cannot be written, the session ends and the error is published. If
 it cannot be cleared, sign-out still takes effect in this tab, but the promise
 rejects and the error stays visible: retry `signOut()` once storage is
 available, because undeleted credentials could survive a reload.
+
+### Debugging
+
+The `debug` option reports what auth does: restores, refreshes and why they
+ran, timers, storage operations and how long they took, other tabs' changes,
+state changes, and what ended a session.
+
+```ts
+const auth = createAuth({ ...options, debug: true });
+// [session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
+```
+
+- `true` logs each event as one `console.info` line.
+- A function receives each `AuthDebugEvent` instead: `{ name, type, message,
+data?, error? }`, for example to add Sentry breadcrumbs. `type` is one of a
+  fixed set, such as `"refresh"` or `"storage"`; the wording of `message` and
+  the fields in `data` may change in any release.
+- Events leave out tokens, saved values, and user fields; a session appears as
+  its `sessionId`, and an error as its code and message, without the cause.
+  `{ sensitive: true }` puts them in, so keep it to development builds.
+  `{ log, sensitive }` sets both.
+
+A storage adapter can add its own events through the optional `debug` member
+of `AuthStorage`, as `secureStorage()` does.
 
 ## Security notes
 
