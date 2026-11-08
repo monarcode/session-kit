@@ -2,9 +2,18 @@ import {
 	createRootRouteWithContext,
 	createRouter,
 } from "@tanstack/react-router";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
 import { z } from "zod";
 
+import {
+	Auth,
+	AuthFailure,
+	type AuthFailureCode,
+	type RegisteredSession,
+} from "../dist/effect/index.js";
 import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
@@ -48,6 +57,12 @@ const router = createRouter({ routeTree: root, context: { auth } });
 declare module "@tanstack/react-router" {
 	interface Register {
 		router: typeof router;
+	}
+}
+
+declare module "../dist/effect/index.js" {
+	interface Register {
+		auth: typeof auth;
 	}
 }
 
@@ -321,3 +336,57 @@ createAuth({
 });
 // @ts-expect-error `seal` and `open` come together.
 createAuth({ ...debugBase, locking: { seal: (payload: string) => payload } });
+
+// Effect: the registered client types every Effect.
+const effectSession: Effect.Effect<RegisteredSession, AuthFailure, Auth> =
+	Auth.session;
+const effectEmail = Auth.session.pipe(
+	Effect.map((session) => session.user.email),
+);
+const effectEmailType: Effect.Effect<string, AuthFailure, Auth> = effectEmail;
+const effectMaybe: Effect.Effect<
+	Option.Option<{ sessionId: string }>,
+	AuthFailure,
+	Auth
+> = Auth.sessionOption;
+const effectStatuses: Stream.Stream<string, never, Auth> = Auth.changes.pipe(
+	Stream.map((state) => state.status),
+);
+const effectHandled: Effect.Effect<string, never, Auth> = effectEmail.pipe(
+	Effect.catchTag("AuthFailure", (failure) => Effect.succeed(failure.code)),
+);
+const effectProvided: Effect.Effect<string, AuthFailure> = Effect.provide(
+	effectEmail,
+	Auth.layer(auth),
+);
+Auth.signIn({ accessToken: "a", user: { id: "1", email: "a@example.com" } });
+// @ts-expect-error signIn takes the registered client's user input.
+Auth.signIn({ accessToken: "a", user: { id: 1 } });
+Auth.updateUser({ id: "1", email: "b@example.com" });
+// @ts-expect-error updateUser takes the registered client's user input.
+Auth.updateUser({ id: "1" });
+class ProfileUnavailable {
+	readonly _tag = "ProfileUnavailable";
+}
+declare const fetchProfile: Effect.Effect<
+	{ id: string; email: string },
+	ProfileUnavailable,
+	"Api"
+>;
+const effectUpdate: Effect.Effect<
+	void,
+	AuthFailure | ProfileUnavailable,
+	Auth | "Api"
+> = Auth.updateUser(fetchProfile);
+// @ts-expect-error INVALID_OPTIONS is a defect, never a failure.
+const effectMisuse: AuthFailureCode = "INVALID_OPTIONS";
+void [
+	effectSession,
+	effectEmailType,
+	effectMaybe,
+	effectStatuses,
+	effectHandled,
+	effectProvided,
+	effectUpdate,
+	effectMisuse,
+];

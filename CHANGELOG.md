@@ -4,6 +4,15 @@
 
 ### Added
 
+- `@monarcode/session-kit/effect` provides the client as an Effect
+  service, `Auth`, for apps built on `effect` 4.1 or newer, an optional peer
+  dependency. Register the client's type once through `Register`, provide
+  it with `Auth.layer(auth)`, and use `Auth.session`, `Auth.sessionOption`,
+  `Auth.credentials`, `Auth.renew`, `Auth.signIn`, `Auth.signOut`,
+  `Auth.updateUser` (which also takes an Effect that fetches the user) and
+  `Auth.changes`, a `Stream` of the state. They fail with `AuthFailure`, a
+  tagged error carrying the `AuthErrorCode` as `code`; `INVALID_OPTIONS` is
+  a defect. The [Effect guide](./docs/effect.md) walks through it.
 - A `debug` option on `createAuth` reports what auth does: restores,
   refreshes and why they ran, timers, storage operations, other tabs'
   changes, state changes, and what ended a session. `true` logs to

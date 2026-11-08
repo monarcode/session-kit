@@ -35,6 +35,7 @@ them. Your backend does the authentication; session-kit does the rest:
 - [Quick start: TanStack Router](#quick-start-tanstack-router)
 - [Other setups](#other-setups)
 - [Expo Router](./docs/expo.md)
+- [Effect](./docs/effect.md)
 - [Using the client](#using-the-client)
   - [State](#state)
   - [Sessions and credentials](#sessions-and-credentials)
@@ -507,6 +508,10 @@ app.
 **Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
 in any React app.
 
+**Effect.** `@monarcode/session-kit/effect` provides the client as an Effect
+service, `Auth`, whose Effects fail with a tagged `AuthFailure`. The
+[Effect guide](./docs/effect.md) shows how to register and provide it.
+
 ## Using the client
 
 ### State
@@ -808,6 +813,7 @@ of `AuthStorage`, as `secureStorage()` does.
 | `@monarcode/session-kit/react-router`    | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                            |
 | `@monarcode/session-kit/expo`            | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                 |
 | `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                         |
+| `@monarcode/session-kit/effect`          | `Auth`, `AuthFailure`, `Register`, types                                                                  |
 
 Do not import internal `dist` paths.
 
@@ -824,8 +830,9 @@ pnpm run check
 `check` runs Oxlint and Oxfmt, builds the package, runs the tests, and
 type-checks the tests, the consumer declarations, and every TypeScript example
 marked with a `file:` comment: this README's under NodeNext and Bundler
-resolution, and the [Expo guide](./docs/expo.md)'s under Bundler resolution,
-as Metro resolves, without DOM types. `pnpm test` runs the runtime tests
+resolution, the [Expo guide](./docs/expo.md)'s under Bundler resolution,
+as Metro resolves, without DOM types, and the [Effect guide](./docs/effect.md)'s
+under both. `pnpm test` runs the runtime tests
 twice: with synchronous storage, and with storage that settles every operation
 late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
 the package and every example app.

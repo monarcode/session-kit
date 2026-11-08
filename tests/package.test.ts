@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { sep } from "node:path";
 import test from "node:test";
 
 import {
@@ -8,6 +9,7 @@ import {
 	memoryStorage,
 	webStorage,
 } from "@monarcode/session-kit";
+import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import {
@@ -41,8 +43,19 @@ test("all public entry points import without browser globals", () => {
 		RouterSessionOutlet,
 		useAuthRevalidation,
 		createAuthFetch,
+		Auth,
+		AuthFailure,
 	]) {
 		assert.equal(typeof fn, "function");
+	}
+});
+
+test("only the Effect entry imports effect, an optional peer", async () => {
+	const dist = new URL("dist/", packageRoot);
+	for (const file of await readdir(dist, { recursive: true })) {
+		if (!file.endsWith(".js") || file.startsWith(`effect${sep}`)) continue;
+		const code = await readFile(new URL(file, dist), "utf8");
+		assert.doesNotMatch(code, /from "effect[/"]/, file);
 	}
 });
 

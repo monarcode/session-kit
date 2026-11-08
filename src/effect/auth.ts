@@ -1,0 +1,375 @@
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+
+import { AuthError } from "../core/errors.js";
+import type { AuthClient, Credentials } from "../core/types.js";
+import {
+	type AuthFailure,
+	fromAuthError,
+	fromPromise,
+	unauthenticated,
+} from "./failure.js";
+
+/**
+ * Register your client's type here, once, so `Auth`'s Effects carry your
+ * user. Without it they're typed with an `unknown` user.
+ *
+ * @example
+ * ```ts
+ * import { createAuth, memoryStorage } from "@monarcode/session-kit";
+ * import { Auth } from "@monarcode/session-kit/effect";
+ * import { z } from "zod";
+ *
+ * export const auth = createAuth({
+ * 	name: "app",
+ * 	user: z.object({ id: z.string(), name: z.string() }),
+ * 	storage: memoryStorage(),
+ * });
+ *
+ * declare module "@monarcode/session-kit/effect" {
+ * 	interface Register {
+ * 		auth: typeof auth;
+ * 	}
+ * }
+ *
+ * export const AuthLive = Auth.layer(auth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface Register {}
+
+/**
+ * What `Auth` needs from a client: any client `createAuth` returns fits.
+ * Inputs are `never` and listeners take `unknown`, so every client's
+ * methods match.
+ */
+type ClientShape = {
+	state: {
+		get: () => unknown;
+		subscribe: (listener: (state: unknown) => void) => {
+			unsubscribe: () => void;
+		};
+	};
+	signIn: (input: never) => Promise<void>;
+	signOut: () => Promise<void>;
+	getSession: () => Promise<unknown>;
+	credentials: {
+		get: () => Promise<Credentials | null>;
+		renew: (credentials: Credentials) => Promise<Credentials | null>;
+	};
+};
+
+/**
+ * The client registered in {@link Register}, or a client with an `unknown`
+ * user when none is.
+ *
+ * @example
+ * ```ts
+ * import type { RegisteredAuth } from "@monarcode/session-kit/effect";
+ *
+ * declare const client: RegisteredAuth;
+ * export const status = client.state.get().status;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RegisteredAuth = Register extends {
+	readonly auth: infer Client extends ClientShape;
+}
+	? Client
+	: AuthClient<unknown, unknown>;
+
+/**
+ * What {@link Auth.layer} takes: the registered client, or any client while
+ * none is registered.
+ */
+type LayerClient = Register extends { readonly auth: ClientShape }
+	? RegisteredAuth
+	: ClientShape;
+
+/**
+ * The session {@link Auth.session} resolves: the registered client's
+ * `Session`, never `null`.
+ *
+ * @example
+ * ```ts
+ * import type { RegisteredSession } from "@monarcode/session-kit/effect";
+ *
+ * export const greet = (session: RegisteredSession) => session.sessionId;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RegisteredSession = NonNullable<
+	Awaited<ReturnType<RegisteredAuth["getSession"]>>
+>;
+
+/**
+ * The registered client's `AuthState`, as {@link Auth.changes} emits it.
+ *
+ * @example
+ * ```ts
+ * import type { RegisteredState } from "@monarcode/session-kit/effect";
+ *
+ * export const signedIn = (state: RegisteredState) =>
+ * 	state.status === "authenticated" || state.status === "refreshing";
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RegisteredState = ReturnType<RegisteredAuth["state"]["get"]>;
+
+/**
+ * What {@link Auth.signIn} takes: the registered client's `signIn` input.
+ *
+ * @example
+ * ```ts
+ * import type { RegisteredSignIn } from "@monarcode/session-kit/effect";
+ *
+ * declare const input: RegisteredSignIn;
+ * export const token = input.accessToken;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RegisteredSignIn = Parameters<RegisteredAuth["signIn"]>[0];
+
+/**
+ * What {@link Auth.updateUser} takes: the registered client's user input, or
+ * `never` for a client whose user comes from the access token.
+ *
+ * @example
+ * ```ts
+ * import type { RegisteredUserInput } from "@monarcode/session-kit/effect";
+ *
+ * declare const next: RegisteredUserInput;
+ * export const user: unknown = next;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RegisteredUserInput = RegisteredAuth extends {
+	updateUser: (input: infer Input) => Promise<void>;
+}
+	? Exclude<Input, () => Promise<unknown>>
+	: never;
+
+/**
+ * The auth client as an Effect service, with Effects for what Effect code
+ * does with a session. Provide it with {@link Auth.layer}; register the
+ * client's type in {@link Register} so the Effects carry your user.
+ *
+ * Each Effect fails with an `AuthFailure` whose `code` is the client's
+ * `AuthErrorCode`, and dies on misuse (`INVALID_OPTIONS`). The layer doesn't
+ * mount the client: `AuthProvider`, `SessionGate` or the router adapters do,
+ * or call `auth.mount()` yourself. `lock()` and `unlock()` stay on the
+ * client.
+ *
+ * @example
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import { createAuth, memoryStorage } from "@monarcode/session-kit";
+ * import { Auth } from "@monarcode/session-kit/effect";
+ * import { z } from "zod";
+ *
+ * const auth = createAuth({
+ * 	name: "app",
+ * 	user: z.object({ name: z.string() }),
+ * 	storage: memoryStorage(),
+ * });
+ *
+ * const program = Effect.map(Auth.session, (session) => session.sessionId);
+ *
+ * export const run = () =>
+ * 	Effect.runPromise(Effect.provide(program, Auth.layer(auth)));
+ * ```
+ *
+ * @since 0.1.0
+ */
+export class Auth extends Context.Service<Auth, RegisteredAuth>()(
+	"@monarcode/session-kit/effect/Auth",
+) {
+	/**
+	 * Provides `client` as the {@link Auth} service.
+	 */
+	static readonly layer = (client: LayerClient): Layer.Layer<Auth> =>
+		Layer.succeed(Auth, client as RegisteredAuth);
+
+	/**
+	 * The current session, refreshing expired access first, as
+	 * `getSession()` does. Fails with `UNAUTHENTICATED` when signed out, and
+	 * with `LOCKED`, `REFRESH_FAILED`, `PERSISTENCE_FAILED` or
+	 * `SESSION_CHANGED` as `getSession()` rejects.
+	 */
+	static readonly session: Effect.Effect<
+		RegisteredSession,
+		AuthFailure,
+		Auth
+	> = Auth.use((client) =>
+		Effect.flatMap(
+			fromPromise(() => client.getSession()),
+			(session) =>
+				session === null
+					? Effect.fail(unauthenticated("Sign in is required"))
+					: Effect.succeed(session as RegisteredSession),
+		),
+	);
+
+	/**
+	 * Like {@link Auth.session}, but signed out is `Option.none()` rather than
+	 * a failure, for code where that's expected.
+	 */
+	static readonly sessionOption: Effect.Effect<
+		Option.Option<RegisteredSession>,
+		AuthFailure,
+		Auth
+	> = Auth.use((client) =>
+		Effect.map(
+			fromPromise(() => client.getSession()),
+			(session) => Option.fromNullishOr(session as RegisteredSession | null),
+		),
+	);
+
+	/**
+	 * The current access token and session ID, for an API request. Fails as
+	 * {@link Auth.session} does. Code that only needs the user should use
+	 * {@link Auth.session}, which holds no tokens.
+	 */
+	static readonly credentials: Effect.Effect<Credentials, AuthFailure, Auth> =
+		Auth.use((client) =>
+			Effect.flatMap(
+				fromPromise(() => client.credentials.get()),
+				(credentials) =>
+					credentials === null
+						? Effect.fail(unauthenticated("Sign in is required"))
+						: Effect.succeed(credentials),
+			),
+		);
+
+	/**
+	 * New credentials after the backend rejected `credentials`, for example
+	 * with a 401. Calls at the same time share one refresh. Fails with
+	 * `UNAUTHENTICATED` when that ended the session, and with
+	 * `SESSION_CHANGED` when the session has moved on.
+	 */
+	static readonly renew = (
+		credentials: Credentials,
+	): Effect.Effect<Credentials, AuthFailure, Auth> =>
+		Auth.use((client) =>
+			Effect.flatMap(
+				fromPromise(() => client.credentials.renew(credentials)),
+				(renewed) =>
+					renewed === null
+						? Effect.fail(unauthenticated("The session has ended"))
+						: Effect.succeed(renewed),
+			),
+		);
+
+	/**
+	 * Saves a new session from `input`, as `signIn` does: for example after
+	 * a login request. Fails with `USER_VALIDATION_FAILED`,
+	 * `INVALID_SESSION`, `PERSISTENCE_FAILED` or `SESSION_CHANGED`.
+	 */
+	static readonly signIn = (
+		input: RegisteredSignIn,
+	): Effect.Effect<void, AuthFailure, Auth> =>
+		Auth.use((client) =>
+			fromPromise(() =>
+				(client.signIn as (input: unknown) => Promise<void>)(input),
+			),
+		);
+
+	/**
+	 * Signs out, as `signOut` does. Fails with `PERSISTENCE_FAILED` when
+	 * storage can't be cleared; a failed `revoke` succeeds and stays on
+	 * `state.error`.
+	 */
+	static readonly signOut: Effect.Effect<void, AuthFailure, Auth> = Auth.use(
+		(client) => fromPromise(() => client.signOut()),
+	);
+
+	/**
+	 * Replaces the user, as `updateUser` does. Pass the user, or an Effect
+	 * that fetches it: the session is captured before the Effect runs, so a
+	 * profile fetched for one account never lands on another. The Effect's
+	 * own failure is this one's, unchanged. Dies for a client whose user
+	 * comes from the access token, which has no `updateUser`.
+	 */
+	static readonly updateUser = <E = never, R = never>(
+		input: RegisteredUserInput | Effect.Effect<RegisteredUserInput, E, R>,
+	): Effect.Effect<void, AuthFailure | E, Auth | R> =>
+		Effect.gen(function* (): Effect.fn.Return<
+			void,
+			AuthFailure | E,
+			Auth | R
+		> {
+			const client = yield* Auth;
+			const update = (
+				client as { updateUser?: (input: unknown) => Promise<void> }
+			).updateUser;
+			if (!update)
+				return yield* Effect.die(
+					new AuthError(
+						"INVALID_OPTIONS",
+						"updateUser needs a user schema; this client reads its user from the access token",
+					),
+				);
+			if (!Effect.isEffect(input))
+				return yield* fromPromise(() => update(input));
+			const fetchUser = input as Effect.Effect<RegisteredUserInput, E, R>;
+			const run = Effect.runPromiseExitWith(yield* Effect.context<R>());
+			// The input Effect's own failure, rethrown here once `updateUser`
+			// has wrapped it in `USER_VALIDATION_FAILED`.
+			let failed: Cause.Cause<E> | undefined;
+			return yield* fromPromise((signal) =>
+				update(async () => {
+					const exit = await run(fetchUser, { signal });
+					if (Exit.isSuccess(exit)) return exit.value;
+					failed = exit.cause;
+					throw Cause.squash(exit.cause);
+				}),
+			).pipe(
+				Effect.catch((failure): Effect.Effect<never, AuthFailure | E> =>
+					failed ? Effect.failCause(failed) : Effect.fail(failure),
+				),
+			);
+		});
+
+	/**
+	 * The client's `AuthState`, now and on every change, for as long as the
+	 * stream runs.
+	 */
+	static readonly changes: Stream.Stream<RegisteredState, never, Auth> =
+		Stream.unwrap(
+			Auth.useSync((client) =>
+				Stream.callback<RegisteredState>((queue) =>
+					Effect.acquireRelease(
+						Effect.sync(() => {
+							Queue.offerUnsafe(
+								queue,
+								client.state.get() as RegisteredState,
+							);
+							return client.state.subscribe((state) => {
+								Queue.offerUnsafe(queue, state as RegisteredState);
+							});
+						}),
+						(subscription) =>
+							Effect.sync(() => subscription.unsubscribe()),
+					),
+				),
+			),
+		);
+
+	/**
+	 * Fails with the `AuthFailure` for `error`, an `AuthError` from code
+	 * outside `Auth`. Anything else, and `INVALID_OPTIONS`, is a defect.
+	 */
+	static readonly fromAuthError = fromAuthError;
+}

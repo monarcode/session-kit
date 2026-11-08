@@ -105,6 +105,12 @@ const documents = [
 		dom: false,
 		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
 	},
+	{
+		path: "docs/effect.md",
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {},
+	},
 ];
 
 /** The entry point of each subpath, whose exports are the public API. */
@@ -115,6 +121,7 @@ const entries = [
 	"react-router/index",
 	"http/index",
 	"expo/index",
+	"effect/index",
 ];
 
 const root = fileURLToPath(new URL("../", import.meta.url));
