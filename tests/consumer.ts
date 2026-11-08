@@ -14,7 +14,11 @@ import {
 	webStorage,
 	type AuthClient,
 	type AuthDebugEvent,
+	type AuthDebugType,
+	type AuthErrorCode,
+	type AuthLocking,
 	type AuthState,
+	type AuthStatus,
 	type AuthStorage,
 	type RefreshFn,
 	type UserInput,
@@ -103,6 +107,11 @@ function greet(state: AuthState<{ email: string }>) {
 		const sessionId: string = state.sessionId;
 		return { email, sessionId };
 	}
+	// A locked session keeps its user, so `user` alone doesn't mean access.
+	// @ts-expect-error `user` may still be set while locked.
+	const notYet: null = state.user;
+	void notYet;
+	if (state.status === "locked") return { email: state.user.email };
 	const signedOut: null = state.user;
 	return signedOut;
 }
@@ -278,3 +287,35 @@ expo.SessionGate({ client: { state: expoAuth.state, mount: expoAuth.mount } });
 expo.rememberDeepLink(expoAuth, "myapp://orders/42", { loginPath: "/sign-in" });
 // @ts-expect-error The deep link is kept for one client.
 expo.rememberDeepLink("myapp://orders/42");
+
+// Locking: `true`, or the app's `seal` and `open`, which may be async.
+createAuth({ ...debugBase, locking: true });
+const sealing: AuthLocking = {
+	seal: (payload) => payload,
+	open: async (sealed) => sealed,
+};
+const lockable = createAuth({ ...debugBase, locking: sealing });
+const relocked: Promise<void> = lockable.lock();
+const unlocked: Promise<{ sessionId: string; user: { email: string } } | null> =
+	lockable.unlock();
+void [relocked, unlocked];
+const lockedState = lockable.state.get();
+if (lockedState.status === "locked") {
+	// A locked session keeps its user and ID.
+	const lockedEmail: string = lockedState.user.email;
+	const lockedId: string = lockedState.sessionId;
+	void [lockedEmail, lockedId];
+}
+const lockedStatus: AuthStatus = "locked";
+const lockedCodes: AuthErrorCode[] = ["LOCKED", "UNLOCK_FAILED"];
+const lockEvents: AuthDebugType = "lock";
+void [lockedStatus, lockedCodes, lockEvents];
+createAuth({
+	name: "token-lock",
+	user: fromAccessToken(z.object({ sub: z.string() })),
+	storage: memoryStorage(),
+	// @ts-expect-error Locking needs a user schema.
+	locking: true,
+});
+// @ts-expect-error `seal` and `open` come together.
+createAuth({ ...debugBase, locking: { seal: (payload: string) => payload } });

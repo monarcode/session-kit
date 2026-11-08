@@ -7,6 +7,7 @@ import {
 
 import { Outlet, useMatch, useRouter } from "@tanstack/react-router";
 
+import type { AuthStatus } from "../core/types.js";
 import {
 	assertAuthSource,
 	useAuthState,
@@ -46,11 +47,15 @@ export function SessionOutlet({
 		"Provide an auth client in Router context or AuthProvider before rendering SessionOutlet",
 	);
 	const signedIn = useAuthState(auth, (state) => {
-		const { user, sessionId } = state as {
-			user: unknown;
+		const { status, sessionId } = state as {
+			status: AuthStatus;
 			sessionId: string | null;
 		};
-		return user === null ? null : sessionId;
+		// `status`, not `user`: a locked session has a user but no usable
+		// access, and locking is for native apps, so it shows `pending`.
+		return status === "authenticated" || status === "refreshing"
+			? sessionId
+			: null;
 	});
 	// The nearest match is this route's, whose context holds what its guard returned.
 	const match: { context?: { session?: { sessionId?: unknown } } } = useMatch({

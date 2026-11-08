@@ -419,3 +419,51 @@ test("SessionOutlet keeps child routes through profile updates and swaps them on
 		disconnect();
 	}
 });
+
+test("SessionOutlet shows pending for a locked session, and the guard sends it to sign in", async () => {
+	const auth = newClient({ locking: true });
+	await signIn(auth);
+	const {
+		createRouter,
+		createRootRouteWithContext,
+		createRoute,
+		createMemoryHistory,
+		RouterProvider,
+	} = routerModule;
+	const { requireSession, SessionOutlet } = routerBinding;
+	const root = createRootRouteWithContext<{ auth: Client }>()({});
+	const login = createRoute({
+		getParentRoute: () => root,
+		path: "/login",
+		component: () => h("output", null, "login"),
+	});
+	const guarded = createRoute({
+		getParentRoute: () => root,
+		id: "guarded",
+		beforeLoad: ({ context, location }) =>
+			requireSession(context.auth, { location, loginPath: "/login" }),
+		component: () => h(SessionOutlet, { pending: "checking" }),
+	});
+	const home = createRoute({
+		getParentRoute: () => guarded,
+		path: "/",
+		component: () => h("output", null, "home"),
+	});
+	const router = createRouter({
+		routeTree: root.addChildren([login, guarded.addChildren([home])]),
+		context: { auth },
+		history: createMemoryHistory({ initialEntries: ["/"] }),
+	});
+	await act(() => router.load());
+	const view = await render(
+		h(RouterProvider, { router: router as AnyRouter }),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "home");
+	// Not connected, so only the outlet sees the lock.
+	await act(() => auth.lock());
+	assert.equal(view.container.textContent, "checking");
+	await act(() => router.invalidate());
+	await settle();
+	assert.equal(view.container.textContent, "login");
+});

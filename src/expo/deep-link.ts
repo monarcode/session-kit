@@ -108,7 +108,8 @@ export function rememberDeepLink(
 
 /**
  * What a change of status or screen does to a remembered link: a sign-in
- * opens it if it was waiting and forgets it; while signed out, it waits,
+ * opens it if it was waiting and forgets it; while signed out or locked, it
+ * waits,
  * unless the screen it names is already showing, since anyone may see that
  * one. Restoring and unavailable access leave it as it is, as does a
  * `pathname` still equal to `launch`, Expo Router's reading of the launch
@@ -134,6 +135,8 @@ function nextLink(
 						link: undefined,
 						why: "dropped: the app opened signed in, so Expo Router showed it",
 					};
+		// Unlocking opens it, as a sign-in does.
+		case "locked":
 		case "unauthenticated":
 			if (sameRoute(pathname, link.path)) {
 				// A guarded screen moves off it; one open to anyone stays, and the

@@ -59,6 +59,32 @@ declare module "@tanstack/react-router" {
 `;
 
 /**
+ * The parts of `@noble/ciphers` and `expo-crypto` the Expo guide's locking
+ * example uses. They are the app's dependencies, not session-kit's.
+ */
+const LOCKING_DEPS = `
+declare module "@noble/ciphers/aes.js" {
+  export function gcm(
+    key: Uint8Array,
+    nonce: Uint8Array,
+    AAD?: Uint8Array,
+  ): {
+    encrypt(plaintext: Uint8Array): Uint8Array;
+    decrypt(ciphertext: Uint8Array): Uint8Array;
+  };
+}
+declare module "@noble/ciphers/utils.js" {
+  export function bytesToHex(bytes: Uint8Array): string;
+  export function hexToBytes(hex: string): Uint8Array;
+  export function utf8ToBytes(text: string): Uint8Array;
+  export function bytesToUtf8(bytes: Uint8Array): string;
+}
+declare module "expo-crypto" {
+  export function getRandomBytes(byteCount: number): Uint8Array;
+}
+`;
+
+/**
  * Documents whose TypeScript examples, marked with a `<!-- file: path -->`
  * comment, are written out and type-checked as one project per document:
  * under each listed module resolution, with `lib`, and with `fixtures`, the
@@ -77,7 +103,7 @@ const documents = [
 		resolutions: ["Bundler"],
 		// No DOM, so browser-only code fails as it would on a device.
 		lib: ["ES2022"],
-		fixtures: {},
+		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
 	},
 ];
 

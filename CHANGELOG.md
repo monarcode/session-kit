@@ -19,6 +19,29 @@
   hidden, even if the gate remounts. The deep link opened after a sign-in
   waits for `ready` too.
 
+- `locking` on `createAuth` restores a saved session as the new `locked`
+  status, with `user` and `sessionId` set and its tokens waiting for
+  `auth.unlock()`, for native apps that ask a returning user to unlock, for
+  example with biometrics. `{ seal, open }` encrypts the saved tokens with a
+  key the app holds; `locking: true` stores them as they are. `auth.lock()`
+  locks again, keeping the saved session. While locked, `getSession`,
+  `retry`, `refresh`, `updateUser`, `credentials.get`, and
+  `credentials.renew` reject with `LOCKED`, and nothing refreshes.
+  `unlock()` refreshes expired access at once; if that refresh fails, it
+  rejects with `REFRESH_FAILED`, and the session is unlocked but
+  `unavailable`. `open` runs only when unlocking. `SessionGate` renders the navigator for a locked session, and a remembered
+  deep link opens after the unlock. The router adapters treat a locked
+  session as signed out.
+
+### Changed
+
+- `AuthStatus` adds `"locked"`, and `AuthErrorCode` adds `"LOCKED"` and
+  `"UNLOCK_FAILED"`, so a `switch` that covers every value needs the new
+  cases. `AuthClient` adds `lock` and `unlock`, which reject without
+  `locking`. Without `locking`, no state is ever `locked`.
+- TanStack Router's `SessionOutlet` reads `status` rather than `user`, so a
+  locked session shows `pending`.
+
 ### Fixed
 
 - A cold-start deep link to a guarded screen is no longer dropped as

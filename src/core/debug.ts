@@ -13,7 +13,8 @@ export type AuthDebugType =
 	| "mount"
 	| "gate"
 	| "deep-link"
-	| "foreground";
+	| "foreground"
+	| "lock";
 
 /**
  * One thing auth did, for reading while debugging. `type` is stable; the

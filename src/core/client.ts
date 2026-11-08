@@ -1,10 +1,19 @@
 import { atom } from "nanostores";
 
 import { createDebugger, registerDebugger, seconds } from "./debug.js";
-import { AuthError, toAuthError, sessionChanged } from "./errors.js";
+import {
+	AuthError,
+	toAuthError,
+	sessionChanged,
+	sessionLocked,
+} from "./errors.js";
 import { createId } from "./id.js";
 import { attempt, chain, isThenable, type MaybePromise } from "./maybe.js";
-import { createPersistence, type StoredSession } from "./persistence.js";
+import {
+	createPersistence,
+	type SavedEntry,
+	type StoredSession,
+} from "./persistence.js";
 import { obtainTokens } from "./refresh.js";
 import {
 	resolveUserSource,
@@ -16,6 +25,7 @@ import { setLongTimeout, proactiveRefreshDelay } from "./timers.js";
 import { receiveTokens, tokensOf, type SessionTokens } from "./tokens.js";
 import type {
 	AuthClient,
+	AuthLocking,
 	AuthOptions,
 	AuthState,
 	AuthStatus,
@@ -29,6 +39,9 @@ import type {
 import { sameUser } from "./user.js";
 
 type InternalSession<U> = SessionTokens & { id: string; user: U };
+
+/** A locked session: what is known without its tokens. */
+type LockedSession<U> = { id: string; user: U };
 
 /**
  * Why a refresh runs: the early-refresh timer, expired access, a 401 from the
@@ -57,6 +70,7 @@ const SIGNED_IN = {
 	initializing: false,
 	authenticated: true,
 	refreshing: true,
+	locked: true,
 	unauthenticated: false,
 	unavailable: false,
 } satisfies Record<AuthStatus, boolean>;
@@ -69,6 +83,7 @@ const GUARD_STATUS = {
 	initializing: "initializing",
 	authenticated: "authenticated",
 	refreshing: "authenticated",
+	locked: "locked",
 	unauthenticated: "unauthenticated",
 	unavailable: "unavailable",
 } satisfies Record<AuthStatus, AuthStatus>;
@@ -143,12 +158,19 @@ export function createAuth<Src extends UserSource>(
 		);
 	}
 	const users = resolveUserSource(options.user) as UserResolver<U>;
+	const locking = options.locking as true | AuthLocking | undefined;
+	if (locking && !users.saved) {
+		throw new Error(
+			"locking needs a user schema: a user read from the access token can't be shown while its tokens are locked",
+		);
+	}
 	const debug = createDebugger(options.name, options.debug);
 	const persistence = createPersistence(
 		options.storage,
 		options.name,
 		options.maxAge,
 		debug,
+		locking === true ? undefined : locking,
 	);
 	const store = atom<AuthState<U>>({
 		status: "initializing",
@@ -175,6 +197,9 @@ export function createAuth<Src extends UserSource>(
 	// `initialization` is the restore in progress, if any.
 	let session: InternalSession<U> | null = null;
 	let initialized = false;
+	// With `locking`, the session while `locked`. `session` is then `null`,
+	// except while `lock()` waits for a refresh already running.
+	let locked: LockedSession<U> | null = null;
 	let initialization: Promise<void> | undefined;
 
 	// Storage operations settle after the decisions that issued them, so this
@@ -215,11 +240,14 @@ export function createAuth<Src extends UserSource>(
 	 * tab may have refreshed this session, signed out, or signed in again.
 	 * Resolves the saved session (possibly newer than memory), `null` when this
 	 * tab's session is no longer the saved one, or `undefined` when storage is
-	 * unreadable and memory is the best remaining source.
+	 * unreadable and memory is the best remaining source. With `locking` there
+	 * is no other context, so memory is current: storage isn't read, and
+	 * sealed tokens aren't opened again.
 	 */
 	async function latest(
 		id: string,
 	): Promise<StoredSession | null | undefined> {
+		if (locking) return undefined;
 		try {
 			const stored = await persistence.read();
 			return stored?.id === id ? stored : null;
@@ -230,6 +258,7 @@ export function createAuth<Src extends UserSource>(
 
 	function deriveStatus(): AuthStatus {
 		if (!initialized) return "initializing";
+		if (locked) return "locked";
 		if (!session) return "unauthenticated";
 		if (valid()) return "authenticated";
 		return flight ? "refreshing" : "unavailable";
@@ -267,8 +296,9 @@ export function createAuth<Src extends UserSource>(
 
 	function publish(error: AuthError | null = null) {
 		const status = deriveStatus();
-		const user = SIGNED_IN[status] ? session!.user : null;
-		const sessionId = session?.id ?? null;
+		const current = locked ?? session;
+		const user = SIGNED_IN[status] ? current!.user : null;
+		const sessionId = current?.id ?? null;
 		const previous = store.get();
 		const changed =
 			GUARD_STATUS[previous.status] !== GUARD_STATUS[status] ||
@@ -294,7 +324,8 @@ export function createAuth<Src extends UserSource>(
 
 	function schedule() {
 		stopTimers();
-		if (!mounts || !session || session.expiresAt === undefined) return;
+		if (!mounts || locked || !session || session.expiresAt === undefined)
+			return;
 		const remaining = session.expiresAt - Date.now();
 		if (remaining <= 0) return;
 		cancelExpiry = setLongTimeout(() => {
@@ -344,6 +375,7 @@ export function createAuth<Src extends UserSource>(
 	function forget(error: AuthError | null = null) {
 		advanceEpoch();
 		session = null;
+		locked = null;
 		revision++;
 		initialized = true;
 		rejectedToken = undefined;
@@ -454,6 +486,7 @@ export function createAuth<Src extends UserSource>(
 	async function reload() {
 		advanceEpoch();
 		session = null;
+		locked = null;
 		revision++;
 		initialized = false;
 		rejectedToken = undefined;
@@ -603,13 +636,26 @@ export function createAuth<Src extends UserSource>(
 		debug.log("restore", "started");
 		const restored = attempt(
 			() =>
-				chain(persistence.read(), (stored) => {
-					assertEpoch(expected);
-					if (!stored) return finish(null);
-					return chain(bounded(users.restore(stored)), (user) =>
-						finish({ ...tokensOf(stored), id: stored.id, user }),
-					);
-				}),
+				locking
+					? // Without opening the tokens. Locking needs a user schema, whose
+						// restore reads only `user`.
+						chain(persistence.readEntry(), (entry) => {
+							assertEpoch(expected);
+							if (!entry) return finish(null);
+							return chain(
+								bounded(
+									users.restore(entry as unknown as StoredSession),
+								),
+								(user) => finishLocked({ id: entry.id, user }),
+							);
+						})
+					: chain(persistence.read(), (stored) => {
+							assertEpoch(expected);
+							if (!stored) return finish(null);
+							return chain(bounded(users.restore(stored)), (user) =>
+								finish({ ...tokensOf(stored), id: stored.id, user }),
+							);
+						}),
 			(cause): MaybePromise<void> => {
 				assertEpoch(expected);
 				const error = toAuthError(
@@ -665,6 +711,19 @@ export function createAuth<Src extends UserSource>(
 			if (!session || valid()) publish();
 			schedule();
 		}
+		/** Installs a saved session as locked, once this restore is still current. */
+		function finishLocked(restoredLock: LockedSession<U>) {
+			assertEpoch(expected);
+			locked = restoredLock;
+			revision++;
+			initialized = true;
+			debug.log("restore", "found a saved session: locked", {
+				durationMs: Date.now() - started,
+				sessionId: restoredLock.id,
+				...debug.secret({ user: restoredLock.user }),
+			});
+			publish();
+		}
 		if (!isThenable(restored)) return;
 		const promise = restored;
 		initialization = promise;
@@ -715,6 +774,7 @@ export function createAuth<Src extends UserSource>(
 				);
 			}
 			advanceEpoch();
+			locked = null;
 			rejectedToken = undefined;
 			refreshAttempted = false;
 			profileVersion++;
@@ -760,10 +820,10 @@ export function createAuth<Src extends UserSource>(
 		// is a sign-out too.
 		debug.log(
 			"sign-out",
-			initialized && !session
+			initialized && !session && !locked
 				? `nothing to sign out (${cause}); clearing the saved session anyway`
 				: `signed out: ${cause}`,
-			{ sessionId: session?.id ?? null },
+			{ sessionId: (locked ?? session)?.id ?? null },
 		);
 		const ended =
 			revoke && revokeHandler && session
@@ -865,6 +925,9 @@ export function createAuth<Src extends UserSource>(
 		captured: { id: string; accessToken: string },
 		reason: RefreshReason,
 	): Promise<InternalSession<U> | null> {
+		// Nothing refreshes while locked, including while `lock()` waits for a
+		// refresh that started before it.
+		if (locked) throw sessionLocked();
 		if (!session) return null;
 		if (session.id !== captured.id) throw sessionChanged();
 		if (session.accessToken !== captured.accessToken) return resolveSession();
@@ -1034,6 +1097,7 @@ export function createAuth<Src extends UserSource>(
 		const expected = epoch;
 		await initialize();
 		if (epoch !== expected && session) throw sessionChanged();
+		if (locked) throw sessionLocked();
 		if (!session) return null;
 		if (valid()) return session;
 		if (failure && !retry) throw failure;
@@ -1050,6 +1114,7 @@ export function createAuth<Src extends UserSource>(
 		const expected = epoch;
 		await initialize();
 		if (epoch !== expected && session) throw sessionChanged();
+		if (locked) throw sessionLocked();
 		if (!session) return null;
 		if (!options.refresh || !session.refreshToken) {
 			throw new AuthError(
@@ -1060,15 +1125,149 @@ export function createAuth<Src extends UserSource>(
 		return refreshSession(session, "manual");
 	}
 
+	function requireLocking(method: string) {
+		if (!locking)
+			throw new Error(`Pass locking to createAuth to use ${method}()`);
+	}
+
+	/** Waits for a refresh already running, whatever its outcome. */
+	async function settled() {
+		if (flight)
+			await flight.then(
+				() => {},
+				() => {},
+			);
+	}
+
+	async function lock(): Promise<void> {
+		requireLocking("lock");
+		if (!session || locked) return;
+		const target: LockedSession<U> = { id: session.id, user: session.user };
+		locked = target;
+		stopTimers();
+		debug.log("lock", "locked", { sessionId: target.id });
+		publish();
+		// A refresh already running finishes and saves its tokens: cancelling it
+		// could lose a refresh token the backend already rotated.
+		await settled();
+		// Unless a sign-in, sign-out, or unlock replaced the lock meanwhile.
+		if (locked !== target || session?.id !== target.id) return;
+		// The refresh may have brought a new user.
+		if (session.user !== target.user)
+			locked = { id: target.id, user: session.user };
+		session = null;
+		revision++;
+		publish();
+	}
+
+	// The unlock in progress, which overlapping calls share.
+	let unlocking: Promise<InternalSession<U> | null> | undefined;
+
+	async function unlock(): Promise<Session<U> | null> {
+		requireLocking("unlock");
+		if (!unlocking) {
+			const promise = unlockOnce();
+			unlocking = promise;
+			const clear = () => {
+				if (unlocking === promise) unlocking = undefined;
+			};
+			void promise.then(clear, clear);
+		}
+		return toSession(await unlocking);
+	}
+
+	async function unlockOnce(): Promise<InternalSession<U> | null> {
+		await initialize();
+		const target = locked;
+		if (!target) return resolveSession();
+		let entry: SavedEntry | null;
+		let stored: StoredSession | null;
+		try {
+			entry = await persistence.readEntry();
+			stored = entry && (await persistence.open(entry));
+		} catch (cause) {
+			const error = toAuthError(
+				"UNLOCK_FAILED",
+				"Could not unlock the session",
+				cause,
+			);
+			if (locked !== target) throw sessionChanged();
+			debug.log("lock", "unlock failed", { sessionId: target.id }, error);
+			// The saved session can't be used: sign out, as restoring would.
+			if (rejectsSaved(error)) await discardSaved(error);
+			throw error;
+		}
+		// A sign-in or sign-out during the read.
+		if (locked !== target) throw sessionChanged();
+		if (!stored) {
+			debug.log("lock", "unlock found no saved session", {
+				sessionId: target.id,
+			});
+			forget();
+			return null;
+		}
+		if (stored.id !== target.id) {
+			await reload();
+			throw sessionChanged();
+		}
+		const next: InternalSession<U> = {
+			...tokensOf(stored),
+			id: target.id,
+			user: target.user,
+		};
+		locked = null;
+		rejectedToken = undefined;
+		refreshAttempted = false;
+		adopt(next);
+		if (!valid()) {
+			// Refreshing seals what it saves. If it fails, the session is
+			// unlocked all the same, and `unavailable` until `retry()`.
+			debug.log("lock", "unlocked: access expired, refreshing", {
+				sessionId: next.id,
+			});
+			return resolveSession();
+		}
+		// A session saved before locking was turned on is sealed now, if it
+		// can be. If not, the saved session stays as it was, which is better
+		// than losing it, and the next save seals it. The write is queued
+		// before publishing, so a sign-out from a listener is saved after it.
+		const resealing =
+			entry?.tokens && locking !== true
+				? persistence.write(next)
+				: undefined;
+		publish();
+		debug.log("lock", "unlocked", { sessionId: next.id });
+		if (resealing) {
+			try {
+				await resealing;
+			} catch (cause) {
+				debug.log(
+					"lock",
+					"could not seal the session saved before locking; it stays as it was",
+					{ sessionId: next.id },
+					toAuthError(
+						"PERSISTENCE_FAILED",
+						"Could not seal the session",
+						cause,
+					),
+				);
+			}
+		}
+		return resolveSession();
+	}
+
 	function mount() {
 		// Only the first mount and the last unmount start and stop anything.
 		// Later mounts, such as `SessionGate`'s own or a foreground re-check,
 		// would only add noise.
 		if (mounts++ === 0) {
 			debug.log("mount", "mounted: timers running");
-			unwatch = persistence.watch(() => inBackground(sync()));
-			// Another tab may have changed the session while nothing watched.
-			if (initialized) inBackground(sync());
+			// Locking is for native apps, with no other tab to follow.
+			if (!locking) {
+				unwatch = persistence.watch(() => inBackground(sync()));
+				// Another tab may have changed the session while nothing watched.
+				if (initialized) inBackground(sync());
+			}
 		}
 		// Restores synchronously when it can, before returning. On every call,
 		// not only the first: a re-check after timers were suspended, as in a
@@ -1118,7 +1317,9 @@ export function createAuth<Src extends UserSource>(
 		retry: async () => toSession(await resume(true)),
 		refresh: async () => toSession(await refreshNow()),
 		isCurrent: (captured: { sessionId: string }) =>
-			session?.id === captured.sessionId,
+			(locked ?? session)?.id === captured.sessionId,
+		lock,
+		unlock,
 		mount,
 		credentials: {
 			get: async () => toCredentials(await resolveSession()),

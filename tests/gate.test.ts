@@ -555,3 +555,50 @@ test("a client passed as a wrapper still reports, and keeps its links", async ()
 		lines.includes("deep-link: /profile: opening it after the sign-in"),
 	);
 });
+
+/** A client that restores a saved session as `locked`. */
+const lockingClient = (storage: AuthStorage) =>
+	createAuth({ name: "gate", user: userSchema, storage, locking: true });
+
+/** A locked client, as at launch after an earlier sign-in. */
+async function lockedClient() {
+	const storage = memoryStorage();
+	await lockingClient(storage).signIn({ accessToken: "access-1", user });
+	return lockingClient(storage);
+}
+
+test("a locked session settles the gate, and a cold-start link opens after unlock", async () => {
+	const auth = await lockedClient();
+	navigation.go("/profile");
+	rememberDeepLink(auth, "myapp://profile");
+	const view = await renderGate(auth);
+	await settle();
+	assert.equal(auth.state.get().status, "locked");
+	assert.equal(view.container.textContent, "navigator");
+	assert.equal(navigation.splashHides, 1);
+	// The app's guards send a locked session to its unlock screen.
+	await act(async () => navigation.go("/welcome-back"));
+	assert.deepEqual(navigation.replaced, []);
+	await act(async () => {
+		await auth.unlock();
+	});
+	assert.deepEqual(navigation.replaced, ["/profile"]);
+	assert.equal(mounts.navigator, 1);
+});
+
+test("unlocking, locking, and a password sign-in from locked keep the navigator", async () => {
+	const auth = await lockedClient();
+	navigation.go("/welcome-back");
+	await renderGate(auth);
+	await settle();
+	await act(async () => {
+		await auth.unlock();
+	});
+	await act(() => auth.lock());
+	assert.equal(auth.state.get().status, "locked");
+	await act(() =>
+		auth.signIn({ accessToken: "access-2", user: { ...user, id: "alice" } }),
+	);
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(mounts.navigator, 1);
+});

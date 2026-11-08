@@ -39,6 +39,7 @@ them. Your backend does the authentication; session-kit does the rest:
   - [Signing in and out](#signing-in-and-out)
   - [Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
   - [Users from the access token](#users-from-the-access-token)
+  - [Locking](#locking)
 - [Schemas, refresh, and storage](#schemas-refresh-and-storage)
   - [User schemas](#user-schemas)
   - [Refresh](#refresh)
@@ -522,8 +523,12 @@ error reporting can catch it. Checking `status` narrows `user`:
 | `initializing`    | The saved session is being restored.                                      | `null` |
 | `authenticated`   | Access is usable.                                                         | Set    |
 | `refreshing`      | A refresh is replacing expired or rejected access.                        | Set    |
+| `locked`          | With `locking`, a session is saved, but its tokens wait for `unlock()`.   | Set    |
 | `unauthenticated` | No session; sign-in is needed.                                            | `null` |
 | `unavailable`     | Restoring failed, or a failed refresh left no usable access; see `error`. | `null` |
+
+A locked session keeps its user, so check `status`, not `user`, to know
+whether access is usable.
 
 `state.sessionId` is new on every sign-in and stable across refreshes and
 profile updates; scope private cached data, such as TanStack Query results, to
@@ -609,6 +614,60 @@ such as `exp` or `jti`, out of the user. OAuth providers may change their
 access token format, so this suits backends you control. The
 [`tanstack-start-spa`](./examples/tanstack-start-spa) and
 [`react-router-data`](./examples/react-router-data) examples use this source.
+
+### Locking
+
+For native apps that ask a returning user to unlock, for example with
+biometrics, before the app opens. With `locking`, a saved session restores as
+`locked`: `user` and `sessionId` are set, but the tokens wait for
+`auth.unlock()`.
+
+```ts
+const auth = createAuth({
+  ...options,
+  locking: {
+    // Your app's own encryption, with a key it holds in memory.
+    seal: (payload) => encrypt(key, payload),
+    open: (sealed) => decrypt(key, sealed),
+  },
+});
+
+await auth.unlock(); // once the app has its key: `authenticated`
+await auth.lock(); // `locked` again; the saved session stays
+```
+
+- **Sealing.** `seal` encrypts the tokens, a JSON string, whenever they are
+  saved, and `open` decrypts them when unlocking, and only then. The user and
+  session ID are saved beside them, readable while
+  locked. Either function may return a promise. session-kit depends on no
+  crypto or biometrics library. `locking: true` stores the tokens as they are,
+  for a lock screen in front of an otherwise ordinary session.
+- **Unlocking.** `unlock()` resolves the session. Expired access is refreshed
+  at once, and a refresh token the backend rejects signs out and resolves
+  `null`. Any other refresh failure rejects with `REFRESH_FAILED`, but the
+  session is unlocked all the same: `unavailable` until `retry()`, so check
+  `status` rather than treating every rejection as still locked. When `open`
+  throws, `unlock()` rejects with `UNLOCK_FAILED` and the session stays
+  locked. A saved session that can't be used signs out and rejects with
+  `INVALID_SESSION`. Overlapping calls share one unlock.
+- **While locked.** `getSession`, `retry`, `refresh`, `updateUser`,
+  `credentials.get`, and `credentials.renew` reject with `LOCKED`, rather than
+  waiting for an unlock that may never come. Nothing refreshes, and timers are
+  off. `signIn` replaces the session, which is the password path. `signOut`
+  clears it, without calling `revoke`, since the tokens are sealed.
+- **Locking again.** `lock()` takes the tokens out of memory and keeps the
+  saved session. A refresh already running still saves its tokens, so keep
+  the key until the promise settles.
+- **Native apps.** With `locking`, other tabs' changes aren't followed. The
+  router adapters treat a locked session as signed out. Locking needs a user
+  schema: a user read from the access token can't be shown without its token.
+- **Existing sessions.** A session saved before `locking` was added restores
+  as `locked` too, and is sealed when unlocked. If sealing fails then, it stays
+  as it was, and the next save seals it. Turning `locking` off later
+  makes sealed sessions unreadable, which signs those users out.
+
+The [Expo guide](./docs/expo.md#locking) has a worked example: a key behind
+the device's biometrics, AES-GCM sealing, and a welcome-back screen.
 
 ## Schemas, refresh, and storage
 

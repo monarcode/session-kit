@@ -597,3 +597,35 @@ test("requireSession strips the basename ignoring case and trailing slashes", as
 		/basename must start with/,
 	);
 });
+
+test("declarative mode: SessionOutlet sends a locked session to sign in", async () => {
+	const auth = newClient({ locking: true });
+	await signIn(auth);
+	await auth.lock();
+	const { AuthProvider } = hooks.createAuthHooks<Client>();
+	const { MemoryRouter, Routes, Route } = router;
+	const view = await render(
+		h(
+			AuthProvider,
+			{ client: auth },
+			h(
+				MemoryRouter,
+				{ initialEntries: ["/private"] },
+				h(
+					Routes,
+					null,
+					h(Route, { path: "/login", element: h(Where) }),
+					h(
+						Route,
+						{
+							element: h(binding.SessionOutlet, { loginPath: "/login" }),
+						},
+						h(Route, { path: "/private", element: "private" }),
+					),
+				),
+			),
+		),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "login?redirectTo=%2Fprivate");
+});

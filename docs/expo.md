@@ -25,6 +25,7 @@ client, refresh, and errors work; this guide covers what differs on Expo.
 - [SessionGate](#sessiongate)
 - [Deep links](#deep-links)
 - [Debugging](#debugging)
+- [Locking](#locking)
 - [Not supported](#not-supported)
 
 ## Requirements
@@ -155,7 +156,8 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  // `user` is set exactly while authenticated or refreshing.
+  // Without `locking`, `user` is set exactly while authenticated or
+  // refreshing. With it, check `status`: see Locking.
   const signedIn = useAuth((state) => state.user !== null);
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -406,6 +408,9 @@ keychain, and encrypted with an Android Keystore key.
 - **When the app returns to the foreground** it re-checks the session, because
   timers don't run while iOS suspends the app. An access token that expired in
   the background is refreshed then.
+- **While locked** it renders the navigator, so your guards can show an
+  unlock screen. Neither unlocking nor a password sign-in from the lock
+  screen remounts the navigator.
 - **When one account replaces another** without a sign-out between them, it
   remounts the navigator, so no screen keeps the previous account's component
   state. The screens that were open stay open, as the URL does on the web. A
@@ -422,6 +427,7 @@ decides what to do with it:
 - Signed in already: the link is dropped, and Expo Router opens it as usual.
 - Signed out: once the user signs in, and `ready` is `true`, `SessionGate`
   opens it with `router.replace`.
+- Locked: the same, once the user unlocks or signs in with a password.
 - A link to a screen anyone may see, such as the sign-in screen, is dropped
   once it is shown. If the app launched with it, it is dropped at the sign-in
   instead, unopened, since the screen was already showing.
@@ -458,13 +464,252 @@ and errors' causes. `debug: { sensitive: true }` puts them in, so keep it to dev
 builds. A function, `debug: (event) => ...` or `debug: { log }`, receives each
 event instead of the console, for example to add Sentry breadcrumbs.
 
+## Locking
+
+A returning user can be asked to unlock before the app opens: a
+"Welcome back" screen with Face ID, Touch ID, or a fingerprint, and the
+password as a fallback. With `locking`, a saved session restores as `locked`,
+with `user` and `sessionId` set and its tokens sealed by a key your app holds.
+The [README](../README.md#locking) covers the behaviour; this is the Expo
+side.
+
+Keep a random key in a SecureStore item that needs biometrics to read, and
+seal the tokens with AES-GCM. This example uses `@noble/ciphers` and
+`expo-crypto`, your app's dependencies, not session-kit's:
+
+<!-- file: src/session-key.ts -->
+
+```ts
+import type { AuthLocking } from "@monarcode/session-kit";
+import { gcm } from "@noble/ciphers/aes.js";
+import {
+  bytesToHex,
+  bytesToUtf8,
+  hexToBytes,
+  utf8ToBytes,
+} from "@noble/ciphers/utils.js";
+import { getRandomBytes } from "expo-crypto";
+import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+
+const KEY_ITEM = "session-key";
+// Whether the key needs biometrics: it must be read the way it was saved.
+const BIOMETRIC_ITEM = "session-key-biometric";
+
+function keyOptions(biometric: boolean): SecureStore.SecureStoreOptions {
+  return biometric
+    ? {
+        requireAuthentication: true,
+        authenticationPrompt: "Unlock your account",
+      }
+    : {};
+}
+
+// In memory from an unlock or a password sign-in until the app locks.
+let key: Uint8Array | undefined;
+
+/**
+ * Saves the key behind the device's biometrics, or, on a device with none
+ * enrolled, without them. On Android, saving shows the prompt.
+ */
+async function saveKey(next: Uint8Array): Promise<void> {
+  const biometric = SecureStore.canUseBiometricAuthentication();
+  await SecureStore.setItemAsync(
+    KEY_ITEM,
+    bytesToHex(next),
+    keyOptions(biometric),
+  );
+  await SecureStore.setItemAsync(BIOMETRIC_ITEM, String(biometric));
+}
+
+/** Reads the key, which shows the prompt when it needs biometrics. */
+async function readKey(): Promise<string | null> {
+  const biometric = await SecureStore.getItemAsync(BIOMETRIC_ITEM);
+  if (biometric === null) return null;
+  return SecureStore.getItemAsync(KEY_ITEM, keyOptions(biometric === "true"));
+}
+
+/**
+ * Loads the key to unlock. Throws when the user cancels the prompt, or when
+ * the device's biometrics changed and the key can't be read.
+ */
+export async function loadKey(): Promise<void> {
+  const saved = await readKey();
+  if (saved) {
+    key = hexToBytes(saved);
+    return;
+  }
+  // A session saved before locking was added has no key yet. Make one: on
+  // iOS, saving doesn't prompt, so read it back to show the prompt.
+  const next = getRandomBytes(32);
+  await saveKey(next);
+  if (Platform.OS === "ios" && !(await readKey()))
+    throw new Error("Could not read the new session key");
+  key = next;
+}
+
+/**
+ * Signs in with a new key, and saves it only once the sign-in succeeds: a
+ * failed sign-in keeps the key that the saved session is sealed with.
+ */
+export async function withNewKey<T>(signIn: () => Promise<T>): Promise<T> {
+  const previous = key;
+  const next = getRandomBytes(32);
+  key = next;
+  let result: T;
+  try {
+    result = await signIn();
+  } catch (error) {
+    if (key === next) key = previous;
+    throw error;
+  }
+  try {
+    await saveKey(next);
+  } catch (error) {
+    // The session works until the app closes; then the password unlocks it.
+    console.warn("Could not save the session key", error);
+  }
+  return result;
+}
+
+/** Forgets the key in memory, once `auth.lock()` has settled. */
+export function dropKey(): void {
+  key = undefined;
+}
+
+function loadedKey(): Uint8Array {
+  if (!key) throw new Error("The session key isn't loaded");
+  return key;
+}
+
+/** AES-256-GCM: a random 12-byte nonce, then the ciphertext, as hex. */
+export const sessionLocking: AuthLocking = {
+  seal(payload) {
+    const nonce = getRandomBytes(12);
+    const sealed = gcm(loadedKey(), nonce).encrypt(utf8ToBytes(payload));
+    return bytesToHex(nonce) + bytesToHex(sealed);
+  },
+  open(sealed) {
+    const bytes = hexToBytes(sealed);
+    const nonce = bytes.subarray(0, 12);
+    return bytesToUtf8(gcm(loadedKey(), nonce).decrypt(bytes.subarray(12)));
+  },
+};
+```
+
+A device with no biometrics enrolled can't save an item that needs them, so
+there the key is saved without them, and unlocking asks for nothing beyond
+the device's own lock screen. If your app needs more on those devices, sign
+out instead of locking.
+
+Pass it to the client, and sign in with a new key, so the new session is
+sealed with it:
+
+```ts
+export const auth = createAuth({
+  // ...
+  locking: sessionLocking,
+});
+
+export async function signInWithPassword(username: string, password: string) {
+  // ...
+  await withNewKey(() => auth.signIn({ accessToken, refreshToken, user }));
+}
+```
+
+Guard the screens by `status`, since a locked session keeps its user. The
+unlock screen comes before the sign-in screen, so a locked app opens on it,
+and the sign-in screen stays open to a locked user for the password path:
+
+```tsx
+function RootStack() {
+  const status = useAuth((state) => state.status);
+  const signedIn = status === "authenticated" || status === "refreshing";
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(app)" />
+      </Stack.Protected>
+      <Stack.Protected guard={status === "locked"}>
+        <Stack.Screen name="welcome-back" />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="login" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+```
+
+The unlock screen reads the key, which shows the biometric prompt, then
+unlocks:
+
+<!-- file: app/welcome-back.tsx -->
+
+```tsx
+import { Link } from "expo-router";
+import { useState } from "react";
+import { Button, Text, View } from "react-native";
+
+import { auth, useAuth } from "../src/auth";
+import { loadKey } from "../src/session-key";
+
+export default function WelcomeBack() {
+  const name = useAuth((state) => state.user?.firstName);
+  const [failed, setFailed] = useState(false);
+
+  async function unlock() {
+    setFailed(false);
+    try {
+      await loadKey();
+      await auth.unlock();
+      // No navigation: Stack.Protected leaves this screen, and
+      // SessionGate opens the deep link the user was headed to.
+    } catch {
+      // Cancelled, or the biometrics changed: offer the password. A refresh
+      // that failed after unlocking leaves the session `unavailable`, which
+      // SessionGate shows instead.
+      if (auth.state.get().status === "locked") setFailed(true);
+    }
+  }
+
+  return (
+    <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
+      <Text>Welcome back{name ? `, ${name}` : ""}</Text>
+      <Button title="Unlock" onPress={() => void unlock()} />
+      {failed ? <Text accessibilityRole="alert">Could not unlock</Text> : null}
+      <Link href="/login">Use your password</Link>
+    </View>
+  );
+}
+```
+
+To lock again after some time in the background, lock when the app returns
+to the foreground, then drop the key:
+
+```ts
+let backgroundedAt: number | undefined;
+AppState.addEventListener("change", (next) => {
+  if (next === "background") backgroundedAt = Date.now();
+  else if (next === "active" && backgroundedAt !== undefined) {
+    if (Date.now() - backgroundedAt > 5 * 60_000)
+      void auth.lock().then(dropKey);
+    backgroundedAt = undefined;
+  }
+});
+```
+
+Call `dropKey()` after `auth.signOut()` too. While locked, `SessionGate`
+re-checks nothing on a return to the foreground, and requests through
+`authFetch` reject with `LOCKED` until the user unlocks.
+
 ## Not supported
 
 - **Expo web.** `secureStorage()` and `SessionGate` are for iOS and Android.
 - **`requireAuthentication`.** `secureStorage()` doesn't pass SecureStore's
   biometric prompt: a session that refreshes on its own can't ask for a face
-  or fingerprint on every read and write. Lock the app's screens with
-  `expo-local-authentication` instead.
+  or fingerprint on every read and write. Keep a key behind the prompt
+  instead, and seal the session with it: see [Locking](#locking).
 - **Network status.** session-kit doesn't watch connectivity. When your app
   learns the device is back online, for example from
   `@react-native-community/netinfo`, call `auth.retry()`, or the `retry` that

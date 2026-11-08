@@ -138,6 +138,8 @@ export type Credentials = Readonly<{
  * - `initializing`: restoring the saved session has not finished.
  * - `authenticated`: access is locally usable; `user` is set.
  * - `refreshing`: a refresh is replacing expired or rejected access; `user` stays visible.
+ * - `locked`: with `locking`, a session is saved and `user` is set, but its
+ *   tokens wait for `unlock()`.
  * - `unauthenticated`: no session; sign-in is needed.
  * - `unavailable`: restoration failed, or the credentials cannot supply usable access.
  */
@@ -145,6 +147,7 @@ export type AuthStatus =
 	| "initializing"
 	| "authenticated"
 	| "refreshing"
+	| "locked"
 	| "unauthenticated"
 	| "unavailable";
 
@@ -169,11 +172,13 @@ type SignedOutState<Status extends AuthStatus> = StateFields & {
 
 /**
  * Reactive auth snapshot. Tokens are intentionally excluded. Checking `status`
- * narrows `user`: it is set exactly while `authenticated` or `refreshing`.
+ * narrows `user`: it is set exactly while `authenticated`, `refreshing`, or
+ * `locked`, so check `status`, not `user`, to know whether access is usable.
  */
 export type AuthState<U> =
 	| SignedInState<U, "authenticated">
 	| SignedInState<U, "refreshing">
+	| SignedInState<U, "locked">
 	| SignedOutState<"initializing">
 	| SignedOutState<"unauthenticated">
 	| (StateFields & {
@@ -210,7 +215,9 @@ type AuthClientBase<U, I> = {
 	/**
 	 * Resolves who is signed in, restoring or refreshing the session if needed,
 	 * or `null` when signed out. After a failed refresh, rethrows that failure
-	 * until `retry()`, sign-in, or sign-out.
+	 * until `retry()`, sign-in, or sign-out. Rejects with `LOCKED` while locked,
+	 * as `retry`, `refresh`, `updateUser`, `credentials.get`, and
+	 * `credentials.renew` do.
 	 */
 	getSession: () => Promise<Session<U> | null>;
 	/** Like `getSession()`, but tries a failed refresh again. */
@@ -223,6 +230,27 @@ type AuthClientBase<U, I> = {
 	refresh: () => Promise<Session<U> | null>;
 	/** Whether this snapshot belongs to the current session (same `sessionId`). */
 	isCurrent: (session: { sessionId: string }) => boolean;
+	/**
+	 * Locks the session, with `locking`: the tokens leave memory and timers
+	 * stop, while the saved session stays. `state` turns `locked` at once. A
+	 * refresh already running still saves its tokens, and the promise settles
+	 * after that save, so keep the key `seal` needs until then. Does nothing
+	 * while signed out or locked. Rejects without `locking`.
+	 */
+	lock: () => Promise<void>;
+	/**
+	 * Unlocks a `locked` session, with `locking`: reads the saved tokens,
+	 * opening them with `locking.open`, and resolves the session. Expired
+	 * access is refreshed at once; a refresh token the backend rejects signs
+	 * out and resolves `null`. A refresh that fails otherwise rejects with
+	 * `REFRESH_FAILED`, but the session is unlocked all the same, and
+	 * `unavailable` until `retry()`. Rejects with `UNLOCK_FAILED` when `open`
+	 * throws or returns something other than a string, and the session stays
+	 * locked; a saved session that can't be used signs out and rejects with
+	 * `INVALID_SESSION`. Overlapping calls share one unlock. When not locked,
+	 * resolves like `getSession()`. Rejects without `locking`.
+	 */
+	unlock: () => Promise<Session<U> | null>;
 	/**
 	 * Starts background work: expiry timers and cross-tab sync. Called by
 	 * `AuthProvider` and the router adapters; mounts are counted, and the last
@@ -263,6 +291,19 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 				updateUser: (input: I | (() => Promise<I>)) => Promise<void>;
 			});
 
+/**
+ * Encrypts the saved tokens with a key the app holds, for `locking`.
+ * session-kit stores what `seal` returns beside the user and session ID,
+ * which stay readable while locked, and calls `open` only from `unlock()`:
+ * after that, the tokens are in memory.
+ */
+export type AuthLocking = {
+	/** Encrypts the tokens, a JSON string, whenever they are saved. */
+	seal: (payload: string) => string | Promise<string>;
+	/** Decrypts what `seal` returned. Must throw when it can't. */
+	open: (sealed: string) => string | Promise<string>;
+};
+
 export type AuthOptions<Src extends UserSource> = {
 	/**
 	 * Storage namespace: letters, digits, `_` or `-`, up to 64 characters. Uses
@@ -298,4 +339,12 @@ export type AuthOptions<Src extends UserSource> = {
 	 * createAuth({ ...options, debug: __DEV__ });
 	 */
 	debug?: AuthDebug;
+	/**
+	 * Restores a saved session as `locked`, with its user but not its tokens,
+	 * until `unlock()`. `true` stores the tokens as they are; `{ seal, open }`
+	 * encrypts them with the app's key. For native apps: with `locking`, other
+	 * tabs' changes aren't followed. Needs a user schema, since a user read
+	 * from the access token can't be shown without its token. Default: off.
+	 */
+	locking?: Src extends AccessTokenUser<any, any> ? never : true | AuthLocking;
 };

@@ -21,6 +21,7 @@ export type { AuthStorage, WebStorageOptions } from "./core/storage.js";
 
 export type {
 	AuthClient,
+	AuthLocking,
 	AuthOptions,
 	AuthState,
 	AuthStatus,

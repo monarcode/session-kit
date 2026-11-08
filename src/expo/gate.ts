@@ -165,7 +165,11 @@ export function SessionGate({
 	// Before the first screen, Expo Router's pathname can still be the launch
 	// URL's, so the link would be judged by a screen nobody has seen.
 	useRememberedLink(auth, state.status, !shown || !ready);
-	const accountKey = useAccountKey(state.sessionId);
+	// A locked session counts as signed out here, so neither unlocking nor
+	// a password sign-in from the lock screen remounts the navigator.
+	const accountKey = useAccountKey(
+		state.status === "locked" ? null : state.sessionId,
+	);
 	useEffect(() => {
 		if (accountKey)
 			logGate(
@@ -198,6 +202,8 @@ export function SessionGate({
 			return renderUnavailable(auth, state, unavailable);
 		case "authenticated":
 		case "refreshing":
+		// Settled: the navigator routes to the app's unlock screen.
+		case "locked":
 		case "unauthenticated":
 			return createElement(Fragment, { key: accountKey }, children);
 	}

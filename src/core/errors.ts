@@ -7,7 +7,11 @@ export type AuthErrorCode =
 	| "REFRESH_FAILED"
 	| "REVOKE_FAILED"
 	| "SESSION_CHANGED"
-	| "UNAUTHENTICATED";
+	| "UNAUTHENTICATED"
+	/** The session is locked: `unlock()` it first. */
+	| "LOCKED"
+	/** `locking.open` failed, so the session stays locked. */
+	| "UNLOCK_FAILED";
 
 export type AuthErrorOptions = ErrorOptions & {
 	/** Schema issues behind a `USER_VALIDATION_FAILED` error. */
@@ -40,6 +44,10 @@ export function toAuthError(
 	return cause instanceof AuthError
 		? cause
 		: new AuthError(code, message, { cause });
+}
+
+export function sessionLocked(): AuthError {
+	return new AuthError("LOCKED", "The session is locked; unlock it first");
 }
 
 export function sessionChanged(): AuthError {

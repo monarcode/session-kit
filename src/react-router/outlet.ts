@@ -93,6 +93,9 @@ export function SessionOutlet({
 			if (guarded !== undefined && guarded !== state.sessionId)
 				return createElement(Fragment, null, pending);
 			return createElement(Outlet, { key: state.sessionId });
+		// Locking is for native apps: a locked session goes to the sign-in
+		// page, as a signed-out one does.
+		case "locked":
 		case "unauthenticated":
 			return createElement(Navigate, {
 				to: loginHref(
