@@ -3,7 +3,7 @@ import { beforeEach, test } from "node:test";
 
 import { createElement as h, useEffect } from "react";
 
-import { AuthError } from "@monarcode/session-kit";
+import type { AuthError } from "@monarcode/session-kit";
 
 import {
 	act,
@@ -34,11 +34,26 @@ beforeEach(async () => {
 	hooks = await import("@monarcode/session-kit/react");
 });
 
-/** Shows where the router is, so tests can assert on redirects. */
+/** The sign-in page, showing its query so tests can assert on `redirectTo`. */
 function Where() {
 	const location = router.useLocation();
 	return h("output", null, `login${location.search}`);
 }
+
+/** A data-mode root route that re-runs loaders when auth changes. */
+function Root() {
+	binding.useAuthRevalidation();
+	return h(router.Outlet);
+}
+
+/** A sign-in route loader that sends a signed-in user on to `redirectTo`. */
+const loginLoader =
+	(auth: Client) =>
+	async ({ request }: { request: Request }) => {
+		const redirectTo = new URL(request.url).searchParams.get("redirectTo");
+		await binding.redirectIfSignedIn(auth, { redirectTo });
+		return null;
+	};
 
 /** A home page that counts its mounts and shows the user's email. */
 const homePage = (
@@ -50,7 +65,7 @@ const homePage = (
 		mounts: 0,
 		Home() {
 			const email = useAuth((state) => state.user?.email);
-			useEffect(() => {
+			useEffect(function countMount() {
 				page.mounts++;
 			}, []);
 			return h("output", null, `home:${String(email)}`);
@@ -226,11 +241,7 @@ test("data mode: StrictMode lets a loader's refresh finish and sends the token o
 	const held = heldRefresh();
 	const auth = newClient({ refresh: held.refresh });
 	const { AuthProvider } = hooks.createAuthHooks<Client>();
-	const { createMemoryRouter, RouterProvider, Outlet } = router;
-	function Root() {
-		binding.useAuthRevalidation();
-		return h(Outlet);
-	}
+	const { createMemoryRouter, RouterProvider } = router;
 	const memory = createMemoryRouter(
 		[
 			{
@@ -354,12 +365,8 @@ test("data mode: loaders guard routes and re-run when auth changes", async () =>
 	await signIn(auth);
 	const { AuthProvider, useAuth } = hooks.createAuthHooks<Client>();
 	const page = homePage(useAuth as never);
-	const { createMemoryRouter, RouterProvider, Outlet } = router;
+	const { createMemoryRouter, RouterProvider } = router;
 	let loads = 0;
-	function Root() {
-		binding.useAuthRevalidation();
-		return h(Outlet);
-	}
 	const memory = createMemoryRouter(
 		[
 			{
@@ -367,13 +374,7 @@ test("data mode: loaders guard routes and re-run when auth changes", async () =>
 				children: [
 					{
 						path: "/login",
-						loader: async ({ request }: { request: Request }) => {
-							const redirectTo = new URL(request.url).searchParams.get(
-								"redirectTo",
-							);
-							await binding.redirectIfSignedIn(auth, { redirectTo });
-							return null;
-						},
+						loader: loginLoader(auth),
 						element: h(Where),
 					},
 					{
@@ -445,7 +446,7 @@ test("loader guards redirect with the requested URL and never leave the site", a
 	}
 	await assert.rejects(
 		binding.requireSession(auth, { request, loginPath: "login" }),
-		/loginPath must start with/,
+		{ code: "INVALID_OPTIONS", message: /loginPath must start with/ },
 	);
 });
 
@@ -453,14 +454,9 @@ test("data mode: SessionOutlet waits for the loader to accept a new account", as
 	const auth = newClient();
 	await signIn(auth);
 	const { AuthProvider, useAuth } = hooks.createAuthHooks<Client>();
-	const { createMemoryRouter, RouterProvider, Outlet, useRouteLoaderData } =
-		router;
+	const { createMemoryRouter, RouterProvider, useRouteLoaderData } = router;
 	let hold: Promise<void> | undefined;
 	const mismatches: string[] = [];
-	function Root() {
-		binding.useAuthRevalidation();
-		return h(Outlet);
-	}
 	function Home() {
 		const id = useAuth((state) => state.user?.id);
 		const data = useRouteLoaderData("guarded") as {
@@ -526,13 +522,7 @@ test("data mode: requireSession leaves the basename out of redirectTo", async ()
 		[
 			{
 				path: "/login",
-				loader: async ({ request }: { request: Request }) => {
-					const redirectTo = new URL(request.url).searchParams.get(
-						"redirectTo",
-					);
-					await binding.redirectIfSignedIn(auth, { redirectTo });
-					return null;
-				},
+				loader: loginLoader(auth),
 				element: "login",
 			},
 			{
@@ -594,7 +584,7 @@ test("requireSession strips the basename ignoring case and trailing slashes", as
 			loginPath: "/login",
 			basename: "app",
 		}),
-		/basename must start with/,
+		{ code: "INVALID_OPTIONS", message: /basename must start with/ },
 	);
 });
 

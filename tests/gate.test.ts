@@ -42,13 +42,28 @@ type Client = ReturnType<typeof newClient>;
 
 const { AuthProvider } = createAuthHooks<Client>();
 
-/** Counts how often it mounts, which a remount of the navigator shows. */
+/** Counts navigator mounts, so a remount shows apart from a rerender. */
 const mounts = { navigator: 0 };
 function Navigator() {
-	useEffect(() => {
+	useEffect(function countMount() {
 		mounts.navigator++;
 	}, []);
 	return h("main", null, "navigator");
+}
+
+/** Renders `fallback` with the error a child threw. */
+class Boundary extends Component<
+	{ children?: ReactNode; fallback: (error: unknown) => ReactNode },
+	{ caught: boolean; error: unknown }
+> {
+	override state = { caught: false, error: undefined as unknown };
+	static getDerivedStateFromError(error: unknown) {
+		return { caught: true, error };
+	}
+	override render() {
+		const { caught, error } = this.state;
+		return caught ? this.props.fallback(error) : this.props.children;
+	}
 }
 
 const unavailable = ({ error, retry }: UnavailableProps) => {
@@ -112,27 +127,23 @@ test("shows unavailable instead of the navigator until retry succeeds", async ()
 
 test("without unavailable, the error reaches the error boundary and the splash hides", async (t) => {
 	t.mock.method(console, "error", () => {});
-	class Boundary extends Component<
-		{ children: ReactNode },
-		{ error: unknown }
-	> {
-		override state = { error: null as unknown };
-		static getDerivedStateFromError(error: unknown) {
-			return { error };
-		}
-		override render() {
-			const { error } = this.state;
-			return error
-				? h("p", null, `boundary: ${(error as AuthError).code}`)
-				: this.props.children;
-		}
-	}
 	const lock = lockable();
 	const view = await render(
 		h(
 			AuthProvider,
 			{ client: newClient(lock.storage) },
-			h(Boundary, null, h(SessionGate, null, h(Navigator))),
+			h(
+				Boundary,
+				{
+					fallback: (error) =>
+						h(
+							"p",
+							null,
+							`boundary: ${(error as AuthError | undefined)?.code}`,
+						),
+				},
+				h(SessionGate, null, h(Navigator)),
+			),
 		),
 	);
 	await settle();
@@ -275,7 +286,7 @@ test("rememberDeepLink checks loginPath like safeReturnTo", () => {
 	const auth = newClient();
 	assert.throws(
 		() => rememberDeepLink(auth, "myapp://x", { loginPath: "login" }),
-		/loginPath must start with "\/"/,
+		{ code: "INVALID_OPTIONS", message: /loginPath must start with "\/"/ },
 	);
 });
 
@@ -318,7 +329,7 @@ function renderReady(auth: Client, initial: boolean, strict = false) {
 	mounts.navigator = 0;
 	function Root() {
 		const [ready, setReady] = useState(initial);
-		useEffect(() => {
+		useEffect(function exposeSetReady() {
 			readiness.set = setReady;
 		}, []);
 		return h(
@@ -511,25 +522,11 @@ test("gate events don't repeat under StrictMode", async () => {
 
 test("the error boundary path is reported once", async (t) => {
 	t.mock.method(console, "error", () => {});
-	class Boundary extends Component<
-		{ children: ReactNode },
-		{ error: unknown }
-	> {
-		override state = { error: null as unknown };
-		static getDerivedStateFromError(error: unknown) {
-			return { error };
-		}
-		override render() {
-			return this.state.error
-				? h("p", null, "boundary")
-				: this.props.children;
-		}
-	}
 	const { auth, lines } = debugClient(false, lockable().storage);
 	const view = await render(
 		h(
 			Boundary,
-			null,
+			{ fallback: () => h("p", null, "boundary") },
 			h(AuthProvider, { client: auth }, h(SessionGate, null, h(Navigator))),
 		),
 	);
@@ -596,9 +593,7 @@ test("unlocking, locking, and a password sign-in from locked keep the navigator"
 	});
 	await act(() => auth.lock());
 	assert.equal(auth.state.get().status, "locked");
-	await act(() =>
-		auth.signIn({ accessToken: "access-2", user: { ...user, id: "alice" } }),
-	);
+	await act(() => auth.signIn({ accessToken: "access-2", user }));
 	assert.equal(auth.state.get().status, "authenticated");
 	assert.equal(mounts.navigator, 1);
 });

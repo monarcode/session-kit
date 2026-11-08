@@ -107,7 +107,6 @@ function greet(state: AuthState<{ email: string }>) {
 		const sessionId: string = state.sessionId;
 		return { email, sessionId };
 	}
-	// A locked session keeps its user, so `user` alone doesn't mean access.
 	// @ts-expect-error `user` may still be set while locked.
 	const notYet: null = state.user;
 	void notYet;
@@ -301,13 +300,16 @@ const unlocked: Promise<{ sessionId: string; user: { email: string } } | null> =
 void [relocked, unlocked];
 const lockedState = lockable.state.get();
 if (lockedState.status === "locked") {
-	// A locked session keeps its user and ID.
 	const lockedEmail: string = lockedState.user.email;
 	const lockedId: string = lockedState.sessionId;
 	void [lockedEmail, lockedId];
 }
 const lockedStatus: AuthStatus = "locked";
-const lockedCodes: AuthErrorCode[] = ["LOCKED", "UNLOCK_FAILED"];
+const lockedCodes: AuthErrorCode[] = [
+	"LOCKED",
+	"UNLOCK_FAILED",
+	"INVALID_OPTIONS",
+];
 const lockEvents: AuthDebugType = "lock";
 void [lockedStatus, lockedCodes, lockEvents];
 createAuth({

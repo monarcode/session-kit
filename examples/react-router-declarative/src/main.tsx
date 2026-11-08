@@ -15,9 +15,15 @@ import { auth } from "./auth";
 import { AuthProvider, useAuth } from "./hooks";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";
 
-/** Signing in changes state, and this page then navigates away. */
+/**
+ * Doesn't navigate after `signIn`: the state change re-renders this page,
+ * which then redirects.
+ */
 function Login() {
-	const signedIn = useAuth((state) => state.user !== null);
+	const signedIn = useAuth(
+		(state) =>
+			state.status === "authenticated" || state.status === "refreshing",
+	);
 	const [search] = useSearchParams();
 	if (signedIn)
 		return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;

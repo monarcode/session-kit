@@ -1,6 +1,22 @@
 import { AuthError } from "./errors.js";
 
-/** Where a debug event comes from. */
+/**
+ * Where an {@link AuthDebugEvent} comes from. Stable across releases, so it is
+ * safe to filter on.
+ *
+ * @example
+ * ```ts
+ * import type { AuthDebugEvent, AuthDebugType } from "@monarcode/session-kit";
+ *
+ * const watched = new Set<AuthDebugType>(["refresh", "timer"]);
+ *
+ * function log(event: AuthDebugEvent) {
+ * 	if (watched.has(event.type)) console.info(event.message, event.data);
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type AuthDebugType =
 	| "state"
 	| "restore"
@@ -17,39 +33,86 @@ export type AuthDebugType =
 	| "lock";
 
 /**
- * One thing auth did, for reading while debugging. `type` is stable; the
- * wording of `message` and the fields in `data` may change in any release.
+ * One thing auth did, for reading while debugging, as passed to the `debug`
+ * option ({@link AuthDebug}). `type` is stable; the wording of `message` and
+ * the fields in `data` may change in any release. Events are frozen.
+ *
+ * @example
+ * ```ts
+ * import type { AuthDebugEvent } from "@monarcode/session-kit";
+ *
+ * declare function breadcrumb(message: string, data?: object): void;
+ *
+ * function report(event: AuthDebugEvent) {
+ * 	breadcrumb(`${event.name} ${event.type}: ${event.message}`, {
+ * 		...event.data,
+ * 		code: event.error?.code,
+ * 	});
+ * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export type AuthDebugEvent = Readonly<{
-	/** The auth `name`. */
+	/** The `name` passed to `createAuth`. */
 	name: string;
 	type: AuthDebugType;
 	/** One readable line, such as `started (proactive)`. */
 	message: string;
 	/** Details, such as `status`, `sessionId`, or `durationMs`. */
-	data?: Readonly<Record<string, unknown>>;
+	data?: Readonly<Record<string, unknown>> | undefined;
 	/**
 	 * The failure, when the event reports one: its `code` and `message`. Its
 	 * `cause` and `issues`, which can hold tokens or user fields, only with
 	 * `sensitive`.
 	 */
-	error?: AuthError;
+	error?: AuthError | undefined;
 }>;
 
+/**
+ * Options for debug logging, as the object form of `createAuth`'s `debug`
+ * option ({@link AuthDebug}): where events go, and whether they include
+ * secrets.
+ *
+ * @example
+ * ```ts
+ * import type { AuthDebugOptions } from "@monarcode/session-kit";
+ *
+ * const debug: AuthDebugOptions = {
+ * 	log: (event) => console.debug(event),
+ * 	sensitive: location.hostname === "localhost",
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type AuthDebugOptions = {
 	/** Receives every event. Default: one `console.info` line per event. */
-	log?: (event: AuthDebugEvent) => void;
+	log?: ((event: AuthDebugEvent) => void) | undefined;
 	/**
 	 * Also puts tokens, saved values, user fields, whole deep-link paths, and
 	 * errors' causes in events. Anyone who reads such logs can act as the
 	 * user, so keep this to development builds. Default: `false`.
 	 */
-	sensitive?: boolean;
+	sensitive?: boolean | undefined;
 };
 
 /**
- * `true` logs every event to the console, a function receives every event,
- * and `AuthDebugOptions` choose both and whether to include secrets.
+ * The `debug` option of `createAuth`. `true` logs every event to the console,
+ * a function receives every {@link AuthDebugEvent}, and
+ * {@link AuthDebugOptions} choose both and whether to include secrets.
+ * `false` or omitted turns debugging off.
+ *
+ * @example
+ * ```ts
+ * import type { AuthDebug } from "@monarcode/session-kit";
+ *
+ * const toConsole: AuthDebug = true;
+ * const toLogger: AuthDebug = (event) => console.debug(event.type, event.message);
+ * const withSecrets: AuthDebug = { sensitive: true };
+ * ```
+ *
+ * @since 0.1.0
  */
 export type AuthDebug =
 	| boolean
@@ -92,7 +155,7 @@ function consoleLog(event: AuthDebugEvent) {
  */
 function redacted(error: AuthError): AuthError {
 	const copy = new AuthError(error.code, error.message);
-	copy.stack = error.stack;
+	if (error.stack !== undefined) copy.stack = error.stack;
 	return copy;
 }
 

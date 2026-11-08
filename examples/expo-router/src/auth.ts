@@ -28,10 +28,10 @@ const loginResponseSchema = tokensSchema.extend(userSchema.shape);
 export const auth = createAuth({
 	name: "expo-example",
 	user: userSchema,
-	// Keychain on iOS, Keystore-encrypted storage on Android. Two JWTs and a
-	// user exceed SecureStore's 2048-byte value limit, so the value is split
-	// across keys. Defaults shown:
-	//   secureStorage({ clearOnReinstall: true, keychainAccessible: undefined })
+	// The iOS keychain, or Keystore-encrypted storage on Android. Two JWTs and
+	// a user exceed SecureStore's 2048-byte value limit, so the value is split
+	// across keys. The defaults are `clearOnReinstall: true` and SecureStore's
+	// own `keychainAccessible` (`WHEN_UNLOCKED`).
 	storage: secureStorage(),
 	// Logs restores, refreshes, timers, and the gate's decisions to Metro in
 	// development. Tokens and user fields stay out of the log.
@@ -39,7 +39,8 @@ export const auth = createAuth({
 	/**
 	 * DummyJSON answers 403 for an invalid or expired refresh token and 401
 	 * for a missing one: both mean "sign in again", so return `null`. Other
-	 * failures are operational.
+	 * failures throw: the session is kept and the error shows in
+	 * `state.error`.
 	 */
 	refresh: async ({ refreshToken, signal }) => {
 		const response = await fetch(`${API}/auth/refresh`, {
@@ -57,7 +58,10 @@ export const auth = createAuth({
 export const { AuthProvider, useAuth, useAuthClient } =
 	createAuthHooks<typeof auth>();
 
-/** Requests to DummyJSON with the access token, refreshing after a 401. */
+/**
+ * Sends requests to DummyJSON with the access token. After a 401 it
+ * refreshes, then replays a GET or HEAD once.
+ */
 export const authFetch = createAuthFetch(auth, `${API}/`);
 
 /** Signs in with DummyJSON, then saves the tokens and the user it returned. */

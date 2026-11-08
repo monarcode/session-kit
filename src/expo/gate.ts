@@ -24,18 +24,41 @@ import { watchForeground } from "./foreground.js";
 
 export type { UnavailableProps };
 
+/**
+ * Props for {@link SessionGate}: the root navigator, plus what to show while
+ * access is unavailable and what else the splash screen waits for.
+ *
+ * @example
+ * ```tsx
+ * import {
+ * 	SessionGate,
+ * 	type SessionGateProps,
+ * } from "@monarcode/session-kit/expo";
+ *
+ * declare function useFontsLoaded(): boolean;
+ *
+ * // Holds the splash screen for the app's fonts as well as the session.
+ * export function AppGate(props: SessionGateProps) {
+ * 	const fontsLoaded = useFontsLoaded();
+ * 	const ready = fontsLoaded && props.ready !== false;
+ * 	return <SessionGate {...props} ready={ready} />;
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type SessionGateProps = {
 	/** The root navigator, usually a `Stack` guarded with `Stack.Protected`. */
-	children?: ReactNode;
+	children?: ReactNode | undefined;
 	/**
 	 * Shown instead of the navigator while access is unavailable, such as
 	 * after a failed refresh. Without it, the error is thrown to the root
 	 * layout's `ErrorBoundary`. That boundary's `retry` only renders again,
 	 * and a failed refresh stays failed until `auth.retry()`, so call both.
 	 */
-	unavailable?: (props: UnavailableProps) => ReactNode;
+	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
-	client?: RetryableSource;
+	client?: RetryableSource | undefined;
 	/**
 	 * Whether the rest of the app is ready for its first screen, such as
 	 * fonts or remote config loaded. Until it is `true`, as well as while the
@@ -45,7 +68,7 @@ export type SessionGateProps = {
 	 * on screen. The deep link opened after a sign-in always waits for it.
 	 * Default: `true`.
 	 */
-	ready?: boolean;
+	ready?: boolean | undefined;
 };
 
 // Clients whose first screen was shown, by their `state`, so a gate that
@@ -108,7 +131,8 @@ function useAccountKey(sessionId: string | null): number {
 
 /**
  * Wraps the root navigator in `app/_layout.tsx`, inside `AuthProvider` or
- * with a `client`, and adds what Expo Router's `Stack.Protected` lacks:
+ * with a `client`, and adds what Expo Router's `Stack.Protected` lacks. It
+ * mounts the client, so it works without `AuthProvider` too.
  *
  * - **While the session is restored**, and until `ready`, it renders
  *   nothing, so the splash screen stays up, and hides the splash screen once
@@ -116,22 +140,54 @@ function useAccountKey(sessionId: string | null): number {
  *   isn't sent to the sign-in screen first. Call
  *   `SplashScreen.preventAutoHideAsync()` at the top of the root layout.
  * - **While access is unavailable** it renders `unavailable({ error, retry })`
- *   instead of the navigator.
+ *   instead of the navigator. Without `unavailable`, it hides the splash
+ *   screen and throws the error to the root layout's `ErrorBoundary`.
+ * - **While locked** it renders the navigator, so its guards can show an
+ *   unlock screen. Neither unlocking nor a password sign-in from the lock
+ *   screen remounts the navigator.
  * - **When the app returns to the foreground** it re-checks the session,
  *   because timers don't run while iOS suspends the app.
- * - **After a sign-in** it opens the deep link `rememberDeepLink` kept, with
- *   `router.replace`, once `ready`.
+ * - **After a sign-in or unlock** it opens the deep link
+ *   `rememberDeepLink` kept, with `router.replace`, once `ready`.
  * - **When one account replaces another** without a sign-out between them, it
  *   remounts the navigator, so no screen keeps the previous account's
  *   component state. The screens that were open stay open, as the URL does
  *   on the web. A sign-out already removes the guarded screens.
  *
  * @example
- * <AuthProvider client={auth}>
- * 	<SessionGate unavailable={(props) => <Unavailable {...props} />}>
- * 		<RootStack />
- * 	</SessionGate>
- * </AuthProvider>
+ * ```tsx
+ * // Rendered inside `AuthProvider` in app/_layout.tsx.
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { SessionGate } from "@monarcode/session-kit/expo";
+ * import { createAuthHooks } from "@monarcode/session-kit/react";
+ * import { SplashScreen, Stack } from "expo-router";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ * const { useAuth } = createAuthHooks<typeof auth>();
+ *
+ * void SplashScreen.preventAutoHideAsync();
+ *
+ * export function RootNavigator() {
+ * 	// `status`, not `user`: a locked session keeps its user.
+ * 	const signedIn = useAuth(
+ * 		({ status }) => status === "authenticated" || status === "refreshing",
+ * 	);
+ * 	return (
+ * 		<SessionGate>
+ * 			<Stack>
+ * 				<Stack.Protected guard={signedIn}>
+ * 					<Stack.Screen name="(app)" />
+ * 				</Stack.Protected>
+ * 				<Stack.Protected guard={!signedIn}>
+ * 					<Stack.Screen name="login" />
+ * 				</Stack.Protected>
+ * 			</Stack>
+ * 		</SessionGate>
+ * 	);
+ * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export function SessionGate({
 	children,
@@ -143,25 +199,31 @@ export function SessionGate({
 	const state = useAuthState(auth, (value) => value);
 	const restoring = state.status === "initializing";
 	const shown = useShown(auth, !restoring && ready);
-
-	// What the splash screen waits for, until the first screen is shown.
 	const holding = shown
 		? undefined
 		: restoring
 			? "restoring the session"
 			: "waiting for ready";
-	useEffect(() => {
-		if (holding) {
-			logGate(auth, `holding the splash screen: ${holding}`);
-			return;
-		}
-		if (!shownClients.has(auth.state)) {
-			shownClients.add(auth.state);
-			logGate(auth, "hid the splash screen");
-		}
-		hideSplash();
-	}, [holding, auth]);
-	useEffect(() => watchForeground(auth), [auth]);
+	useEffect(
+		function holdSplashUntilShown() {
+			if (holding) {
+				logGate(auth, `holding the splash screen: ${holding}`);
+				return;
+			}
+			if (!shownClients.has(auth.state)) {
+				shownClients.add(auth.state);
+				logGate(auth, "hid the splash screen");
+			}
+			hideSplash();
+		},
+		[holding, auth],
+	);
+	useEffect(
+		function recheckOnForeground() {
+			return watchForeground(auth);
+		},
+		[auth],
+	);
 	// Before the first screen, Expo Router's pathname can still be the launch
 	// URL's, so the link would be judged by a screen nobody has seen.
 	useRememberedLink(auth, state.status, !shown || !ready);
@@ -170,20 +232,26 @@ export function SessionGate({
 	const accountKey = useAccountKey(
 		state.status === "locked" ? null : state.sessionId,
 	);
-	useEffect(() => {
-		if (accountKey)
-			logGate(
-				auth,
-				"another account signed in: remounted the navigator",
-				undefined,
-				accountKey,
-			);
-	}, [accountKey, auth]);
+	useEffect(
+		function logAccountSwitch() {
+			if (accountKey)
+				logGate(
+					auth,
+					"another account signed in: remounted the navigator",
+					undefined,
+					accountKey,
+				);
+		},
+		[accountKey, auth],
+	);
 	const fallback =
 		shown && state.status === "unavailable" && unavailable !== undefined;
-	useEffect(() => {
-		if (fallback) logGate(auth, "showing unavailable", state.error);
-	}, [fallback, state.error, auth]);
+	useEffect(
+		function logUnavailable() {
+			if (fallback) logGate(auth, "showing unavailable", state.error);
+		},
+		[fallback, state.error, auth],
+	);
 
 	if (!shown) return createElement(Fragment);
 	switch (state.status) {

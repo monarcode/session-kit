@@ -303,13 +303,13 @@ test("lock() during a refresh locks at once, then lets the refresh save", async 
 	const refreshing = auth.refresh();
 	await flush();
 	let settled = false;
-	const locking_ = auth.lock().then(() => (settled = true));
+	const lockDone = auth.lock().then(() => (settled = true));
 	assert.equal(auth.state.get().status, "locked");
 	await flush();
 	assert.equal(settled, false);
 	release();
 	await refreshing;
-	await locking_;
+	await lockDone;
 	assert.equal(auth.state.get().status, "locked");
 	// The refresh's new tokens arm no timers while locked.
 	const lockedAt = events.findIndex((event) => event.message === "locked");
@@ -376,11 +376,14 @@ test("unlock() when not locked resolves like getSession()", async () => {
 
 test("lock() and unlock() need the locking option", async () => {
 	const auth = client();
-	await assert.rejects(auth.lock(), /Pass locking to createAuth to use lock/);
-	await assert.rejects(
-		auth.unlock(),
-		/Pass locking to createAuth to use unlock/,
-	);
+	await assert.rejects(auth.lock(), {
+		code: "INVALID_OPTIONS",
+		message: /Pass locking to createAuth to use lock/,
+	});
+	await assert.rejects(auth.unlock(), {
+		code: "INVALID_OPTIONS",
+		message: /Pass locking to createAuth to use unlock/,
+	});
 });
 
 test("locking needs a user schema", () => {
@@ -392,7 +395,7 @@ test("locking needs a user schema", () => {
 				storage: keychain().storage,
 				locking: true,
 			} as never),
-		/locking needs a user schema/,
+		{ code: "INVALID_OPTIONS", message: /locking needs a user schema/ },
 	);
 });
 

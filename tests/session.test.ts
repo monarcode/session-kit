@@ -491,7 +491,8 @@ test("sessions name the user without tokens; credentials carry the token", async
 });
 
 test("sign-out revokes the ended tokens after clearing them", async () => {
-	const calls: Array<{ refreshToken?: string; cleared: boolean }> = [];
+	const calls: Array<{ refreshToken?: string | undefined; cleared: boolean }> =
+		[];
 	const auth = client({
 		revoke: async ({ accessToken, refreshToken, signal }): Promise<void> => {
 			assert.equal(accessToken, "access-1");
@@ -580,18 +581,35 @@ test("restoring waits for asynchronous storage or schemas", async () => {
 	}
 });
 
-test("mounting restores at once from synchronous storage and a synchronous schema", async () => {
+test("a restore that times out keeps the saved session", async (t) => {
 	await client().signIn(input());
-	const auth = client({ storage: webStorage() });
-	const states = recordStates(auth);
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: Date.now() });
+	const auth = client({
+		user: userSchema.refine(async () => new Promise<boolean>(() => {})),
+	});
 	cleanups.push(auth.mount());
-	assert.equal(auth.state.get().status, "authenticated");
-	assert.equal(auth.state.get().user?.id, "alice");
 	await flush();
-	assert.deepEqual(
-		states.map((state) => state.status),
-		["authenticated"],
+	t.mock.timers.tick(15_000);
+	await flush();
+	const state = auth.state.get();
+	assert.equal(state.status, "unavailable");
+	assert.equal(state.error?.code, "PERSISTENCE_FAILED");
+	assert.equal(saved().accessToken, "access-1");
+	t.mock.timers.reset();
+});
+
+test("updateUser rejects with USER_VALIDATION_FAILED when its input fails", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const failure = new Error("network down");
+	await assert.rejects(
+		auth.updateUser(async () => {
+			throw failure;
+		}),
+		(error: AuthError) =>
+			error.code === "USER_VALIDATION_FAILED" && error.cause === failure,
 	);
+	assert.equal(auth.state.get().user?.email, user.email);
 });
 
 test("mounting validates a saved user once with an asynchronous schema", async () => {

@@ -22,6 +22,29 @@ import {
 	type UnavailableProps,
 } from "../react/context.js";
 
+/**
+ * Props for {@link SessionOutlet}.
+ *
+ * @example
+ * ```tsx
+ * import { SessionOutlet } from "@monarcode/session-kit/react-router";
+ *
+ * export const layout = (
+ * 	<SessionOutlet
+ * 		loginPath="/login"
+ * 		pending={<p>Restoring session…</p>}
+ * 		unavailable={({ error, retry }) => (
+ * 			<div role="alert">
+ * 				<p>{error?.message ?? "Can't reach the server."}</p>
+ * 				<button onClick={retry}>Try again</button>
+ * 			</div>
+ * 		)}
+ * 	/>
+ * );
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type SessionOutletProps = {
 	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
 	loginPath: string;
@@ -29,15 +52,15 @@ export type SessionOutletProps = {
 	 * Shown while the saved session is being restored and, in data mode,
 	 * while the loader has yet to accept a new session. Default: nothing.
 	 */
-	pending?: ReactNode;
+	pending?: ReactNode | undefined;
 	/**
 	 * Shown when access is unavailable, such as after a failed refresh. `retry`
 	 * tries again; a repeated failure stays in `state.error`. Without it, the
 	 * error is thrown to the nearest error boundary or error element.
 	 */
-	unavailable?: (props: UnavailableProps) => ReactNode;
+	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
-	client?: RetryableSource;
+	client?: RetryableSource | undefined;
 };
 
 /**
@@ -63,19 +86,33 @@ function useGuardedSessionId(): string | undefined {
 /**
  * Renders child routes only while someone is signed in, in any mode. In
  * declarative mode it is the guard: signed-out users are sent to `loginPath`
- * with `?redirectTo=` set to the current location. In data mode, render it
+ * with `?redirectTo=` set to the current location, and so are users of a
+ * locked session, since locking is for native apps. In data mode, render it
  * as the element of the route whose loader returns `requireSession`'s
  * result: child routes then render only while that session is still the
- * signed-in one, and `pending` shows until `useAuthRevalidation` has re-run
- * the loader for a new one, so no child sees the previous account's loader
- * data. Child routes are keyed by session, so nothing from one account stays
- * mounted for the next. Profile updates and token refreshes keep them
- * mounted.
+ * signed-in one, and `pending` shows until `useAuthRevalidation` has
+ * re-run the loader for a new one, so no child sees the previous account's
+ * loader data. Child routes are keyed by session, so nothing from one account
+ * stays mounted for the next. Profile updates and token refreshes keep them
+ * mounted. Needs an `AuthProvider` above it, or a `client`.
  *
  * @example
- * <Route element={<SessionOutlet loginPath="/login" pending={<Spinner />} />}>
- * 	<Route index element={<Home />} />
- * </Route>
+ * ```tsx
+ * import { Route, Routes } from "react-router";
+ * import { SessionOutlet } from "@monarcode/session-kit/react-router";
+ *
+ * // Declarative mode, inside `AuthProvider` and `BrowserRouter`.
+ * export const routes = (
+ * 	<Routes>
+ * 		<Route element={<SessionOutlet loginPath="/login" />}>
+ * 			<Route index element={<p>Signed in</p>} />
+ * 		</Route>
+ * 		<Route path="/login" element={<p>Sign in</p>} />
+ * 	</Routes>
+ * );
+ * ```
+ *
+ * @since 0.1.0
  */
 export function SessionOutlet({
 	loginPath,

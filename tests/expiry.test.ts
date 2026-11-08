@@ -11,6 +11,7 @@ import {
 	recordStates,
 	saved,
 	credentialsOf,
+	jwt,
 	useBrowserMocks,
 } from "./helpers.ts";
 
@@ -139,15 +140,11 @@ test("opaque tokens work and explicit expiry wins over JWT exp", async () => {
 	const auth = client();
 	await auth.signIn(input());
 	assert.equal((await credentialsOf(auth)).expiresAt, undefined);
-	const jwt = `e30.${Buffer.from(JSON.stringify({ exp: 1 })).toString("base64url")}.x`;
 	await auth.signIn(
-		input({ accessToken: jwt, expiresAt: Date.now() + 60_000 }),
+		input({ accessToken: jwt({ exp: 1 }), expiresAt: Date.now() + 60_000 }),
 	);
 	assert.ok(((await credentialsOf(auth)).expiresAt ?? 0) > Date.now());
 });
-
-const jwt = (claims: object) =>
-	`e30.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.x`;
 
 test("JWT lifetime is measured from receipt when the browser clock runs fast", async (t) => {
 	const serverNow = 1_000_000;

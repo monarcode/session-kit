@@ -76,7 +76,7 @@ test("web storage can keep each tab's session in sessionStorage", async () => {
 	assert.throws(
 		// @ts-expect-error -- deliberately invalid area
 		() => webStorage({ area: "cookie" }),
-		/area must be "local" or "session"/,
+		{ code: "INVALID_OPTIONS", message: /area must be "local" or "session"/ },
 	);
 });
 
@@ -161,8 +161,8 @@ test("a profile update keeps tokens this tab refreshed while it read storage", a
 test("web storage outside a browser says why it cannot restore", async () => {
 	setGlobal("localStorage", undefined);
 	const auth = client({ storage: webStorage() });
-	await assert.rejects(auth.getSession(), (error: Error) => {
-		const cause = (error as Error & { cause?: Error }).cause;
-		return /localStorage is not available here/.test(cause?.message ?? "");
+	await assert.rejects(auth.getSession(), {
+		code: "PERSISTENCE_FAILED",
+		message: /localStorage is not available here/,
 	});
 });

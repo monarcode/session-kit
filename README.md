@@ -702,16 +702,9 @@ throwing.
 
 ### Expiry
 
-Expiry comes from the first of these the tokens provide:
-
-1. `expiresAt`: Unix time in milliseconds, compared with the browser clock.
-2. `expiresIn`: lifetime in seconds, as in OAuth `expires_in`, counted from
-   receipt.
-3. A JWT's `exp - iat` lifetime, counted from receipt.
-4. A JWT's `exp` alone, compared with the browser clock.
-
-Browser clocks can be minutes off; options 2 and 3 are unaffected by that.
-Opaque tokens without expiry are refreshed only after a 401.
+Expiry comes from `expiresAt`, `expiresIn`, or a JWT's `exp` and `iat`
+claims; the `Tokens` type documents which one wins and how a wrong browser
+clock affects each.
 
 ### Storage
 
@@ -753,12 +746,13 @@ has one JavaScript context, so it has no tabs to follow and needs no lock.
 
 ### Errors
 
-`state.error` and rejected promises carry an `AuthError` whose `code` is one of
-`USER_VALIDATION_FAILED`, `INVALID_SESSION`, `PERSISTENCE_FAILED`,
-`REFRESH_FAILED`, `REVOKE_FAILED`, `SESSION_CHANGED`, or `UNAUTHENTICATED`.
-Validation errors include the schema's `issues`, and underlying failures appear
-in `cause`. Work superseded by a newer sign-in or sign-out rejects with
-`SESSION_CHANGED`.
+Errors from session-kit's own logic are `AuthError`s, whether thrown,
+rejected with, or published in `state.error`. Match on their `code`, an
+`AuthErrorCode`, such as `REFRESH_FAILED`, `SESSION_CHANGED`,
+`USER_VALIDATION_FAILED`, or `INVALID_OPTIONS` for misuse. `cause` holds
+whatever failed underneath, and `issues` a schema's issues. `authFetch` lets
+`fetch`'s and `Request`'s own failures, such as a network error, through
+unchanged.
 
 If storage cannot be written, the session ends and the error is published. If
 it cannot be cleared, sign-out still takes effect in this tab, but the promise

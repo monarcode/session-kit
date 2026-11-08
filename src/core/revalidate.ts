@@ -2,8 +2,8 @@ import type { AuthClient } from "./types.js";
 
 /**
  * Calls `revalidate` after auth changes in a way guards care about, when
- * `version` changes: a sign-in, sign-out, account switch, profile update, or
- * failed refresh. Several changes in one turn call it once. `onChange` runs at
+ * `version` changes: a sign-in, sign-out, account switch, profile update,
+ * lock, or a refresh that fails once access has expired. Several changes in one turn call it once. `onChange` runs at
  * once on every such change. Returns a function that stops watching and
  * cancels a call not yet made.
  */

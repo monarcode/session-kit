@@ -58,7 +58,7 @@ test("each entry exports readable JavaScript and declarations", async () => {
 	}
 });
 
-test("React declarations retain consumer Router registration", async () => {
+test("TanStack Router declarations retain consumer Router registration", async () => {
 	const declarations = await readFile(
 		new URL("dist/tanstack-router/index.d.ts", packageRoot),
 		"utf8",

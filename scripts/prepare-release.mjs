@@ -53,6 +53,8 @@ export async function checkRegistry(version, request = fetch) {
 	throw new Error(`npm registry check failed with HTTP ${response.status}.`);
 }
 
+// Runs only as a script (the Release workflow), so tests can import the
+// functions above.
 if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(resolve(process.argv[1])).href

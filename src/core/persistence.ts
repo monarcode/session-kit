@@ -7,7 +7,10 @@ import { tokensOf, validateTokens, type SessionTokens } from "./tokens.js";
 import type { AuthLocking } from "./types.js";
 
 /** A saved session. `user` is absent when the user comes from the access token. */
-export type StoredSession = SessionTokens & { id: string; user?: unknown };
+export type StoredSession = SessionTokens & {
+	id: string;
+	user?: unknown;
+};
 
 /**
  * A saved entry before its tokens are read: `sealed` when `locking.seal`
@@ -20,7 +23,6 @@ export type SavedEntry = { id: string; user?: unknown } & (
 
 /** Format of the saved entry; entries in any other format are not restored. */
 const STORAGE_VERSION = 4;
-/** Thirty days. */
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 /** Reports a storage failure, keeping auth's own errors as they are. */
@@ -44,7 +46,8 @@ export function createPersistence(
 		!Number.isSafeInteger(maxAge) ||
 		maxAge <= 0
 	) {
-		throw new Error(
+		throw new AuthError(
+			"INVALID_OPTIONS",
 			"Use a simple auth name and a positive maxAge in seconds",
 		);
 	}
@@ -178,9 +181,7 @@ export function createPersistence(
 				throw new AuthError(
 					"UNLOCK_FAILED",
 					"Could not open the saved session",
-					{
-						cause: new TypeError("locking.open must return a string"),
-					},
+					{ cause: new TypeError("locking.open must return a string") },
 				);
 			}
 			try {
@@ -234,7 +235,7 @@ export function createPersistence(
 		});
 	}
 
-	/** The fields saved for `session`: its tokens sealed, with `sealing`. */
+	/** The fields saved for `session`, with its tokens sealed when `sealing` is set. */
 	async function fieldsOf(session: StoredSession): Promise<object> {
 		if (!sealing) return session;
 		const payload = JSON.stringify({ id: session.id, ...tokensOf(session) });

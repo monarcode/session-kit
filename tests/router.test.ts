@@ -146,17 +146,30 @@ test("terminal refresh rejection signs out with one invalidation", async () => {
 	assert.equal(router.invalidations, before + 1);
 });
 
-/** A real TanStack Router guarding `/private`, counting guard runs and invalidations. */
-const realRouter = async (auth: TestClient) => {
+/** The browser globals TanStack Router reads, with the window at `path`. */
+function routerGlobals(path: string) {
 	setGlobal("self", globalThis);
 	setGlobal("scrollTo", () => {});
 	setGlobal("window", {
 		// Router 1.132 and later resolve locations against `window.origin`.
 		origin: "https://example.com",
-		location: new URL("https://example.com/private"),
+		location: new URL(`https://example.com${path}`),
 		addEventListener() {},
 		removeEventListener() {},
 	});
+}
+
+/** Runs the router's transitions synchronously: there is no React renderer here. */
+function syncTransitions<R extends { startTransition: unknown }>(router: R) {
+	router.startTransition = (async (fn: () => void) => {
+		fn();
+		return true;
+	}) as unknown as R["startTransition"];
+}
+
+/** A real TanStack Router guarding `/private`, counting guard runs and invalidations. */
+const realRouter = async (auth: TestClient) => {
+	routerGlobals("/private");
 	const {
 		createRouter,
 		createRootRouteWithContext,
@@ -182,11 +195,7 @@ const realRouter = async (auth: TestClient) => {
 		history: createMemoryHistory({ initialEntries: ["/private"] }),
 		isServer: false,
 	});
-	// Run transitions synchronously; there is no React renderer here.
-	router.startTransition = (async (fn: () => void) => {
-		fn();
-		return true;
-	}) as unknown as typeof router.startTransition;
+	syncTransitions(router);
 	const invalidate = router.invalidate.bind(router);
 	router.invalidate = (...args: Parameters<typeof invalidate>) => {
 		counts.invalidations++;
@@ -260,15 +269,7 @@ const guardedRouter = async (
 	path: string,
 	{ basepath }: { basepath?: string } = {},
 ) => {
-	setGlobal("self", globalThis);
-	setGlobal("scrollTo", () => {});
-	setGlobal("window", {
-		// Router 1.132 and later resolve locations against `window.origin`.
-		origin: "https://example.com",
-		location: new URL(`https://example.com${path}`),
-		addEventListener() {},
-		removeEventListener() {},
-	});
+	routerGlobals(path);
 	const {
 		createRouter,
 		createRootRouteWithContext,
@@ -296,12 +297,9 @@ const guardedRouter = async (
 		context: { auth },
 		history: createMemoryHistory({ initialEntries: [path] }),
 		isServer: false,
-		basepath,
+		...(basepath === undefined ? {} : { basepath }),
 	});
-	router.startTransition = (async (fn: () => void) => {
-		fn();
-		return true;
-	}) as unknown as typeof router.startTransition;
+	syncTransitions(router);
 	await router.load();
 	return router;
 };
@@ -384,7 +382,7 @@ test("requireSession reads a session that changes mid-check again", async () => 
 	);
 	await assert.rejects(
 		requireSession(churning, { ...options, loginPath: "login" }),
-		/loginPath must start with/,
+		{ code: "INVALID_OPTIONS", message: /loginPath must start with/ },
 	);
 });
 

@@ -14,9 +14,8 @@ export default function Profile() {
 	const [profile, setProfile] = useState<z.infer<typeof profileSchema>>();
 	const [error, setError] = useState("");
 
-	useEffect(() => {
+	useEffect(function loadProfile() {
 		const controller = new AbortController();
-		// Attaches the access token. After a 401 it refreshes and replays the GET once.
 		authFetch("auth/me", { signal: controller.signal })
 			.then(async (response) => {
 				if (!response.ok)
@@ -27,7 +26,9 @@ export default function Profile() {
 				if (controller.signal.aborted) return;
 				setError(cause instanceof Error ? cause.message : "Could not load");
 			});
-		return () => controller.abort();
+		return function cancelLoad() {
+			controller.abort();
+		};
 	}, []);
 
 	if (error) return <Text accessibilityRole="alert">{error}</Text>;

@@ -7,8 +7,26 @@ import {
 	type SecureStoreOptions,
 } from "expo-secure-store";
 
+import { AuthError } from "../core/errors.js";
 import type { AuthStorage } from "../core/storage.js";
 
+/**
+ * Options for {@link secureStorage}. Both are for iOS: when the keychain may
+ * be read, and what happens to a session an earlier install left there.
+ *
+ * @example
+ * ```ts
+ * import { secureStorage } from "@monarcode/session-kit/expo";
+ * import { AFTER_FIRST_UNLOCK } from "expo-secure-store";
+ *
+ * // For an app that refreshes in a background task before the first unlock.
+ * export const storage = secureStorage({
+ * 	keychainAccessible: AFTER_FIRST_UNLOCK,
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type SecureStorageOptions = {
 	/**
 	 * When iOS lets the app read the session: one of SecureStore's constants,
@@ -18,14 +36,14 @@ export type SecureStorageOptions = {
 	 * keychain can't be read, the session is `unavailable`; it is never signed
 	 * out for that.
 	 */
-	keychainAccessible?: KeychainAccessibilityConstant;
+	keychainAccessible?: KeychainAccessibilityConstant | undefined;
 	/**
 	 * iOS keeps keychain items after the app is deleted. By default, a session
 	 * an earlier install left there is removed before it is read, so a
 	 * reinstalled app starts signed out. `false` restores it instead.
 	 * Default: `true`.
 	 */
-	clearOnReinstall?: boolean;
+	clearOnReinstall?: boolean | undefined;
 };
 
 /** SecureStore may reject values longer than this, in UTF-8 bytes. */
@@ -94,8 +112,10 @@ const undecryptable = (error: unknown) =>
 	error.code === "ERR_DECRYPT";
 
 /**
- * Saves the session with `expo-secure-store`: in the iOS keychain, and
- * encrypted with an Android Keystore key. For Expo apps on iOS and Android.
+ * An {@link AuthStorage} that saves the session with `expo-secure-store`: in
+ * the iOS keychain, and encrypted with an Android Keystore key. For Expo apps
+ * on iOS and Android; pass it as `createAuth`'s `storage`. See
+ * {@link SecureStorageOptions}.
  *
  * - Values longer than SecureStore's 2048-byte limit are split across keys.
  *   The value is replaced only once every piece of the new one is written, so
@@ -103,15 +123,31 @@ const undecryptable = (error: unknown) =>
  *   value whole.
  * - Reads are synchronous, so with a synchronous user schema the session is
  *   restored before the first render. Writes and removals are asynchronous.
- * - A session left in the keychain by an earlier install is removed unless
- *   `clearOnReinstall` is `false`. A marker file in the app's documents
+ * - On iOS, a session left in the keychain by an earlier install is removed
+ *   unless `clearOnReinstall` is `false`. A marker file in the app's documents
  *   directory, which deleting the app removes, tells installs apart.
  * - Data that can't be decrypted, as after Android restores a backup onto
  *   another device, reads as signed out and is removed. Other read failures,
  *   such as a locked iOS keychain, make the session `unavailable`.
  *
  * There is one JavaScript context in an app, so it has no `subscribe` or
- * `lock`.
+ * `lock`: there are no tabs to follow, and the client runs one refresh at a
+ * time itself.
+ *
+ * @example
+ * ```ts
+ * import { createAuth } from "@monarcode/session-kit";
+ * import { secureStorage } from "@monarcode/session-kit/expo";
+ * import { z } from "zod";
+ *
+ * export const auth = createAuth({
+ * 	name: "my-app",
+ * 	user: z.object({ id: z.number(), name: z.string() }),
+ * 	storage: secureStorage(),
+ * });
+ * ```
+ *
+ * @since 0.1.0
  */
 export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	const clearOnReinstall = options.clearOnReinstall ?? true;
@@ -222,7 +258,8 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		} else {
 			const chunks = split(value);
 			if (chunks.length > MAX_CHUNKS) {
-				throw new Error(
+				throw new AuthError(
+					"PERSISTENCE_FAILED",
 					`secureStorage cannot save more than ${MAX_CHUNKS * MAX_BYTES} bytes`,
 				);
 			}

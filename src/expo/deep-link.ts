@@ -13,6 +13,31 @@ import {
 import type { AuthStatus } from "../core/types.js";
 import type { AuthSource } from "../react/context.js";
 
+/**
+ * Options for {@link rememberDeepLink}: the same as `safeReturnTo`'s.
+ * Set `loginPath` when the sign-in screen isn't `/login`, so a link to it is
+ * ignored rather than kept.
+ *
+ * @example
+ * ```ts
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import {
+ * 	rememberDeepLink,
+ * 	type RememberDeepLinkOptions,
+ * } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * const options: RememberDeepLinkOptions = { loginPath: "/sign-in" };
+ *
+ * export function redirectSystemPath({ path }: { path: string }) {
+ * 	rememberDeepLink(auth, path, options);
+ * 	return path;
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type RememberDeepLinkOptions = SafeReturnToOptions;
 
 /**
@@ -65,23 +90,38 @@ export function deepLinkPath(url: string): string {
 }
 
 /**
- * Keeps an incoming deep link, so `SessionGate` can open it once the user has
- * signed in. Call it from `redirectSystemPath` in `app/+native-intent.tsx`,
- * which Expo Router calls with every URL that opens the app, before routing:
- * `Stack.Protected` sends a link to a guarded screen to the first screen the
- * user may see, and the link would be lost.
+ * Keeps an incoming deep link, so `SessionGate` can open it once the
+ * user has signed in. Call it from `redirectSystemPath` in
+ * `app/+native-intent.tsx`, which Expo Router calls with every URL that opens
+ * the app, before routing: `Stack.Protected` sends a link to a guarded screen
+ * to the first screen the user may see, and the link would be lost. Return
+ * the path unchanged, so Expo Router still shows it to a signed-in user.
  *
- * The path is checked with `safeReturnTo`, so the sign-in path, the root,
- * and anything that could leave the app are ignored. `SessionGate` drops the
- * link when the user turns out to be signed in, or when the link opens a
- * screen anyone may see. A newer link replaces an older one.
+ * The path is checked with `safeReturnTo`, so the sign-in path, the
+ * root, and anything that could leave the app are ignored. A newer link
+ * replaces an older one. The link waits in memory, so an app restart forgets
+ * it. What `SessionGate` does with it:
+ *
+ * - **Signed in already**: drops it, since Expo Router opens it as usual.
+ * - **Signed out or locked**: opens it with `router.replace` after the next
+ *   sign-in or unlock, once `SessionGate`'s `ready` is `true`.
+ * - **A screen anyone may see**: drops it once that screen is showing.
  *
  * @example
+ * ```ts
  * // app/+native-intent.tsx
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { rememberDeepLink } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
  * export function redirectSystemPath({ path }: { path: string }) {
  * 	rememberDeepLink(auth, path);
  * 	return path;
  * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export function rememberDeepLink(
 	auth: AuthSource,
@@ -109,9 +149,8 @@ export function rememberDeepLink(
 /**
  * What a change of status or screen does to a remembered link: a sign-in
  * opens it if it was waiting and forgets it; while signed out or locked, it
- * waits,
- * unless the screen it names is already showing, since anyone may see that
- * one. Restoring and unavailable access leave it as it is, as does a
+ * waits, unless the screen it names is already showing, since anyone may see
+ * that one. Restoring and unavailable access leave it as it is, as does a
  * `pathname` still equal to `launch`, Expo Router's reading of the launch
  * URL: until the navigator applies its guards, it names a screen nobody has
  * seen.
@@ -121,7 +160,11 @@ function nextLink(
 	status: AuthStatus,
 	pathname: string,
 	launch: string,
-): { link: RememberedLink | undefined; open?: string; why?: string } {
+): {
+	link: RememberedLink | undefined;
+	open?: string | undefined;
+	why?: string | undefined;
+} {
 	switch (status) {
 		case "authenticated":
 		case "refreshing":
@@ -178,19 +221,22 @@ export function useRememberedLink(
 	// Read before the navigator mounts, which happens after this hook first
 	// runs, so it is the launch URL's.
 	const [launch] = useState(pathname);
-	useEffect(() => {
-		// A newer link arrived meanwhile; the effect runs again for it.
-		if (paused || !link || store.get() !== link) return;
-		const next = nextLink(link, status, pathname, launch);
-		if (next.why) {
-			const debug = debuggerOf(auth);
-			debug.log(
-				"deep-link",
-				`${pathnameOf(link.path)}: ${next.why}`,
-				debug.secret({ path: link.path }),
-			);
-		}
-		if (next.link !== link) store.set(next.link);
-		if (next.open) router.replace(next.open);
-	}, [auth, store, link, status, pathname, launch, router, paused]);
+	useEffect(
+		function applyRememberedLink() {
+			// A newer link arrived meanwhile; the effect runs again for it.
+			if (paused || !link || store.get() !== link) return;
+			const next = nextLink(link, status, pathname, launch);
+			if (next.why) {
+				const debug = debuggerOf(auth);
+				debug.log(
+					"deep-link",
+					`${pathnameOf(link.path)}: ${next.why}`,
+					debug.secret({ path: link.path }),
+				);
+			}
+			if (next.link !== link) store.set(next.link);
+			if (next.open) router.replace(next.open);
+		},
+		[auth, store, link, status, pathname, launch, router, paused],
+	);
 }

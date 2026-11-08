@@ -10,15 +10,25 @@ import {
 
 /**
  * Re-runs loaders whenever auth changes in a way guards care about: a
- * sign-in, sign-out, account switch, profile update, or failed refresh. Token
- * refreshes alone do not. Call it once in the root layout, in data or
- * framework mode; declarative mode has no loaders to re-run.
+ * sign-in, sign-out, account switch, profile update, lock, or a refresh that
+ * fails once access has expired. Token refreshes alone do not, nor does a
+ * failed refresh while the access token is still valid. Call it once in the
+ * root layout, in data or framework mode, so guards such as `requireSession`
+ * run again; declarative mode has no loaders to re-run. Watches `client`, or
+ * the nearest `AuthProvider`'s.
  *
  * @example
- * function Root() {
+ * ```tsx
+ * import { Outlet } from "react-router";
+ * import { useAuthRevalidation } from "@monarcode/session-kit/react-router";
+ *
+ * export function Root() {
  * 	useAuthRevalidation();
  * 	return <Outlet />;
  * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export function useAuthRevalidation(client?: AuthSource): void {
 	const auth = useProvidedClient(client);
@@ -28,8 +38,16 @@ export function useAuthRevalidation(client?: AuthSource): void {
 	);
 	const { revalidate } = useRevalidator();
 	const latest = useRef(revalidate);
-	useEffect(() => {
-		latest.current = revalidate;
-	}, [revalidate]);
-	useEffect(() => watchVersion(auth, () => latest.current()), [auth]);
+	useEffect(
+		function trackRevalidate() {
+			latest.current = revalidate;
+		},
+		[revalidate],
+	);
+	useEffect(
+		function watchAuth() {
+			return watchVersion(auth, () => latest.current());
+		},
+		[auth],
+	);
 }

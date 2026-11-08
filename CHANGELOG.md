@@ -41,6 +41,26 @@
   `locking`. Without `locking`, no state is ever `locked`.
 - TanStack Router's `SessionOutlet` reads `status` rather than `user`, so a
   locked session shows `pending`.
+- Errors from session-kit's own logic are `AuthError`s, under the new code
+  `"INVALID_OPTIONS"` for misuse, so a `switch` that covers every
+  `AuthErrorCode` needs that case too. Misuse that threw a plain `Error` now
+  throws or rejects with `INVALID_OPTIONS`, with the same message: an invalid
+  `createAuth` option, a `loginPath` or `basename` without a leading `/`, an
+  unknown `webStorage` area, hooks with no client, and `lock()` or `unlock()`
+  without `locking`. `createAuthFetch` throws it for an invalid `baseUrl`,
+  and `authFetch` rejects with it for an invalid path or one off the API
+  origin; `fetch`'s own failures still pass through.
+- `webStorage()` outside a browser and a value too large for
+  `secureStorage()` fail with `PERSISTENCE_FAILED` carrying their own
+  message, rather than a generic one whose `cause` held it.
+- `updateUser` rejects with `USER_VALIDATION_FAILED` when its input function
+  rejects or times out, with the failure as `cause`, as `signIn` already
+  did. It used to reject with that failure itself.
+- Optional properties of the public types accept `undefined` explicitly
+  (`foo?: T | undefined`), so apps using `exactOptionalPropertyTypes` can
+  pass `undefined` to them.
+- Every public export has JSDoc with an example, which the published `.d.ts`
+  files carry to editors.
 
 ### Fixed
 

@@ -121,13 +121,27 @@ function toCredentials<U>(
 }
 
 /**
- * Creates the auth client. Put one in Router context per auth `name` per tab.
+ * Creates the auth client ({@link AuthClient}) from {@link AuthOptions}. Put
+ * one in Router context per auth `name` per tab. Throws `INVALID_OPTIONS` for
+ * options it can't use.
  *
- * Token expiry comes from `expiresAt`, `expiresIn`, or JWT claims; see `Tokens`.
- * Prefer `expiresIn` so a wrong browser clock cannot expire tokens early.
+ * The saved session is restored by the first `mount()`, which `AuthProvider`
+ * and the router adapters call, or the first method that needs it, such as
+ * `getSession()`. Until then, `state` is `initializing`.
+ *
+ * Token expiry comes from `expiresAt`, `expiresIn`, or JWT claims; see
+ * `Tokens`. Prefer `expiresIn` so a wrong browser clock cannot expire
+ * tokens early.
  *
  * @example
- * const auth = createAuth({
+ * ```ts
+ * import { createAuth, webStorage } from "@monarcode/session-kit";
+ * import { z } from "zod";
+ *
+ * declare const accessToken: string;
+ * declare const refreshToken: string;
+ *
+ * export const auth = createAuth({
  * 	name: "my-app",
  * 	user: z.object({ id: z.string(), email: z.string() }),
  * 	storage: webStorage(),
@@ -145,7 +159,15 @@ function toCredentials<U>(
  * 	},
  * });
  *
- * await auth.signIn({ accessToken, refreshToken, expiresIn: 900, user });
+ * await auth.signIn({
+ * 	accessToken,
+ * 	refreshToken,
+ * 	expiresIn: 900,
+ * 	user: { id: "1", email: "ada@example.com" },
+ * });
+ * ```
+ *
+ * @since 0.1.0
  */
 export function createAuth<Src extends UserSource>(
 	options: AuthOptions<Src>,
@@ -153,14 +175,16 @@ export function createAuth<Src extends UserSource>(
 	type U = User<Src>;
 	type I = UserInput<Src>;
 	if (!options.storage) {
-		throw new Error(
+		throw new AuthError(
+			"INVALID_OPTIONS",
 			"Pass a storage adapter, such as webStorage(), as the storage option",
 		);
 	}
 	const users = resolveUserSource(options.user) as UserResolver<U>;
 	const locking = options.locking as true | AuthLocking | undefined;
 	if (locking && !users.saved) {
-		throw new Error(
+		throw new AuthError(
+			"INVALID_OPTIONS",
 			"locking needs a user schema: a user read from the access token can't be shown while its tokens are locked",
 		);
 	}
@@ -294,6 +318,11 @@ export function createAuth<Src extends UserSource>(
 		store.set(next);
 	}
 
+	/**
+	 * Publishes the state the session implies, with `error`. `version` moves
+	 * only when guards must run again: on a change of guard status, user, or
+	 * session.
+	 */
 	function publish(error: AuthError | null = null) {
 		const status = deriveStatus();
 		const current = locked ?? session;
@@ -322,6 +351,10 @@ export function createAuth<Src extends UserSource>(
 		cancelExpiry = cancelProactive = undefined;
 	}
 
+	/**
+	 * Arms the expiry timer and, once per token, the early-refresh timer.
+	 * Nothing is armed while unmounted or locked.
+	 */
 	function schedule() {
 		stopTimers();
 		if (!mounts || locked || !session || session.expiresAt === undefined)
@@ -361,6 +394,7 @@ export function createAuth<Src extends UserSource>(
 		if (epoch !== expected) throw sessionChanged();
 	}
 
+	/** Cancels everything in progress for the current session. */
 	function advanceEpoch() {
 		// A cancelled refresh never finished, so it does not use up the token's attempt.
 		if (flight) refreshAttempted = false;
@@ -372,6 +406,7 @@ export function createAuth<Src extends UserSource>(
 		stopTimers();
 	}
 
+	/** Ends the session in memory only, leaving storage alone. */
 	function forget(error: AuthError | null = null) {
 		advanceEpoch();
 		session = null;
@@ -390,14 +425,14 @@ export function createAuth<Src extends UserSource>(
 		try {
 			await persistence.clear();
 		} catch (cleanup) {
-			const failure = new AuthError(
+			const clearFailure = new AuthError(
 				"PERSISTENCE_FAILED",
 				"Could not clear the invalid saved session",
 				{ cause: new AggregateError([error, cleanup]) },
 			);
 			// A session started since then is not the one that failed to clear.
-			if (epoch === expected) publish(failure);
-			throw failure;
+			if (epoch === expected) publish(clearFailure);
+			throw clearFailure;
 		}
 	}
 
@@ -600,7 +635,7 @@ export function createAuth<Src extends UserSource>(
 
 	/**
 	 * Signs out after the backend rejected `accessToken`, session `id`'s token,
-	 * or it expired with no way to refresh it; `cause` says which.
+	 * or it expired with no way to refresh it; `reason` says which.
 	 * If another tab has already replaced that session in storage, keeps the
 	 * replacement. Resolves `undefined`, ending nothing, if this tab replaced
 	 * the token while storage was read.
@@ -608,14 +643,14 @@ export function createAuth<Src extends UserSource>(
 	async function endSession(
 		id: string,
 		accessToken: string,
-		cause: string,
+		reason: string,
 	): Promise<InternalSession<U> | null | undefined> {
 		const stored = await latest(id);
 		if (!session) return null;
 		if (session.id !== id) throw sessionChanged();
 		if (session.accessToken !== accessToken) return undefined;
 		if (stored === null) return followStorage(id);
-		await signOut(false, cause);
+		await signOut(false, reason);
 		return null;
 	}
 
@@ -814,15 +849,15 @@ export function createAuth<Src extends UserSource>(
 	 * the user asked to sign out, revokes the ended tokens on the backend. A
 	 * session the backend already rejected is not revoked.
 	 */
-	async function signOut(revoke: boolean, cause: string) {
+	async function signOut(revoke: boolean, reason: string) {
 		const revokeHandler = options.revoke;
 		// Before restoring finishes, `session` is still unknown, and ending it
 		// is a sign-out too.
 		debug.log(
 			"sign-out",
 			initialized && !session && !locked
-				? `nothing to sign out (${cause}); clearing the saved session anyway`
-				: `signed out: ${cause}`,
+				? `nothing to sign out (${reason}); clearing the saved session anyway`
+				: `signed out: ${reason}`,
 			{ sessionId: (locked ?? session)?.id ?? null },
 		);
 		const ended =
@@ -886,13 +921,22 @@ export function createAuth<Src extends UserSource>(
 				"UNAUTHENTICATED",
 				"Sign in before updating the user",
 			);
-		const user = await runTask(async () => {
-			const value =
-				typeof input === "function"
-					? await (input as () => Promise<I>)()
-					: input;
-			return users.receive(current.accessToken, value);
-		}, controller.signal);
+		let user: U;
+		try {
+			user = await runTask(async () => {
+				const value =
+					typeof input === "function"
+						? await (input as () => Promise<I>)()
+						: input;
+				return users.receive(current.accessToken, value);
+			}, controller.signal);
+		} catch (cause) {
+			throw toAuthError(
+				"USER_VALIDATION_FAILED",
+				"Could not accept the user",
+				cause,
+			);
+		}
 		/** The session to update, unless a newer update or a session change made this one obsolete. */
 		const target = () => {
 			assertEpoch(expected);
@@ -921,6 +965,12 @@ export function createAuth<Src extends UserSource>(
 		await commit({ ...active, ...(stored && tokensOf(stored)), user });
 	}
 
+	/**
+	 * Replaces `captured`'s access, unless the session has moved on since it
+	 * was captured, and joins a refresh already running. Inside the cross-tab
+	 * lock, storage is read again so tokens another tab saved meanwhile are
+	 * used rather than refreshed twice.
+	 */
 	async function refreshSession(
 		captured: { id: string; accessToken: string },
 		reason: RefreshReason,
@@ -1127,7 +1177,10 @@ export function createAuth<Src extends UserSource>(
 
 	function requireLocking(method: string) {
 		if (!locking)
-			throw new Error(`Pass locking to createAuth to use ${method}()`);
+			throw new AuthError(
+				"INVALID_OPTIONS",
+				`Pass locking to createAuth to use ${method}()`,
+			);
 	}
 
 	/** Waits for a refresh already running, whatever its outcome. */
@@ -1257,9 +1310,9 @@ export function createAuth<Src extends UserSource>(
 	}
 
 	function mount() {
-		// Only the first mount and the last unmount start and stop anything.
+		// Only the first mount and the last unmount start and stop the work.
 		// Later mounts, such as `SessionGate`'s own or a foreground re-check,
-		// would only add noise.
+		// only re-check the session.
 		if (mounts++ === 0) {
 			debug.log("mount", "mounted: timers running");
 			// Locking is for native apps, with no other tab to follow.
