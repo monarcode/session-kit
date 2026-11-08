@@ -36,6 +36,9 @@ importers:
       '@types/use-sync-external-store':
         specifier: 1.7.0
         version: 1.7.0
+      effect:
+        specifier: 4.1.1
+        version: 4.1.1
       expo-file-system:
         specifier: 58.0.13
         version: 58.0.13(expo@58.0.22)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
@@ -2197,6 +2200,9 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
+
+  effect@4.1.1:
+    resolution: {integrity: sha512-XYu65BrcmNqu5i7PPvP4dqL+R5ma37zIsfuSPjcn78mog+6e5PkilNg7Xo+pBpjXJYlWEIpH4j91tMrfW05CMw==}
 
   electron-to-chromium@1.5.444:
     resolution: {integrity: sha512-5ss/uJfoDYDHT0lfJzT6FbcskIzROIOPf0BbbFkGcvDzoJU7i//9GDrwwIHQVmIsrAGiF3ihpADBRIsrEFt1rQ==}
@@ -5927,6 +5933,8 @@ snapshots:
   dnssd-advertise@1.1.6: {}
 
   ee-first@1.1.1: {}
+
+  effect@4.1.1: {}
 
   electron-to-chromium@1.5.444: {}
 
