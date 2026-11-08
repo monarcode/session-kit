@@ -1,8 +1,10 @@
+import * as Fetch from "@monarcode/effetch";
 import {
 	createRootRouteWithContext,
 	createRouter,
 } from "@tanstack/react-router";
 import * as Effect from "effect/Effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
@@ -14,6 +16,7 @@ import {
 	type AuthFailureCode,
 	type RegisteredSession,
 } from "../dist/effect/index.js";
+import { sessionAuth, type SessionAuthPlugin } from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
@@ -390,3 +393,30 @@ void [
 	effectUpdate,
 	effectMisuse,
 ];
+
+// effetch: make needs Auth once; calls fail with AuthFailure and can override.
+const sessionPlugin: SessionAuthPlugin = sessionAuth({
+	baseUrl: "https://api.example.com",
+});
+const makeSessionApi = Fetch.make({
+	baseUrl: "https://api.example.com",
+	plugins: [sessionPlugin],
+});
+const madeWithAuth: Effect.Effect<
+	Fetch.Client<readonly [SessionAuthPlugin]>,
+	never,
+	HttpClient.HttpClient | Auth
+> = makeSessionApi;
+// @ts-expect-error make needs the Auth service.
+const madeWithoutAuth: Effect.Effect<unknown, never, HttpClient.HttpClient> =
+	makeSessionApi;
+declare const sessionApi: Fetch.Client<readonly [SessionAuthPlugin]>;
+const sessionCall: Effect.Effect<unknown, AuthFailure | Fetch.FetchError> =
+	sessionApi.get("/me");
+sessionApi.get("/public", { plugins: { sessionAuth: false } });
+sessionApi.get("/me", {
+	plugins: { sessionAuth: { signOutOnRepeated401: false } },
+});
+// @ts-expect-error Calls can override only signOutOnRepeated401.
+sessionApi.get("/me", { plugins: { sessionAuth: { baseUrl: "x" } } });
+void [madeWithAuth, madeWithoutAuth, sessionCall];

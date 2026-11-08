@@ -10,6 +10,7 @@ import {
 	webStorage,
 } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
+import { sessionAuth } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import {
@@ -45,17 +46,21 @@ test("all public entry points import without browser globals", () => {
 		createAuthFetch,
 		Auth,
 		AuthFailure,
+		sessionAuth,
 	]) {
 		assert.equal(typeof fn, "function");
 	}
 });
 
-test("only the Effect entry imports effect, an optional peer", async () => {
+test("only the Effect entries import effect and effetch, optional peers", async () => {
 	const dist = new URL("dist/", packageRoot);
 	for (const file of await readdir(dist, { recursive: true })) {
-		if (!file.endsWith(".js") || file.startsWith(`effect${sep}`)) continue;
+		if (!file.endsWith(".js")) continue;
 		const code = await readFile(new URL(file, dist), "utf8");
-		assert.doesNotMatch(code, /from "effect[/"]/, file);
+		if (!file.startsWith(`effect${sep}`) && !file.startsWith(`effetch${sep}`))
+			assert.doesNotMatch(code, /from "effect[/"]/, file);
+		if (!file.startsWith(`effetch${sep}`))
+			assert.doesNotMatch(code, /from "@monarcode\/effetch/, file);
 	}
 });
 

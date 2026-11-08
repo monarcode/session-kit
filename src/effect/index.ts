@@ -2,6 +2,8 @@ export { Auth } from "./auth.js";
 export { AuthFailure } from "./failure.js";
 
 export type {
+	AuthLayerClient,
+	AuthServiceClient,
 	Register,
 	RegisteredAuth,
 	RegisteredSession,

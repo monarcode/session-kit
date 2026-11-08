@@ -1,5 +1,6 @@
 import { AuthError, sessionChanged } from "../core/errors.js";
 import type { AuthClient, Credentials } from "../core/types.js";
+import { parseUrl } from "../core/url.js";
 
 /**
  * The part of the auth client that {@link createAuthFetch} uses. Any
@@ -48,16 +49,6 @@ export type AuthFetchOptions = {
 	 */
 	signOutOnRepeated401?: boolean | undefined;
 };
-
-function parseUrl(url: string, base?: URL): URL {
-	try {
-		return new URL(url, base);
-	} catch (cause) {
-		throw new AuthError("INVALID_OPTIONS", `Not a valid URL: ${url}`, {
-			cause,
-		});
-	}
-}
 
 /** Releases a response the caller will never see. */
 async function discard(response: Response) {

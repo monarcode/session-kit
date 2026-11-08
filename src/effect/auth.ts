@@ -46,11 +46,27 @@ import {
 export interface Register {}
 
 /**
- * What `Auth` needs from a client: any client `createAuth` returns fits.
- * Inputs are `never` and listeners take `unknown`, so every client's
- * methods match.
+ * What `Auth` needs from a client: any client `createAuth` returns fits,
+ * as does a fake with these members in tests.
+ *
+ * @example
+ * ```ts
+ * import { createAuth, memoryStorage } from "@monarcode/session-kit";
+ * import type { AuthServiceClient } from "@monarcode/session-kit/effect";
+ * import { z } from "zod";
+ *
+ * export const client: AuthServiceClient = createAuth({
+ * 	name: "app",
+ * 	user: z.object({ id: z.string() }),
+ * 	storage: memoryStorage(),
+ * });
+ * ```
+ *
+ * @since 0.1.0
  */
-type ClientShape = {
+// Inputs are `never` and listeners take `unknown`, so every client's methods
+// match.
+export type AuthServiceClient = {
 	state: {
 		get: () => unknown;
 		subscribe: (listener: (state: unknown) => void) => {
@@ -60,9 +76,11 @@ type ClientShape = {
 	signIn: (input: never) => Promise<void>;
 	signOut: () => Promise<void>;
 	getSession: () => Promise<unknown>;
+	isCurrent: (session: { sessionId: string }) => boolean;
 	credentials: {
 		get: () => Promise<Credentials | null>;
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
+		reject: (credentials: Credentials) => Promise<void>;
 	};
 };
 
@@ -81,18 +99,31 @@ type ClientShape = {
  * @since 0.1.0
  */
 export type RegisteredAuth = Register extends {
-	readonly auth: infer Client extends ClientShape;
+	readonly auth: infer Client extends AuthServiceClient;
 }
 	? Client
 	: AuthClient<unknown, unknown>;
 
 /**
- * What {@link Auth.layer} takes: the registered client, or any client while
- * none is registered.
+ * What {@link Auth.layer} takes: the client registered in {@link Register},
+ * or any {@link AuthServiceClient} while none is.
+ *
+ * @example
+ * ```ts
+ * import type { AuthLayerClient } from "@monarcode/session-kit/effect";
+ * import { Auth } from "@monarcode/session-kit/effect";
+ *
+ * declare const fake: AuthLayerClient;
+ * export const TestAuth = Auth.layer(fake);
+ * ```
+ *
+ * @since 0.1.0
  */
-type LayerClient = Register extends { readonly auth: ClientShape }
+export type AuthLayerClient = Register extends {
+	readonly auth: AuthServiceClient;
+}
 	? RegisteredAuth
-	: ClientShape;
+	: AuthServiceClient;
 
 /**
  * The session {@link Auth.session} resolves: the registered client's
@@ -199,7 +230,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	/**
 	 * Provides `client` as the {@link Auth} service.
 	 */
-	static readonly layer = (client: LayerClient): Layer.Layer<Auth> =>
+	static readonly layer = (client: AuthLayerClient): Layer.Layer<Auth> =>
 		Layer.succeed(Auth, client as RegisteredAuth);
 
 	/**
@@ -299,8 +330,11 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * Replaces the user, as `updateUser` does. Pass the user, or an Effect
 	 * that fetches it: the session is captured before the Effect runs, so a
 	 * profile fetched for one account never lands on another. The Effect's
-	 * own failure is this one's, unchanged. Dies for a client whose user
-	 * comes from the access token, which has no `updateUser`.
+	 * own failure is this one's, unchanged. The Effect is interrupted when
+	 * the session changes, failing with `SESSION_CHANGED`, and after 15
+	 * seconds, failing with `USER_VALIDATION_FAILED` whose `cause` is the
+	 * timeout. Dies for a client whose user comes from the access token,
+	 * which has no `updateUser`.
 	 */
 	static readonly updateUser = <E = never, R = never>(
 		input: RegisteredUserInput | Effect.Effect<RegisteredUserInput, E, R>,
@@ -328,14 +362,26 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 			// The input Effect's own failure, rethrown here once `updateUser`
 			// has wrapped it in `USER_VALIDATION_FAILED`.
 			let failed: Cause.Cause<E> | undefined;
-			return yield* fromPromise((signal) =>
-				update(async () => {
-					const exit = await run(fetchUser, { signal });
-					if (Exit.isSuccess(exit)) return exit.value;
-					failed = exit.cause;
-					throw Cause.squash(exit.cause);
-				}),
-			).pipe(
+			return yield* fromPromise(async (signal) => {
+				// Stops the fetch once `updateUser` settles, too: it can give up
+				// first, at its deadline or when the session changes.
+				const fetching = new AbortController();
+				const stop = () => fetching.abort(signal.reason);
+				signal.addEventListener("abort", stop, { once: true });
+				try {
+					return await update(async () => {
+						const exit = await run(fetchUser, {
+							signal: fetching.signal,
+						});
+						if (Exit.isSuccess(exit)) return exit.value;
+						if (!fetching.signal.aborted) failed = exit.cause;
+						throw Cause.squash(exit.cause);
+					});
+				} finally {
+					signal.removeEventListener("abort", stop);
+					fetching.abort();
+				}
+			}).pipe(
 				Effect.catch((failure): Effect.Effect<never, AuthFailure | E> =>
 					failed ? Effect.failCause(failed) : Effect.fail(failure),
 				),

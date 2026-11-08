@@ -122,6 +122,7 @@ const entries = [
 	"http/index",
 	"expo/index",
 	"effect/index",
+	"effetch/index",
 ];
 
 const root = fileURLToPath(new URL("../", import.meta.url));

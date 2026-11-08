@@ -214,6 +214,31 @@ test("interrupting updateUser interrupts the fetching Effect", async () => {
 	assert.deepEqual(auth.state.get().user, user);
 });
 
+test("a sign-out during the fetch interrupts it and fails with SESSION_CHANGED", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	let interrupted = false;
+	const update = run(
+		auth,
+		Effect.flip(
+			Auth.updateUser(
+				Effect.never.pipe(
+					Effect.onInterrupt(() =>
+						Effect.sync(() => {
+							interrupted = true;
+						}),
+					),
+				),
+			),
+		),
+	);
+	await flush();
+	await auth.signOut();
+	assert.equal((await update).code, "SESSION_CHANGED");
+	await flush();
+	assert.ok(interrupted);
+});
+
 test("updateUser dies for a client whose user comes from the access token", async () => {
 	const auth = client({
 		user: fromAccessToken(z.object({ sub: z.string() })),

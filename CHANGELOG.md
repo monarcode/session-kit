@@ -13,6 +13,16 @@
   `Auth.changes`, a `Stream` of the state. They fail with `AuthFailure`, a
   tagged error carrying the `AuthErrorCode` as `code`; `INVALID_OPTIONS` is
   a defect. The [Effect guide](./docs/effect.md) walks through it.
+- `@monarcode/session-kit/effetch` adds `sessionAuth({ baseUrl })`, a
+  plugin for `@monarcode/effetch` (an optional peer dependency) with
+  `createAuthFetch`'s behaviour: it sends the access token only to
+  `baseUrl`'s origin, refuses redirects with Effect's `FetchHttpClient`,
+  renews once after a 401 and replays `GET` and `HEAD`, signs out after a
+  second 401 unless `signOutOnRepeated401` is `false` (calls can override
+  it), and fails with `AuthFailure` (`UNAUTHENTICATED`, `LOCKED`,
+  `SESSION_CHANGED`, …) instead of sending a request without a token or
+  returning another account's response. `Fetch.make` needs the `Auth`
+  service.
 - A `debug` option on `createAuth` reports what auth does: restores,
   refreshes and why they ran, timers, storage operations, other tabs'
   changes, state changes, and what ended a session. `true` logs to

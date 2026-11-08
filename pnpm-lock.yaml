@@ -18,6 +18,9 @@ importers:
         specifier: ^1.6.0
         version: 1.7.0(react@19.3.0)
     devDependencies:
+      '@monarcode/effetch':
+        specifier: 0.1.0-rc.1
+        version: 0.1.0-rc.1(effect@4.1.1)
       '@tanstack/react-router':
         specifier: 1.170.41
         version: 1.170.41(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -986,6 +989,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@monarcode/effetch@0.1.0-rc.1':
+    resolution: {integrity: sha512-w6eMGRluNDXJ+KmLKbMRvhbmTFYgRyhcG8ZISLTMy9mlZOne+UA/UeXhO+aRJhzDyuOTo19vMzn09MWWYt1gQg==}
+    peerDependencies:
+      effect: ^4.0.0
 
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     resolution: {integrity: sha512-tqvZOVmSoiJzm7QjQ+whPxCP45J2C1zCAZnzc1HhwmJrFIWw/qyA8o9Cup0aVqnjNVAN+as9GHX+DbAmkCbGlQ==}
@@ -4787,6 +4795,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@monarcode/effetch@0.1.0-rc.1(effect@4.1.1)':
+    dependencies:
+      effect: 4.1.1
 
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     optional: true

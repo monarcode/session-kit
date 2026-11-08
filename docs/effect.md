@@ -16,7 +16,7 @@ work; this guide covers what Effect adds.
 - [2. Provide the service](#2-provide-the-service)
 - [3. Read the session](#3-read-the-session)
 - [Handling failures](#handling-failures)
-- [Requests with credentials](#requests-with-credentials)
+- [Requests with effetch](#requests-with-effetch)
 - [Updating the user](#updating-the-user)
 - [Watching the session](#watching-the-session)
 - [What stays on the client](#what-stays-on-the-client)
@@ -24,7 +24,7 @@ work; this guide covers what Effect adds.
 ## Installation
 
 Install `effect` 4.1 or newer beside the package. It's an optional peer
-dependency, needed only for this entry point:
+dependency, needed only for this entry point and `./effetch`:
 
 ```sh
 pnpm add @monarcode/session-kit effect zod
@@ -126,38 +126,54 @@ export const accountName = Auth.session.pipe(
 Code outside `Auth` that rejects with an `AuthError`, such as
 `createAuthFetch`, converts it with `Auth.fromAuthError`.
 
-## Requests with credentials
+## Requests with effetch
 
-`Auth.credentials` is the access token, kept apart from `Auth.session` so code
-that only needs the user never holds a token. After a 401, `Auth.renew` gets
-new credentials once for every caller; it fails with `UNAUTHENTICATED` when
-that ended the session:
+With [effetch](https://github.com/monarcode/effetch), the `sessionAuth`
+plugin from `@monarcode/session-kit/effetch` sends the access token and
+handles a 401 as `createAuthFetch` does. Install `@monarcode/effetch` too,
+another optional peer dependency. Put the plugin last, so a retry reads the
+current token, and give it the client's `baseUrl`: the token goes only to
+that origin. `Fetch.make` then needs the `Auth` service, once:
 
-<!-- file: src/orders.ts -->
+<!-- file: src/api.ts -->
 
 ```ts
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type { Credentials } from "@monarcode/session-kit";
-import { Auth } from "@monarcode/session-kit/effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as Fetch from "@monarcode/effetch";
+import { retry } from "@monarcode/effetch/plugins";
+import { sessionAuth } from "@monarcode/session-kit/effetch";
+import { AuthLive } from "./layer.js";
 
-const get = (credentials: Credentials) =>
-  Effect.tryPromise((signal) =>
-    fetch("https://api.example.com/orders", {
-      headers: { Authorization: `Bearer ${credentials.accessToken}` },
-      signal,
-    }),
-  );
+const baseUrl = "https://api.example.com";
 
-export const orders = Effect.gen(function* () {
-  const credentials = yield* Auth.credentials;
-  const response = yield* get(credentials);
-  if (response.status !== 401) return response;
-  return yield* get(yield* Auth.renew(credentials));
+const makeApi = Fetch.make({
+  baseUrl,
+  plugins: [retry(), sessionAuth({ baseUrl })],
 });
+
+// Made once, when the layer is built.
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+  "app/Api",
+) {
+  static readonly layer = Layer.effect(Api, makeApi).pipe(
+    Layer.provide(Layer.merge(FetchHttpClient.layer, AuthLive)),
+  );
+}
+
+export const orders = Api.use((api) => api.get("/orders"));
 ```
 
-Unlike `createAuthFetch`, this doesn't check the origin, refuse a response
-for a session that changed during the call, or sign out after a second 401.
+Calls can fail with `AuthFailure`, and skip the plugin with
+`plugins: { sessionAuth: false }`, for a public endpoint such as the sign-in
+request.
+
+With another HTTP client, use `Auth.credentials`, the access token, kept apart
+from `Auth.session` so code that only needs the user never holds a token.
+After a 401, `Auth.renew(credentials)` gets new credentials once for every
+caller.
 
 ## Updating the user
 
