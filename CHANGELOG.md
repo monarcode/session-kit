@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The Effect guide covers caching with effetch-query: a `QueryProvider` that
+  owns its client and resets it by `sessionId`, so no account sees another's
+  cache.
+
 ## 0.1.0-alpha.6
 
 ### Added

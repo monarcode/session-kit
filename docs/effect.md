@@ -19,6 +19,7 @@ work; this guide covers what Effect adds.
 - [Requests with effetch](#requests-with-effetch)
 - [Updating the user](#updating-the-user)
 - [Watching the session](#watching-the-session)
+- [Caching with effetch-query](#caching-with-effetch-query)
 - [What stays on the client](#what-stays-on-the-client)
 
 ## Installation
@@ -224,6 +225,59 @@ export const logStatus = Auth.changes.pipe(
   Stream.runForEach((status) => Effect.log(`Auth is ${status}`)),
 );
 ```
+
+## Caching with effetch-query
+
+With [effetch-query](https://github.com/monarcode/effetch-query) 0.1.0-rc.2
+or newer (and its `@effect/atom-react` peer for React), a cache must not
+outlive the account that filled it. Let `QueryProvider` own its
+client (`make` instead of `client`) and pass the session ID as `resetKey`:
+signing out or switching accounts then disposes the client, with its cache
+and its requests in flight, and renders the tree with a new one.
+
+<!-- file: src/queries.tsx -->
+
+```tsx
+import type { ReactNode } from "react";
+
+import { QueryClient } from "@monarcode/effetch-query";
+import { QueryProvider } from "@monarcode/effetch-query/react";
+import { createAuthHooks } from "@monarcode/session-kit/react";
+
+import { Api } from "./api.js";
+import { auth } from "./auth.js";
+
+declare module "@monarcode/effetch-query" {
+  interface Register {
+    readonly services: Api;
+  }
+}
+
+const { useAuth } = createAuthHooks<typeof auth>();
+
+export function Queries({ children }: { children: ReactNode }) {
+  const account = useAuth((state) => state.sessionId ?? "signed-out");
+  return (
+    <QueryProvider
+      make={() => QueryClient.make({ layer: Api.layer })}
+      resetKey={account}
+    >
+      {children}
+    </QueryProvider>
+  );
+}
+```
+
+Render it inside `AuthProvider` or `SessionGate`, above every `Suspense`
+boundary. A refresh, a failed refresh or a profile update keeps the
+`sessionId`, and so the cache. So does locking: queries that need a token
+fail with `LOCKED` until `unlock()`, then refetch as usual. Until a saved
+session is restored, the key is `"signed-out"`, and the restore replaces
+that client.
+
+The owned form is for the browser and React Native. With server rendering,
+give `QueryProvider` a `client` per request instead, as effetch-query's
+README describes.
 
 ## What stays on the client
 

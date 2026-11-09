@@ -99,6 +99,7 @@
 	},
 	"devDependencies": {
 		"@monarcode/effetch": "0.1.0-rc.2",
+		"@monarcode/effetch-query": "0.1.0-rc.2",
 		"@tanstack/react-router": "1.170.46",
 		"@types/jsdom": "21.1.7",
 		"@types/node": "22.20.4",
