@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 
 import {
+	cleanups,
 	input,
 	client,
 	code,
@@ -102,4 +103,76 @@ test("a session change during a request releases its response body", async () =>
 	const request = createAuthFetch(auth, "https://api.example.com/");
 	await assert.rejects(request("/me"), code("SESSION_CHANGED"));
 	assert.equal(body.cancelled, true);
+});
+
+test("optional sends signed-out requests without a token, but not locked ones", async () => {
+	let refreshed = 0;
+	const auth = client({
+		locking: true,
+		refresh: async () => {
+			refreshed++;
+			return { accessToken: "access-2" };
+		},
+	});
+	cleanups.push(auth.mount());
+	const sent: Request[] = [];
+	setGlobal("fetch", async (request: Request) => {
+		sent.push(request);
+		return new Response(null, { status: sent.length === 1 ? 200 : 401 });
+	});
+	const request = createAuthFetch(auth, "https://api.example.com/", {
+		optional: true,
+	});
+	assert.equal((await request("/feed")).status, 200);
+	assert.equal((await request("/me")).status, 401);
+	assert.deepEqual(
+		sent.map((sentRequest) => sentRequest.headers.get("Authorization")),
+		[null, null],
+	);
+	assert.equal(sent[0]?.redirect, "error");
+	assert.equal(refreshed, 0);
+	await assert.rejects(
+		request("https://evil.example/feed"),
+		code("INVALID_OPTIONS"),
+	);
+	await assert.rejects(
+		createAuthFetch(auth, "https://api.example.com/")("/feed"),
+		code("UNAUTHENTICATED"),
+	);
+	assert.equal(sent.length, 2);
+
+	await auth.signIn(input({ expiresIn: 600 }));
+	await auth.lock();
+	await assert.rejects(request("/feed"), code("LOCKED"));
+	assert.equal(sent.length, 2);
+});
+
+test("optional still sends the token, and renews after a 401, when signed in", async () => {
+	const auth = client({ refresh: async () => ({ accessToken: "access-2" }) });
+	await auth.signIn(input());
+	const headers: (string | null)[] = [];
+	setGlobal("fetch", async (request: Request) => {
+		headers.push(request.headers.get("Authorization"));
+		return new Response(null, { status: headers.length === 1 ? 401 : 200 });
+	});
+	const request = createAuthFetch(auth, "https://api.example.com/", {
+		optional: true,
+	});
+	assert.equal((await request("/me")).status, 200);
+	assert.deepEqual(headers, ["Bearer access-1", "Bearer access-2"]);
+});
+
+test("a sign-in during an optional signed-out request rejects with SESSION_CHANGED", async () => {
+	const auth = client();
+	const body = trackedBody();
+	setGlobal("fetch", async () => {
+		await auth.signIn(input());
+		return new Response(body.stream, { status: 401 });
+	});
+	const request = createAuthFetch(auth, "https://api.example.com/", {
+		optional: true,
+	});
+	await assert.rejects(request("/me"), code("SESSION_CHANGED"));
+	assert.equal(body.cancelled, true);
+	assert.equal(auth.state.get().status, "authenticated");
 });

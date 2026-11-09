@@ -603,6 +603,9 @@ export async function reloadProfile() {
 redirects. After a 401 it refreshes, then replays GET and HEAD once; other
 methods are never replayed. A second 401 ends that session, unless you pass
 `{ signOutOnRepeated401: false }` for APIs that answer 401 for other reasons.
+Signed out, it rejects with `UNAUTHENTICATED`; pass `{ optional: true }` when
+one `authFetch` serves public and private endpoints, to send those requests
+without a token instead.
 
 ### Users from the access token
 

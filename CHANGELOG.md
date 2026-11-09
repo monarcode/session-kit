@@ -7,6 +7,16 @@
 - The Effect guide covers caching with effetch-query: a `QueryProvider` that
   owns its client and resets it by `sessionId`, so no account sees another's
   cache.
+- `createAuthFetch` takes `optional`, with the same meaning as
+  `sessionBearer`'s: signed out, a
+  request is sent without `Authorization` instead of rejecting with
+  `UNAUTHENTICATED`. Locked still rejects with `LOCKED`, and a sign-in during
+  the request rejects it with `SESSION_CHANGED`.
+
+### Changed
+
+- `AuthFetchClient` now includes `state`, which `optional` reads. Any
+  `createAuth` client still fits; a hand-written object needs `state` too.
 
 ## 0.1.0-alpha.6
 

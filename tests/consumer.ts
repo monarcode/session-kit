@@ -74,6 +74,8 @@ declare module "../dist/effect/index.js" {
 
 connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
+createAuthFetch(auth, "https://api.example.com", { optional: true });
+createAuthFetch(auth, "https://api.example.com", { optional: undefined });
 
 // Provider-free hooks typed by the registered Router.
 const { useAuth, useAuthClient } = createAuthHooks({
