@@ -5,7 +5,7 @@
 Schema-driven sessions for React, with TanStack Router, React Router, and Expo
 Router support.
 
-**Version: 0.1.0-alpha.5. Early development; not ready for production.**
+**Version: 0.1.0-alpha.6. Early development; not ready for production.**
 
 session-kit keeps the tokens your backend issues and manages the session around
 them. Your backend does the authentication; session-kit does the rest:
@@ -88,7 +88,7 @@ Alpha releases are published to the `latest` distribution tag:
 pnpm add @monarcode/session-kit
 ```
 
-Pin `@monarcode/session-kit@0.1.0-alpha.5` to use this exact version. Alpha
+Pin `@monarcode/session-kit@0.1.0-alpha.6` to use this exact version. Alpha
 releases may change the public API; see the [release notes](./CHANGELOG.md).
 
 All peer dependencies are optional, so install only what you use:
