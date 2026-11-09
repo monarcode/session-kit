@@ -27,6 +27,11 @@ import {
 	SessionOutlet,
 	useRouterAuth,
 } from "@monarcode/session-kit/tanstack-router";
+import {
+	loadSession,
+	sessionHydration,
+} from "@monarcode/session-kit/tanstack-start";
+import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 
 const packageRoot = new URL("../", import.meta.url);
 
@@ -38,6 +43,9 @@ test("all public entry points import without browser globals", () => {
 		memoryStorage,
 		webStorage,
 		createServerAuth,
+		loadSession,
+		sessionHydration,
+		startJar,
 		createAuthHooks,
 		connectAuth,
 		requireSession,
@@ -65,6 +73,16 @@ test("only the Effect entries import effect and effetch, optional peers", async 
 			assert.doesNotMatch(code, /from "effect[/"]/, file);
 		if (!file.startsWith(`effetch${sep}`))
 			assert.doesNotMatch(code, /from "@monarcode\/effetch/, file);
+	}
+});
+
+test("only the Start server entry imports @tanstack/react-start, an optional peer", async () => {
+	const dist = new URL("dist/", packageRoot);
+	for (const file of await readdir(dist, { recursive: true })) {
+		if (!file.endsWith(".js")) continue;
+		const code = await readFile(new URL(file, dist), "utf8");
+		if (file !== `tanstack-start${sep}server.js`)
+			assert.doesNotMatch(code, /from "@tanstack\/react-start/, file);
 	}
 });
 

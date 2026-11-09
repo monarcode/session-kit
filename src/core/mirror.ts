@@ -225,6 +225,29 @@ const RECHECK_AFTER_MS = 10_000;
 /** Access tokens this close to expiry are asked for again, in milliseconds. */
 const RENEW_BEFORE_MS = 5_000;
 
+// Adapters that carry the session from a server render to the browser find
+// each mirror's `hydrate` here, by its `state`.
+const hydrators = new WeakMap<object, (session: unknown) => void>();
+
+/**
+ * Starts `client`, a mirror, from `session` as the server rendered it: no
+ * version change, since guards already ran with it, and no message to other
+ * tabs. Returns `false` for a client `createMirrorAuth` didn't make.
+ */
+export function hydrateMirror(
+	client: { readonly state: object },
+	session: unknown,
+): boolean {
+	const hydrate = hydrators.get(client.state);
+	hydrate?.(session);
+	return Boolean(hydrate);
+}
+
+/** Whether `createMirrorAuth` made `client`. */
+export function isMirror(client: { readonly state: object }): boolean {
+	return hydrators.has(client.state);
+}
+
 /** Checks a session from the app's function, returning a frozen copy. */
 function toSession<U>(value: unknown): Session<U> | null {
 	if (value === null) return null;
@@ -643,6 +666,28 @@ export function createMirrorAuth<U, In = never>(
 			debug.log("sign-in", "signed in", { sessionId: next.sessionId });
 			return session!;
 		};
+	hydrators.set(client.state, (value) => {
+		const next = toSession<U>(value);
+		if (next?.sessionId !== session?.sessionId) {
+			cached = undefined;
+			pending = undefined;
+		}
+		session = next;
+		generation++;
+		checkedAt = Date.now();
+		debug.log("sync", "hydrated from the server render", {
+			sessionId: session?.sessionId ?? null,
+		});
+		store.set(
+			Object.freeze({
+				status: session ? "authenticated" : "unauthenticated",
+				user: session?.user ?? null,
+				sessionId: session?.sessionId ?? null,
+				error: null,
+				version: store.get().version,
+			}) as AuthState<U>,
+		);
+	});
 	registerDebugger(client, debug);
 	return client as MirrorAuth<U, In>;
 }

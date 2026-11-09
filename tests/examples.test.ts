@@ -20,6 +20,21 @@ const copies = {
 		"react-router-declarative/src/auth.ts",
 		"react-router-framework-spa/app/auth.ts",
 	],
+	"the TanStack Router hooks": [
+		"tanstack-router/src/hooks.ts",
+		"tanstack-start-spa/src/hooks.ts",
+		"tanstack-start-ssr/src/hooks.ts",
+	],
+	"the TanStack Router guarded layout": [
+		"tanstack-router/src/routes/_authenticated.tsx",
+		"tanstack-start-spa/src/routes/_authenticated.tsx",
+		"tanstack-start-ssr/src/routes/_authenticated.tsx",
+	],
+	"the TanStack Router login route": [
+		"tanstack-router/src/routes/login.tsx",
+		"tanstack-start-spa/src/routes/login.tsx",
+		"tanstack-start-ssr/src/routes/login.tsx",
+	],
 	"auth with the user from the access token": [
 		"tanstack-start-spa/src/auth.ts",
 		"react-router-data/src/auth.ts",

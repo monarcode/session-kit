@@ -23,11 +23,22 @@
   works with `AuthProvider`, the hooks, the router guards, `createAuthFetch`
   and `sessionBearer`. Its `signIn` forwards to the app's server function,
   including tokens the browser got from the backend itself.
+- TanStack Start with server rendering, guided by `docs/tanstack-start.md` and
+  shown in `examples/tanstack-start-ssr`. `@monarcode/session-kit/tanstack-start`
+  has `sessionHydration`, router options that carry the session from the
+  server render to the browser, and `loadSession`, which reads it into the
+  client in the root route's `beforeLoad`.
+  `@monarcode/session-kit/tanstack-start/server` has `startJar()`, the
+  request's cookie jar for server functions and middleware.
+  `@tanstack/react-start` 1.169 or newer is a new optional peer dependency.
 
 ### Changed
 
 - `AuthFetchClient` now includes `state`, which `optional` reads. Any
   `createAuth` client still fits; a hand-written object needs `state` too.
+- `Auth.layer` takes a `createMirrorAuth` client: `AuthServiceClient`'s
+  `signIn` is optional and may resolve a value. `Auth.signIn` dies with
+  `INVALID_OPTIONS` for a client without `signIn`.
 
 ## 0.1.0-alpha.6
 

@@ -50,6 +50,12 @@ import {
 	SessionOutlet,
 	useRouterAuth,
 } from "../dist/tanstack-router/index.js";
+import {
+	loadSession,
+	sessionHydration,
+	type DehydratedSession,
+} from "../dist/tanstack-start/index.js";
+import { startJar } from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -499,3 +505,13 @@ const plainMirror: MirrorAuth<{ id: string }> = createMirrorAuth({
 void plainMirror.signIn;
 // @ts-expect-error The mirror can't lock.
 void plainMirror.lock;
+
+// TanStack Start: hydration and the request's jar.
+const hydration = sessionHydration(mirror);
+const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
+	hydration.dehydrate();
+hydration.hydrate(dehydrated);
+void loadSession(mirror);
+void loadSession(plainMirror);
+const startCookies: CookieJar = startJar();
+void startCookies;

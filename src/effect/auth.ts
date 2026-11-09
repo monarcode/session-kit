@@ -41,13 +41,40 @@ import {
  * export const AuthLive = Auth.layer(auth);
  * ```
  *
+ * @example
+ * A `createMirrorAuth` client, made per request with server rendering,
+ * registers its type the same way:
+ * ```ts
+ * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
+ * import { Auth } from "@monarcode/session-kit/effect";
+ *
+ * declare function getSessionFn(): Promise<Session<{ id: number }> | null>;
+ *
+ * export const createAppAuth = () =>
+ * 	createMirrorAuth({
+ * 		name: "app",
+ * 		session: null,
+ * 		revalidate: getSessionFn,
+ * 		signOut: async () => {},
+ * 	});
+ *
+ * declare module "@monarcode/session-kit/effect" {
+ * 	interface Register {
+ * 		auth: ReturnType<typeof createAppAuth>;
+ * 	}
+ * }
+ *
+ * export const layer = () => Auth.layer(createAppAuth());
+ * ```
+ *
  * @since 0.1.0
  */
 export interface Register {}
 
 /**
- * What `Auth` needs from a client: any client `createAuth` returns fits,
- * as does a fake with these members in tests.
+ * What `Auth` needs from a client: any client `createAuth` or
+ * `createMirrorAuth` returns fits, as does a fake with these members in
+ * tests. `signIn` is optional, since a mirror made without it has none.
  *
  * @example
  * ```ts
@@ -73,7 +100,7 @@ export type AuthServiceClient = {
 			unsubscribe: () => void;
 		};
 	};
-	signIn: (input: never) => Promise<void>;
+	signIn?: ((input: never) => Promise<unknown>) | undefined;
 	signOut: () => Promise<void>;
 	getSession: () => Promise<unknown>;
 	isCurrent: (session: { sessionId: string }) => boolean;
@@ -158,7 +185,8 @@ export type RegisteredSession = NonNullable<
 export type RegisteredState = ReturnType<RegisteredAuth["state"]["get"]>;
 
 /**
- * What {@link Auth.signIn} takes: the registered client's `signIn` input.
+ * What {@link Auth.signIn} takes: the registered client's `signIn` input, or
+ * `never` for a client without `signIn`.
  *
  * @example
  * ```ts
@@ -170,11 +198,16 @@ export type RegisteredState = ReturnType<RegisteredAuth["state"]["get"]>;
  *
  * @since 0.1.0
  */
-export type RegisteredSignIn = Parameters<RegisteredAuth["signIn"]>[0];
+export type RegisteredSignIn = RegisteredAuth extends {
+	signIn: (input: infer Input) => Promise<unknown>;
+}
+	? Input
+	: never;
 
 /**
  * What {@link Auth.updateUser} takes: the registered client's user input, or
- * `never` for a client whose user comes from the access token.
+ * `never` for a client without `updateUser`, such as one whose user comes
+ * from the access token.
  *
  * @example
  * ```ts
@@ -306,16 +339,25 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	/**
 	 * Saves a new session from `input`, as `signIn` does: for example after
 	 * a login request. Fails with `USER_VALIDATION_FAILED`,
-	 * `INVALID_SESSION`, `PERSISTENCE_FAILED` or `SESSION_CHANGED`.
+	 * `INVALID_SESSION`, `PERSISTENCE_FAILED` or `SESSION_CHANGED`. Dies for
+	 * a `createMirrorAuth` client made without `signIn`.
 	 */
 	static readonly signIn = (
 		input: RegisteredSignIn,
 	): Effect.Effect<void, AuthFailure, Auth> =>
-		Auth.use((client) =>
-			fromPromise(() =>
-				(client.signIn as (input: unknown) => Promise<void>)(input),
-			),
-		);
+		Auth.use((client) => {
+			const signIn = (
+				client as { signIn?: (input: unknown) => Promise<unknown> }
+			).signIn;
+			return signIn
+				? Effect.asVoid(fromPromise(() => signIn(input)))
+				: Effect.die(
+						new AuthError(
+							"INVALID_OPTIONS",
+							"This client has no signIn; pass signIn to createMirrorAuth",
+						),
+					);
+		});
 
 	/**
 	 * Signs out, as `signOut` does. Fails with `PERSISTENCE_FAILED` when
@@ -333,8 +375,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * own failure is this one's, unchanged. The Effect is interrupted when
 	 * the session changes, failing with `SESSION_CHANGED`, and after 15
 	 * seconds, failing with `USER_VALIDATION_FAILED` whose `cause` is the
-	 * timeout. Dies for a client whose user comes from the access token,
-	 * which has no `updateUser`.
+	 * timeout. Dies for a client without `updateUser`: one whose user comes
+	 * from the access token, or a `createMirrorAuth` client, whose user comes
+	 * from the server.
 	 */
 	static readonly updateUser = <E = never, R = never>(
 		input: RegisteredUserInput | Effect.Effect<RegisteredUserInput, E, R>,
@@ -352,7 +395,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				return yield* Effect.die(
 					new AuthError(
 						"INVALID_OPTIONS",
-						"updateUser needs a user schema; this client reads its user from the access token",
+						"This client has no updateUser: its user comes from the access token or from the server",
 					),
 				);
 			if (!Effect.isEffect(input))

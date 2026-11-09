@@ -20,6 +20,7 @@ work; this guide covers what Effect adds.
 - [Updating the user](#updating-the-user)
 - [Watching the session](#watching-the-session)
 - [Caching with effetch-query](#caching-with-effetch-query)
+- [With server rendering](#with-server-rendering)
 - [What stays on the client](#what-stays-on-the-client)
 
 ## Installation
@@ -278,6 +279,15 @@ that client.
 The owned form is for the browser and React Native. With server rendering,
 give `QueryProvider` a `client` per request instead, as effetch-query's
 README describes.
+
+## With server rendering
+
+A `createMirrorAuth` client, from the
+[TanStack Start guide](./tanstack-start.md), works as `Auth` too: register
+its type (such as `AppAuth`) and build the layer where you create the client,
+once per request on the server. `Auth.signIn` needs the mirror's `signIn`
+option, and `sessionBearer` its `credentials` option. `Auth.updateUser`
+isn't available, since the user comes from the server.
 
 ## What stays on the client
 

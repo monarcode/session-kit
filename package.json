@@ -12,8 +12,10 @@
 		"react-native",
 		"react-router",
 		"router",
+		"ssr",
 		"standard-schema",
-		"tanstack"
+		"tanstack",
+		"tanstack-start"
 	],
 	"homepage": "https://github.com/monarcode/session-kit#readme",
 	"bugs": {
@@ -58,6 +60,14 @@
 		"./server": {
 			"types": "./dist/server/index.d.ts",
 			"import": "./dist/server/index.js"
+		},
+		"./tanstack-start": {
+			"types": "./dist/tanstack-start/index.d.ts",
+			"import": "./dist/tanstack-start/index.js"
+		},
+		"./tanstack-start/server": {
+			"types": "./dist/tanstack-start/server.d.ts",
+			"import": "./dist/tanstack-start/server.js"
 		},
 		"./expo": {
 			"types": "./dist/expo/index.d.ts",
@@ -105,6 +115,7 @@
 		"@monarcode/effetch": "0.1.0-rc.2",
 		"@monarcode/effetch-query": "0.1.0-rc.2",
 		"@tanstack/react-router": "1.170.46",
+		"@tanstack/react-start": "1.169.5",
 		"@types/jsdom": "21.1.7",
 		"@types/node": "22.20.4",
 		"@types/react": "19.3.0",
@@ -128,6 +139,7 @@
 	"peerDependencies": {
 		"@monarcode/effetch": "^0.1.0-rc.1",
 		"@tanstack/react-router": "^1.132.0",
+		"@tanstack/react-start": "^1.169.0",
 		"effect": "^4.1.0",
 		"expo-file-system": "^18.1.0 || ^19.0.0 || ^55.0.0 || ^56.0.0 || ^57.0.0 || ^58.0.0",
 		"expo-router": "^5.0.2 || ^6.0.0 || ^55.0.0 || ^56.0.0 || ^57.0.0 || ^58.0.0",
@@ -141,6 +153,9 @@
 			"optional": true
 		},
 		"@tanstack/react-router": {
+			"optional": true
+		},
+		"@tanstack/react-start": {
 			"optional": true
 		},
 		"effect": {

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { AuthError, fromAccessToken } from "@monarcode/session-kit";
+import {
+	AuthError,
+	createMirrorAuth,
+	fromAccessToken,
+} from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -250,6 +254,48 @@ test("updateUser dies for a client whose user comes from the access token", asyn
 	);
 	assert.ok(died instanceof AuthError);
 	assert.equal(died.code, "INVALID_OPTIONS");
+});
+
+test("a createMirrorAuth client is the Auth service, without updateUser", async () => {
+	const posted: unknown[] = [];
+	const mirror = createMirrorAuth({
+		name: "effect-mirror",
+		session: null,
+		revalidate: async () => null,
+		signIn: async (data: { username: string }) => {
+			posted.push(data);
+			return { sessionId: "s1", user };
+		},
+		signOut: async () => {},
+	});
+	const layer = Auth.layer(mirror);
+	const session = await Effect.runPromise(
+		Effect.provide(
+			Effect.andThen(
+				Auth.signIn({ username: "alice" } as never),
+				Auth.session,
+			),
+			layer,
+		),
+	);
+	assert.deepEqual(posted, [{ username: "alice" }]);
+	assert.equal(session.sessionId, "s1");
+
+	const plain = createMirrorAuth({
+		name: "effect-mirror",
+		session: null,
+		revalidate: async () => null,
+		signOut: async () => {},
+	});
+	Auth.layer(plain);
+	for (const effect of [
+		Auth.signIn(undefined as never),
+		Auth.updateUser(undefined as never),
+	]) {
+		const died = await defect(plain as never, effect);
+		assert.ok(died instanceof AuthError);
+		assert.equal(died.code, "INVALID_OPTIONS");
+	}
 });
 
 test("changes emits the current state, then each change, and unsubscribes", async (t) => {

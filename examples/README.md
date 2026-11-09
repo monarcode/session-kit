@@ -1,7 +1,7 @@
 # session-kit examples
 
-Six small apps, one per supported setup, all signing in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth). The five web apps
+Seven small apps, one per supported setup, all signing in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth). The six web apps
 share the same pages: `/login`, prefilled with DummyJSON's test user, and a
 protected `/` that shows the user, calls `auth/me` with the access token, and
 signs out. The Expo app has the same sign-in screen, and splits the protected
@@ -12,6 +12,7 @@ deep link has somewhere to go.
 | ------------------------------------------------------------ | --------------------------------------------- | --------------- |
 | [`tanstack-router`](./tanstack-router)                       | TanStack Router, file-based routes            | Login response  |
 | [`tanstack-start-spa`](./tanstack-start-spa)                 | TanStack Start in SPA mode                    | Access token    |
+| [`tanstack-start-ssr`](./tanstack-start-ssr)                 | TanStack Start with server rendering          | Login response  |
 | [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`               | Login response  |
 | [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`           | Access token    |
 | [`react-router-framework-spa`](./react-router-framework-spa) | React Router framework mode with `ssr: false` | Login response  |
@@ -55,6 +56,17 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
+- **TanStack Start with server rendering** keeps the session in an encrypted
+  `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
+  with DummyJSON from a server function, and refreshes in request middleware
+  (`src/start.ts`). `createMirrorAuth` gives the routes and components a
+  client, filled by `loadSession` on the server and `sessionHydration` in the
+  browser. `auth/me` is called both from a server function and, with
+  `clientCredentials`, from the browser. Set `SESSION_SECRET` (32 or more
+  random characters) to run `vite preview`; `vite dev` uses a development
+  secret. The cookie is `Secure` outside `vite dev`, which Safari refuses
+  over `http://localhost`: try `vite preview` in another browser. See
+  [the guide](../docs/tanstack-start.md).
 - **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
   `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
   after a failed refresh, and re-checks the session when the app returns to
@@ -63,10 +75,11 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-every web app has the same `ui.tsx` rather than sharing one. The apps differ in
-where the user comes from on purpose, so both user sources appear: the login
-response, validated by a schema, or the access token's claims, read with
-`fromAccessToken`. DummyJSON supports both.
+the client-side web apps have the same `ui.tsx` rather than sharing one; the
+server-rendered app has its own, since it signs in on the server. The apps
+differ in where the user comes from on purpose, so both user sources appear:
+the login response, validated by a schema, or the access token's claims, read
+with `fromAccessToken`. DummyJSON supports both.
 
 DummyJSON has no logout endpoint, so the apps do not pass `revoke`. Its refresh
 tokens stay valid after rotation, so it cannot show the cross-tab rotation race

@@ -84,6 +84,36 @@ declare module "expo-crypto" {
 }
 `;
 
+/** What TanStack Router's generator would write for the Start guide's routes. */
+const START_ROUTE_TREE = `
+import { Route as rootRoute } from "./routes/__root";
+import { Route as authenticatedRouteImport } from "./routes/_authenticated";
+
+const authenticatedRoute = authenticatedRouteImport.update({
+  id: "/_authenticated",
+  getParentRoute: () => rootRoute,
+} as any);
+
+export const routeTree = rootRoute.addChildren([authenticatedRoute]);
+
+declare module "@tanstack/react-router" {
+  interface FileRoutesByPath {
+    "/_authenticated": {
+      id: "/_authenticated";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof authenticatedRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+  }
+}
+`;
+
+/** The part of Node's types the Start guide's server code uses. */
+const SERVER_ENV = `
+declare const process: { env: Record<string, string | undefined> };
+`;
+
 /**
  * Markdown documents whose TypeScript examples, marked with a
  * `<!-- file: path -->` comment, form one small app per document: they can
@@ -106,6 +136,16 @@ const documents = [
 		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
 	},
 	{
+		path: "docs/tanstack-start.md",
+		// Vite resolves like a bundler, and Start apps import without extensions.
+		resolutions: ["Bundler"],
+		dom: true,
+		fixtures: {
+			"src/routeTree.gen.ts": START_ROUTE_TREE,
+			"src/env.d.ts": SERVER_ENV,
+		},
+	},
+	{
 		path: "docs/effect.md",
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
@@ -121,6 +161,8 @@ const entries = [
 	"react-router/index",
 	"http/index",
 	"server/index",
+	"tanstack-start/index",
+	"tanstack-start/server",
 	"expo/index",
 	"effect/index",
 	"effetch/index",
