@@ -678,7 +678,10 @@ await auth.lock(); // `locked` again; the saved session stays
 - **Locking again.** `lock()` takes the tokens out of memory and keeps the
   saved session. A refresh already running still saves its tokens, so keep
   the key until the promise settles.
-- **Native apps.** With `locking`, other tabs' changes aren't followed. The
+- **Native apps.** Locking is built for apps with one JavaScript context. In
+  a browser, tabs don't follow each other with `locking`: a sign-in, sign-out
+  or lock in one tab doesn't reach the others, and with rotating refresh
+  tokens, two tabs refreshing the same session can sign one of them out. The
   router adapters treat a locked session as signed out. Locking needs a user
   schema: a user read from the access token can't be shown without its token.
 - **Existing sessions.** A session saved before `locking` was added restores
@@ -763,6 +766,7 @@ and the others reuse what it saved; rotating refresh tokens work with several
 tabs open. Without Web Locks, two tabs refreshing at the same instant can both
 spend the token; a short reuse window on the backend covers that. An Expo app
 has one JavaScript context, so it has no tabs to follow and needs no lock.
+With [`locking`](#locking), tabs don't follow each other.
 
 ### Errors
 

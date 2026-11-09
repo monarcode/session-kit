@@ -615,8 +615,11 @@ export type AuthOptions<Src extends UserSource> = {
 	/**
 	 * Restores a saved session as `locked`, with its user but not its tokens,
 	 * until `unlock()`. `true` stores the tokens as they are; `{ seal, open }`
-	 * encrypts them with the app's key ({@link AuthLocking}). For native apps:
-	 * with `locking`, other tabs' changes aren't followed. Needs a user schema,
+	 * encrypts them with the app's key ({@link AuthLocking}). For native apps,
+	 * which have one JavaScript context: in a browser, tabs don't follow each
+	 * other with `locking`. A sign-in, sign-out or lock in one tab doesn't
+	 * reach the others, and with rotating refresh tokens, two tabs refreshing
+	 * the same session can sign one of them out. Needs a user schema,
 	 * since a user read from the access token can't be shown without its
 	 * token. Default: off.
 	 */
