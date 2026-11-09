@@ -120,6 +120,7 @@ const entries = [
 	"tanstack-router/index",
 	"react-router/index",
 	"http/index",
+	"server/index",
 	"expo/index",
 	"effect/index",
 	"effetch/index",

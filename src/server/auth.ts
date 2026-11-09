@@ -1,0 +1,568 @@
+import { createAuth } from "../core/client.js";
+import { createDebugger, type AuthDebug } from "../core/debug.js";
+import { AuthError, sessionChanged } from "../core/errors.js";
+import { isRecord } from "../core/json.js";
+import type { ClientCredentials } from "../core/mirror.js";
+import { checkOptions, createPersistence } from "../core/persistence.js";
+import { resolveUserSource, type UserSource } from "../core/sources.js";
+import type { AuthStorage } from "../core/storage.js";
+import type {
+	AuthClient,
+	Credentials,
+	RefreshFn,
+	RevokeFn,
+	Session,
+	SignInInput,
+	User,
+	UserInput,
+} from "../core/types.js";
+import {
+	createShared,
+	jarStorage,
+	type CookieJar,
+	type CookieOptions,
+} from "./cookies.js";
+import { createSealer, readSecrets } from "./seal.js";
+
+/**
+ * Attributes of the session cookie, the `cookie` option of
+ * {@link ServerAuthOptions}. It is always `httpOnly`.
+ *
+ * @example
+ * ```ts
+ * import type { SessionCookieOptions } from "@monarcode/session-kit/server";
+ *
+ * declare const production: boolean;
+ *
+ * // Plain http on localhost, during development only.
+ * export const cookie: SessionCookieOptions = { secure: production };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type SessionCookieOptions = {
+	/**
+	 * Sends the cookie over HTTPS only. Turn it off only for plain-http
+	 * development on `localhost`. Default: `true`.
+	 */
+	secure?: boolean | undefined;
+	/** `"none"` needs `secure`. Default: `"lax"`. */
+	sameSite?: "lax" | "strict" | "none" | undefined;
+	/** Default: `"/"`. */
+	path?: string | undefined;
+	/** Shares the cookie with subdomains. Default: this host only. */
+	domain?: string | undefined;
+};
+
+/**
+ * Options for {@link createServerAuth}. `name`, `user`, `refresh`, `revoke`,
+ * `maxAge` and `debug` mean what they mean for `createAuth`.
+ *
+ * @example
+ * ```ts
+ * import type { ServerAuthOptions } from "@monarcode/session-kit/server";
+ * import { z } from "zod";
+ *
+ * declare const secret: string;
+ *
+ * const userSchema = z.object({ id: z.number(), firstName: z.string() });
+ *
+ * export const options: ServerAuthOptions<typeof userSchema> = {
+ * 	name: "app",
+ * 	user: userSchema,
+ * 	secret,
+ * 	maxAge: 7 * 24 * 60 * 60, // a week
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type ServerAuthOptions<Src extends UserSource> = {
+	/**
+	 * Letters, digits, `_` or `-`, up to 64 characters. The cookie is
+	 * `<name>.session`, split into `<name>.session.0…n` when large.
+	 */
+	name: string;
+	/**
+	 * Where the user comes from: a Standard Schema validating the `user` passed
+	 * to `signIn`, or `fromAccessToken(…)`. The cookie is trusted once sealed,
+	 * but `signIn`'s input is not checked against your backend: see
+	 * {@link ServerAuth}.
+	 */
+	user: Src;
+	/**
+	 * Seals the cookie: at least 32 random characters, kept out of the code
+	 * and the browser. Pass a list to rotate: the first seals, and any of them
+	 * opens, so sessions survive a new secret. A cookie none opens reads as
+	 * signed out.
+	 */
+	secret: string | readonly string[];
+	/** Exchanges a refresh token for new tokens. See `RefreshFn`. */
+	refresh?: RefreshFn<NoInfer<UserInput<Src>>> | undefined;
+	/** Revokes tokens on the backend after `signOut`. See `RevokeFn`. */
+	revoke?: RevokeFn | undefined;
+	/** Cookie lifetime in seconds, renewed on every save. Default: 30 days. */
+	maxAge?: number | undefined;
+	/** Attributes of the session cookie. See {@link SessionCookieOptions}. */
+	cookie?: SessionCookieOptions | undefined;
+	/**
+	 * Lets `clientCredentials` hand the access token to the app's own page
+	 * scripts, through a function the app exposes. The refresh token never
+	 * leaves the server. Default: `false`, and `clientCredentials` rejects
+	 * with `INVALID_OPTIONS`.
+	 */
+	clientCredentials?: boolean | undefined;
+	/** Reports what auth does on the server, as `createAuth`'s `debug` does. */
+	debug?: AuthDebug | undefined;
+};
+
+/**
+ * Options for {@link ServerAuth}'s `prepare`.
+ *
+ * @example
+ * ```ts
+ * import type { CookieJar, ServerAuth } from "@monarcode/session-kit/server";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ * declare const jar: CookieJar;
+ *
+ * // Refresh when less than two minutes are left.
+ * await serverAuth.prepare(jar, { skew: 120 });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type PrepareOptions = {
+	/**
+	 * Refreshes when the access token expires within this many seconds, so it
+	 * lasts through the request. Keep it well below the token's lifetime: a
+	 * token that lives less than `skew` is refreshed on every request.
+	 * Default: `60`.
+	 */
+	skew?: number | undefined;
+};
+
+type ServerAuthBase<U, I> = {
+	/**
+	 * Who is signed in, from the cookie, or `null`. With a writable jar,
+	 * expired access is refreshed first, as the client's `getSession` does, and
+	 * a refresh token the backend rejects signs out. With a read-only jar, the
+	 * session is returned as the cookie holds it.
+	 */
+	getSession: (jar: CookieJar) => Promise<Session<U> | null>;
+	/**
+	 * Refreshes access that expires within `skew` seconds, then resolves the
+	 * session, for middleware or a proxy that runs before rendering. Refreshes
+	 * at most once per jar, and a failed refresh is ignored while the access
+	 * token still works. Rejects with
+	 * `INVALID_OPTIONS` given a read-only jar. See {@link PrepareOptions}.
+	 */
+	prepare: (
+		jar: CookieJar,
+		options?: PrepareOptions,
+	) => Promise<Session<U> | null>;
+	/**
+	 * Validates `input` as the client's `signIn` does, seals it into the
+	 * cookie and resolves the new session, which holds no tokens, so it can be
+	 * returned to the browser. Rejects with `INVALID_OPTIONS` given a
+	 * read-only jar.
+	 */
+	signIn: (jar: CookieJar, input: SignInInput<I>) => Promise<Session<U>>;
+	/**
+	 * Clears the cookie, then calls `revoke` and waits for it. A failed
+	 * revocation doesn't reject. Rejects with `INVALID_OPTIONS` given a
+	 * read-only jar.
+	 */
+	signOut: (jar: CookieJar) => Promise<void>;
+	/**
+	 * The access token ({@link Credentials}) for server code that calls the
+	 * backend. `get`, `renew` and `reject` behave as the client's do.
+	 */
+	credentials: {
+		/**
+		 * The current access token, refreshing expired access first, or `null`.
+		 * With a read-only jar, expired access can't be refreshed and saved:
+		 * rejects with `REFRESH_FAILED`. Refresh in middleware or a proxy first,
+		 * with `prepare`.
+		 */
+		get: (jar: CookieJar) => Promise<Credentials | null>;
+		/**
+		 * Recovers after the backend rejected `credentials`, for example with a
+		 * 401. Rejects with `REFRESH_FAILED` given a read-only jar.
+		 */
+		renew: (
+			jar: CookieJar,
+			credentials: Credentials,
+		) => Promise<Credentials | null>;
+		/**
+		 * Signs out if `credentials` are still current. Rejects with
+		 * `INVALID_OPTIONS` given a read-only jar.
+		 */
+		reject: (jar: CookieJar, credentials: Credentials) => Promise<void>;
+	};
+	/**
+	 * The access token for the app's page scripts ({@link ClientCredentials}),
+	 * with `clientCredentials: true`. Expose these through a same-origin,
+	 * CSRF-protected server function, action or route handler, and nothing
+	 * else. Both reject with `INVALID_OPTIONS` without the option.
+	 */
+	clientCredentials: {
+		/** Like `credentials.get`, refreshing when access has expired. */
+		get: (jar: CookieJar) => Promise<ClientCredentials | null>;
+		/**
+		 * Like `credentials.renew`, after the backend rejected the token. Takes
+		 * what the browser sends, so anything but a session ID and an access
+		 * token rejects with `INVALID_OPTIONS`.
+		 */
+		renew: (
+			jar: CookieJar,
+			credentials: unknown,
+		) => Promise<ClientCredentials | null>;
+	};
+};
+
+/**
+ * The server engine from {@link createServerAuth}. `U` is the user; `I` is
+ * what `signIn` and `updateUser` accept as the user, or `never` when the user
+ * comes from the access token. Prefer `typeof serverAuth`.
+ *
+ * Each method takes the request's {@link CookieJar}. Nothing is kept between
+ * requests except a short record of new tokens, so parallel requests that
+ * carry the same cookie use one refresh. Across server instances, nothing is
+ * shared: with rotating refresh tokens, give the backend a short reuse window.
+ *
+ * `signIn` seals what it's given. When the browser sends the tokens and the
+ * user, after signing in with the backend itself, the user in the cookie is
+ * what the browser said until a refresh or `updateUser` replaces it: show it,
+ * but let the backend authorize with the access token. To trust it, check the
+ * input before `signIn`, or sign in with the backend on the server.
+ *
+ * @example
+ * ```ts
+ * import type { CookieJar, ServerAuth } from "@monarcode/session-kit/server";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const serverAuth: ServerAuth<User, User>;
+ * declare const jar: CookieJar;
+ *
+ * export async function greeting() {
+ * 	const session = await serverAuth.getSession(jar);
+ * 	return session ? `Hi, ${session.user.firstName}` : "Please sign in";
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type ServerAuth<U, I> = ServerAuthBase<U, I> &
+	([I] extends [never]
+		? unknown
+		: {
+				/**
+				 * Replaces the user and keeps the session, as the client's
+				 * `updateUser` does, then resolves the session. Rejects with
+				 * `INVALID_OPTIONS` given a read-only jar.
+				 */
+				updateUser: (
+					jar: CookieJar,
+					input: I | (() => Promise<I>),
+				) => Promise<Session<U>>;
+			});
+
+/** Default `prepare` skew, in seconds. */
+const DEFAULT_SKEW = 60;
+
+/**
+ * Creates the server engine ({@link ServerAuth}) that keeps the session in an
+ * encrypted `httpOnly` cookie: both tokens and the user, sealed with
+ * AES-256-GCM. Create one per app, at module level, and pass each request's
+ * {@link CookieJar} to its methods. Throws `INVALID_OPTIONS` for options it
+ * can't use, such as a short `secret`. See {@link ServerAuthOptions}.
+ *
+ * @example
+ * ```ts
+ * import { createServerAuth } from "@monarcode/session-kit/server";
+ * import { z } from "zod";
+ *
+ * declare const secret: string; // from the environment
+ *
+ * export const serverAuth = createServerAuth({
+ * 	name: "app",
+ * 	user: z.object({ id: z.number(), firstName: z.string() }),
+ * 	secret,
+ * 	refresh: async ({ refreshToken, signal }) => {
+ * 		const response = await fetch("https://api.example.com/auth/refresh", {
+ * 			method: "POST",
+ * 			signal,
+ * 			headers: { "Content-Type": "application/json" },
+ * 			body: JSON.stringify({ refreshToken }),
+ * 		});
+ * 		if (response.status === 401) return null;
+ * 		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+ * 		return response.json();
+ * 	},
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function createServerAuth<Src extends UserSource>(
+	options: ServerAuthOptions<Src>,
+): ServerAuth<User<Src>, UserInput<Src>> {
+	type U = User<Src>;
+	type I = UserInput<Src>;
+	const secrets = readSecrets(options.secret);
+	const users = resolveUserSource(options.user);
+	const debug = createDebugger(options.name, options.debug);
+	checkOptions(options.name, options.maxAge);
+	const cookie = `${options.name}.session`;
+	const attributes: Omit<CookieOptions, "maxAge"> = Object.freeze({
+		httpOnly: true,
+		secure: options.cookie?.secure ?? true,
+		sameSite: options.cookie?.sameSite ?? "lax",
+		path: options.cookie?.path ?? "/",
+		domain: options.cookie?.domain,
+	});
+	if (attributes.sameSite === "none" && !attributes.secure)
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			'A cookie with sameSite "none" must be secure',
+		);
+	const sealer = createSealer(secrets, options.name);
+	const shared = createShared();
+
+	// One storage per jar, so calls during a request share what it read and
+	// wrote, and one client per writable jar, so they share one refresh.
+	const storages = new WeakMap<CookieJar, AuthStorage>();
+	const clients = new WeakMap<CookieJar, AuthClient<U, unknown>>();
+	// Jars whose request has called `refresh`, so `prepare` doesn't again.
+	const refreshed = new WeakSet<CookieJar>();
+
+	function storageOf(jar: CookieJar): AuthStorage {
+		let storage = storages.get(jar);
+		if (!storage) {
+			storage = jarStorage({
+				jar,
+				cookie,
+				options: attributes,
+				sealer,
+				shared,
+			});
+			storages.set(jar, storage);
+		}
+		return storage;
+	}
+
+	function writable(jar: CookieJar, method: string) {
+		if (!jar.writable)
+			throw new AuthError(
+				"INVALID_OPTIONS",
+				`${method} needs a cookie jar that can set cookies, such as one in a server function, action or route handler`,
+			);
+	}
+
+	function clientOf(jar: CookieJar): AuthClient<U, unknown> {
+		let client = clients.get(jar);
+		if (!client) {
+			client = createAuth({
+				name: options.name,
+				user: options.user,
+				storage: storageOf(jar),
+				refresh:
+					options.refresh &&
+					((context) => {
+						refreshed.add(jar);
+						return options.refresh!(context);
+					}),
+				revoke: options.revoke,
+				maxAge: options.maxAge,
+				debug: options.debug,
+			}) as unknown as AuthClient<U, unknown>;
+			clients.set(jar, client);
+		}
+		return client;
+	}
+
+	/** The session as the cookie holds it, without refreshing, for read-only jars. */
+	async function peek(jar: CookieJar) {
+		const persistence = createPersistence(
+			storageOf(jar),
+			options.name,
+			options.maxAge,
+			debug,
+		);
+		try {
+			const stored = await persistence.read();
+			if (!stored) return null;
+			return { ...stored, user: (await users.restore(stored)) as U };
+		} catch (cause) {
+			if (
+				cause instanceof AuthError &&
+				(cause.code === "INVALID_SESSION" ||
+					cause.code === "USER_VALIDATION_FAILED")
+			)
+				return null;
+			throw cause;
+		}
+	}
+
+	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
+		if (jar.writable) return clientOf(jar).credentials.get();
+		const stored = await peek(jar);
+		if (!stored) return null;
+		if (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
+			throw new AuthError(
+				"REFRESH_FAILED",
+				"The access token expired, and this cookie jar can't save a refreshed one; refresh first in middleware or a proxy, with prepare",
+			);
+		return Object.freeze({
+			sessionId: stored.id,
+			accessToken: stored.accessToken,
+			expiresAt: stored.expiresAt,
+		});
+	}
+
+	async function renew(
+		jar: CookieJar,
+		credentials: Credentials,
+	): Promise<Credentials | null> {
+		if (!jar.writable)
+			throw new AuthError(
+				"REFRESH_FAILED",
+				"This cookie jar can't save a refreshed token; renew in a server function, action or route handler",
+			);
+		const client = clientOf(jar);
+		// Restores the cookie's session first: renewing compares against it.
+		await client.getSession();
+		return client.credentials.renew(credentials);
+	}
+
+	function forClient(
+		credentials: Credentials | null,
+	): ClientCredentials | null {
+		if (!credentials) return null;
+		return Object.freeze({
+			sessionId: credentials.sessionId,
+			accessToken: credentials.accessToken,
+			expiresIn:
+				credentials.expiresAt === undefined
+					? undefined
+					: Math.max(0, (credentials.expiresAt - Date.now()) / 1000),
+		});
+	}
+
+	function requireClientCredentials() {
+		if (!options.clientCredentials)
+			throw new AuthError(
+				"INVALID_OPTIONS",
+				"Pass clientCredentials: true to createServerAuth to give the access token to page scripts",
+			);
+	}
+
+	async function current(client: AuthClient<U, unknown>): Promise<Session<U>> {
+		const session = await client.getSession();
+		if (!session) throw sessionChanged();
+		return session;
+	}
+
+	const serverAuth: ServerAuthBase<U, I> = {
+		async getSession(jar) {
+			if (jar.writable) return clientOf(jar).getSession();
+			const stored = await peek(jar);
+			return (
+				stored && Object.freeze({ sessionId: stored.id, user: stored.user })
+			);
+		},
+		async prepare(jar, prepareOptions = {}) {
+			writable(jar, "prepare");
+			const skew = prepareOptions.skew ?? DEFAULT_SKEW;
+			if (!Number.isFinite(skew) || skew < 0)
+				throw new AuthError(
+					"INVALID_OPTIONS",
+					"Pass skew as seconds, zero or more",
+				);
+			const client = clientOf(jar);
+			const credentials = await client.credentials.get();
+			if (!credentials) return null;
+			if (
+				options.refresh &&
+				!refreshed.has(jar) &&
+				credentials.expiresAt !== undefined &&
+				credentials.expiresAt - Date.now() < skew * 1000
+			) {
+				try {
+					await client.refresh();
+				} catch (error) {
+					if (
+						!client.isCurrent(credentials) ||
+						credentials.expiresAt <= Date.now()
+					)
+						throw error;
+				}
+			}
+			return client.getSession();
+		},
+		async signIn(jar, input) {
+			writable(jar, "signIn");
+			const client = clientOf(jar);
+			await client.signIn(input as SignInInput<unknown>);
+			return current(client);
+		},
+		async signOut(jar) {
+			writable(jar, "signOut");
+			const client = clientOf(jar);
+			// Restores the cookie's session, so revoke receives its tokens.
+			await client.getSession().catch(() => {});
+			await client.signOut();
+		},
+		credentials: {
+			get: getCredentials,
+			renew,
+			async reject(jar, credentials) {
+				writable(jar, "credentials.reject");
+				const client = clientOf(jar);
+				// Restores the cookie's session to compare against, even if its
+				// refresh fails.
+				await client.getSession().catch(() => {});
+				await client.credentials.reject(credentials);
+			},
+		},
+		clientCredentials: {
+			async get(jar) {
+				requireClientCredentials();
+				return forClient(await getCredentials(jar));
+			},
+			async renew(jar, credentials) {
+				requireClientCredentials();
+				if (
+					!isRecord(credentials) ||
+					typeof credentials.sessionId !== "string" ||
+					typeof credentials.accessToken !== "string"
+				)
+					throw new AuthError(
+						"INVALID_OPTIONS",
+						"Pass the sessionId and accessToken the browser was given",
+					);
+				return forClient(
+					await renew(jar, {
+						sessionId: credentials.sessionId,
+						accessToken: credentials.accessToken,
+					}),
+				);
+			},
+		},
+	};
+	if (!users.saved) return serverAuth as ServerAuth<U, I>;
+	return {
+		...serverAuth,
+		async updateUser(jar: CookieJar, input: I | (() => Promise<I>)) {
+			writable(jar, "updateUser");
+			const client = clientOf(jar);
+			await (
+				client as unknown as {
+					updateUser: (input: unknown) => Promise<void>;
+				}
+			).updateUser(input);
+			return current(client);
+		},
+	} as ServerAuth<U, I>;
+}

@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
 	createAuth,
+	createMirrorAuth,
 	fromAccessToken,
 	memoryStorage,
 	webStorage,
@@ -18,6 +19,7 @@ import {
 	SessionOutlet as RouterSessionOutlet,
 	useAuthRevalidation,
 } from "@monarcode/session-kit/react-router";
+import { createServerAuth } from "@monarcode/session-kit/server";
 import {
 	connectAuth,
 	redirectIfSignedIn,
@@ -31,9 +33,11 @@ const packageRoot = new URL("../", import.meta.url);
 test("all public entry points import without browser globals", () => {
 	for (const fn of [
 		createAuth,
+		createMirrorAuth,
 		fromAccessToken,
 		memoryStorage,
 		webStorage,
+		createServerAuth,
 		createAuthHooks,
 		connectAuth,
 		requireSession,

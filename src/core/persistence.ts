@@ -34,6 +34,25 @@ function storageError(cause: unknown): AuthError {
 			});
 }
 
+/** Whether `name` can name an auth: in storage keys, locks, cookies and channels. */
+export function isAuthName(name: unknown): name is string {
+	return typeof name === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(name);
+}
+
+/** Checks the `name` and `maxAge` options, which every engine shares. */
+export function checkOptions(name: unknown, maxAge: unknown): void {
+	if (
+		!isAuthName(name) ||
+		(maxAge !== undefined &&
+			(!Number.isSafeInteger(maxAge) || (maxAge as number) <= 0))
+	) {
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Use a simple auth name and a positive maxAge in seconds",
+		);
+	}
+}
+
 export function createPersistence(
 	storage: AuthStorage,
 	name: string,
@@ -41,16 +60,7 @@ export function createPersistence(
 	debug: Debugger,
 	sealing?: AuthLocking,
 ) {
-	if (
-		!/^[a-zA-Z0-9_-]{1,64}$/.test(name) ||
-		!Number.isSafeInteger(maxAge) ||
-		maxAge <= 0
-	) {
-		throw new AuthError(
-			"INVALID_OPTIONS",
-			"Use a simple auth name and a positive maxAge in seconds",
-		);
-	}
+	checkOptions(name, maxAge);
 	const key = `${name}:auth:session`;
 	const lockName = `${name}:auth:refresh`;
 	if (debug.on)

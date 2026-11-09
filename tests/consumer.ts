@@ -24,6 +24,7 @@ import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
 	createAuth,
+	createMirrorAuth,
 	fromAccessToken,
 	memoryStorage,
 	webStorage,
@@ -35,11 +36,14 @@ import {
 	type AuthState,
 	type AuthStatus,
 	type AuthStorage,
+	type MirrorAuth,
 	type RefreshFn,
+	type Session,
 	type UserInput,
 } from "../dist/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import { createAuthHooks } from "../dist/react/index.js";
+import { createServerAuth, type CookieJar } from "../dist/server/index.js";
 import {
 	connectAuth,
 	requireSession,
@@ -427,3 +431,71 @@ sessionApi.get("/feed", { plugins: { sessionBearer: { optional: true } } });
 // @ts-expect-error Calls can override only optional and signOutOnRepeated401.
 sessionApi.get("/me", { plugins: { sessionBearer: { baseUrl: "x" } } });
 void [madeWithAuth, madeWithoutAuth, sessionCall];
+
+// Server custody: the engine and the mirror client.
+const serverAuth = createServerAuth({
+	name: "type-test",
+	user: userSchema,
+	secret: "a-type-test-secret-that-is-32-chars-long",
+	cookie: { sameSite: "strict", secure: undefined },
+});
+declare const jar: CookieJar;
+async function serverSide() {
+	const session = await serverAuth.signIn(jar, {
+		accessToken: "a",
+		user: { id: "1", email: "a@example.com" },
+	});
+	const email: string = session.user.email;
+	// @ts-expect-error signIn needs the user the schema validates.
+	await serverAuth.signIn(jar, { accessToken: "a" });
+	await serverAuth.updateUser(jar, { id: "1", email });
+	const credentials = await serverAuth.clientCredentials.get(jar);
+	const expiresIn: number | undefined = credentials?.expiresIn;
+	return expiresIn;
+}
+void serverSide;
+const tokenServer = createServerAuth({
+	name: "type-test",
+	user: fromAccessToken(z.object({ sub: z.string() })),
+	secret: ["a-type-test-secret-that-is-32-chars-long"],
+});
+// @ts-expect-error A user read from the token has no updateUser.
+void tokenServer.updateUser;
+
+declare const initial: Session<z.output<typeof userSchema>> | null;
+const mirror = createMirrorAuth({
+	name: "type-test",
+	session: initial,
+	revalidate: () => serverAuth.getSession(jar),
+	signIn: (input: { username: string }) =>
+		serverAuth.signIn(jar, {
+			accessToken: input.username,
+			user: { id: "1", email: "a@example.com" },
+		}),
+	signOut: () => serverAuth.signOut(jar),
+	credentials: {
+		get: () => serverAuth.clientCredentials.get(jar),
+		renew: (rejected) => serverAuth.clientCredentials.renew(jar, rejected),
+	},
+});
+const mirrorEmail: string | undefined = mirror.state.get().user?.email;
+void mirrorEmail;
+void mirror.signIn({ username: "emilys" });
+// @ts-expect-error signIn takes what the signIn option takes.
+void mirror.signIn({ password: "x" });
+createAuthFetch(mirror, "https://api.example.com");
+createAuthHooks<typeof mirror>().AuthProvider({ client: mirror });
+void requireSession(mirror, {
+	location: { href: "/private" },
+	loginPath: "/login",
+});
+const plainMirror: MirrorAuth<{ id: string }> = createMirrorAuth({
+	name: "type-test",
+	session: null as Session<{ id: string }> | null,
+	revalidate: async () => null,
+	signOut: async () => {},
+});
+// @ts-expect-error Without the signIn option, there is no signIn.
+void plainMirror.signIn;
+// @ts-expect-error The mirror can't lock.
+void plainMirror.lock;

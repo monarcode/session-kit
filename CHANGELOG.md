@@ -12,6 +12,17 @@
   request is sent without `Authorization` instead of rejecting with
   `UNAUTHENTICATED`. Locked still rejects with `LOCKED`, and a sign-in during
   the request rejects it with `SESSION_CHANGED`.
+- `@monarcode/session-kit/server`, for server-rendered apps: `createServerAuth`
+  keeps both tokens and the user in an encrypted `httpOnly` cookie
+  (AES-256-GCM through Web Crypto, with rotatable secrets), refreshes on the
+  server, and shares one refresh between parallel requests. Each method takes
+  the request's `CookieJar`. With `clientCredentials: true`, the app can hand
+  the access token, never the refresh token, to its own page scripts.
+- `createMirrorAuth`, a browser client for that session: it starts from the
+  session the server rendered with, so there is no `initializing` state, and
+  works with `AuthProvider`, the hooks, the router guards, `createAuthFetch`
+  and `sessionBearer`. Its `signIn` forwards to the app's server function,
+  including tokens the browser got from the backend itself.
 
 ### Changed
 

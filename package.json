@@ -55,6 +55,10 @@
 			"types": "./dist/http/index.d.ts",
 			"import": "./dist/http/index.js"
 		},
+		"./server": {
+			"types": "./dist/server/index.d.ts",
+			"import": "./dist/server/index.js"
+		},
 		"./expo": {
 			"types": "./dist/expo/index.d.ts",
 			"import": "./dist/expo/index.js"
