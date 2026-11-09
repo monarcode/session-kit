@@ -69,6 +69,7 @@ before. Tests can provide another client instead.
 
 ```ts
 import { Auth } from "@monarcode/session-kit/effect";
+
 import { auth } from "./auth.js";
 
 export const AuthLive = Auth.layer(auth);
@@ -83,9 +84,10 @@ fails with `UNAUTHENTICATED` when signed out; `Auth.sessionOption` gives
 <!-- file: src/greeting.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Auth } from "@monarcode/session-kit/effect";
+
 import { AuthLive } from "./layer.js";
 
 export const greeting = Auth.sessionOption.pipe(
@@ -110,8 +112,8 @@ client reports as `INVALID_OPTIONS`, is a defect rather than a failure.
 <!-- file: src/account.ts -->
 
 ```ts
-import * as Effect from "effect/Effect";
 import { Auth } from "@monarcode/session-kit/effect";
+import * as Effect from "effect/Effect";
 
 export const accountName = Auth.session.pipe(
   Effect.map((session) => session.user.firstName),
@@ -138,13 +140,14 @@ that origin. `Fetch.make` then needs the `Auth` service, once:
 <!-- file: src/api.ts -->
 
 ```ts
+import * as Fetch from "@monarcode/effetch";
+import { retry } from "@monarcode/effetch/plugins";
+import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as Fetch from "@monarcode/effetch";
-import { retry } from "@monarcode/effetch/plugins";
-import { sessionBearer } from "@monarcode/session-kit/effetch";
+
 import { AuthLive } from "./layer.js";
 
 const baseUrl = "https://api.example.com";
@@ -188,9 +191,10 @@ failure comes through unchanged:
 <!-- file: src/profile.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { Auth } from "@monarcode/session-kit/effect";
+
 import { userSchema } from "./auth.js";
 
 class ProfileUnavailable extends Data.TaggedError("ProfileUnavailable") {}
@@ -210,9 +214,9 @@ then every change, until the stream ends:
 <!-- file: src/watch.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { Auth } from "@monarcode/session-kit/effect";
 
 export const logStatus = Auth.changes.pipe(
   Stream.map((state) => state.status),

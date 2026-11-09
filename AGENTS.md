@@ -141,7 +141,7 @@ The maintainer handles commits, pull requests, CI and npm.
   add each change as it lands, so the release only renames the heading to
   the version.
 - Changes meant for an app's local `file:` link need a fresh `pnpm run
-build`.
+  build`.
 
 ## Before declaring any work done
 

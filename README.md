@@ -128,10 +128,10 @@ essentials. It uses file-based routing, so add the Router plugin before the
 React plugin:
 
 ```ts
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
+import react from "@vitejs/plugin-react";
 // vite.config.ts
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
 export default defineConfig({
   plugins: [
@@ -238,8 +238,9 @@ the selection changes. `useAuthClient()` returns the client for actions.
 
 ```tsx
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
-import type { AppAuth } from "../auth.js";
+
 import { useAuth } from "../auth-hooks.js";
+import type { AppAuth } from "../auth.js";
 
 export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
   component: Root,
@@ -266,9 +267,11 @@ function Root() {
 
 ```tsx
 import { useState, type FormEvent } from "react";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+
 import { safeReturnTo } from "@monarcode/session-kit";
 import { redirectIfSignedIn } from "@monarcode/session-kit/tanstack-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+
 import { signInWithPassword } from "../auth.js";
 
 export const Route = createFileRoute("/login")({
@@ -339,13 +342,14 @@ guarded without `authenticated` appearing in their URLs.
 
 ```tsx
 import {
-  createFileRoute,
-  type ErrorComponentProps,
-} from "@tanstack/react-router";
-import {
   requireSession,
   SessionOutlet,
 } from "@monarcode/session-kit/tanstack-router";
+import {
+  createFileRoute,
+  type ErrorComponentProps,
+} from "@tanstack/react-router";
+
 import { useAuthClient } from "../auth-hooks.js";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -384,6 +388,7 @@ token refreshes keep child routes mounted.
 
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";
+
 import { useAuth, useAuthClient } from "../../auth-hooks.js";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -411,8 +416,9 @@ function Home() {
 <!-- file: src/router.tsx -->
 
 ```tsx
-import { createRouter } from "@tanstack/react-router";
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
+import { createRouter } from "@tanstack/react-router";
+
 import { auth } from "./auth.js";
 import { routeTree } from "./routeTree.gen.js";
 
@@ -445,8 +451,10 @@ hot-module disposal; it stops background work without signing out.
 
 ```tsx
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+
 import { RouterProvider } from "@tanstack/react-router";
+import { createRoot } from "react-dom/client";
+
 import { router } from "./router.js";
 
 createRoot(document.getElementById("root")!).render(
@@ -577,6 +585,7 @@ of landing on another account. `createAuthFetch` attaches the access token:
 
 ```ts
 import { createAuthFetch } from "@monarcode/session-kit/http";
+
 import { auth, userSchema } from "./auth.js";
 
 const authFetch = createAuthFetch(auth, "https://dummyjson.com/");
@@ -780,7 +789,7 @@ const auth = createAuth({ ...options, debug: true });
 
 - `true` logs each event as one `console.info` line.
 - A function receives each `AuthDebugEvent` instead: `{ name, type, message,
-data?, error? }`, for example to add Sentry breadcrumbs. `type` is one of a
+  data?, error? }`, for example to add Sentry breadcrumbs. `type` is one of a
   fixed set, such as `"refresh"` or `"storage"`; the wording of `message` and
   the fields in `data` may change in any release.
 - Events leave out tokens, saved values, and user fields; a session appears as
