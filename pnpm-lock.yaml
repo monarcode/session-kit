@@ -18,6 +18,9 @@ importers:
         specifier: ^1.6.0
         version: 1.7.0(react@19.3.0)
     devDependencies:
+      '@monarcode/effetch':
+        specifier: 0.1.0-rc.1
+        version: 0.1.0-rc.1(effect@4.1.1)
       '@tanstack/react-router':
         specifier: 1.170.41
         version: 1.170.41(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -36,6 +39,9 @@ importers:
       '@types/use-sync-external-store':
         specifier: 1.7.0
         version: 1.7.0
+      effect:
+        specifier: 4.1.1
+        version: 4.1.1
       expo-file-system:
         specifier: 58.0.13
         version: 58.0.13(expo@58.0.22)(react-native@0.88.1(@babel/core@7.29.7)(@react-native/metro-config@0.88.1(@babel/core@7.29.7))(@types/react@19.3.0)(react@19.3.0))
@@ -983,6 +989,11 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@monarcode/effetch@0.1.0-rc.1':
+    resolution: {integrity: sha512-w6eMGRluNDXJ+KmLKbMRvhbmTFYgRyhcG8ZISLTMy9mlZOne+UA/UeXhO+aRJhzDyuOTo19vMzn09MWWYt1gQg==}
+    peerDependencies:
+      effect: ^4.0.0
 
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     resolution: {integrity: sha512-tqvZOVmSoiJzm7QjQ+whPxCP45J2C1zCAZnzc1HhwmJrFIWw/qyA8o9Cup0aVqnjNVAN+as9GHX+DbAmkCbGlQ==}
@@ -2197,6 +2208,9 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
+
+  effect@4.1.1:
+    resolution: {integrity: sha512-XYu65BrcmNqu5i7PPvP4dqL+R5ma37zIsfuSPjcn78mog+6e5PkilNg7Xo+pBpjXJYlWEIpH4j91tMrfW05CMw==}
 
   electron-to-chromium@1.5.444:
     resolution: {integrity: sha512-5ss/uJfoDYDHT0lfJzT6FbcskIzROIOPf0BbbFkGcvDzoJU7i//9GDrwwIHQVmIsrAGiF3ihpADBRIsrEFt1rQ==}
@@ -4782,6 +4796,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@monarcode/effetch@0.1.0-rc.1(effect@4.1.1)':
+    dependencies:
+      effect: 4.1.1
+
   '@noxcturnal/noxcturnal-darwin-arm64@0.1.11':
     optional: true
 
@@ -5927,6 +5945,8 @@ snapshots:
   dnssd-advertise@1.1.6: {}
 
   ee-first@1.1.1: {}
+
+  effect@4.1.1: {}
 
   electron-to-chromium@1.5.444: {}
 

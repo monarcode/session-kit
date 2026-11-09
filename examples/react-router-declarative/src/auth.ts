@@ -8,17 +8,6 @@ const API = "https://dummyjson.com";
 /** One-minute tokens make the early refresh visible after about 30 seconds. */
 const expiresInMins = 1;
 
-/** DummyJSON returns the user's fields beside the tokens. */
-const loginResponse = z.object({
-	accessToken: z.string(),
-	refreshToken: z.string(),
-	id: z.number(),
-	username: z.string(),
-	email: z.string(),
-	firstName: z.string(),
-	lastName: z.string(),
-	image: z.string(),
-});
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
 
 export const userSchema = z.object({
@@ -29,6 +18,9 @@ export const userSchema = z.object({
 	lastName: z.string(),
 	image: z.string(),
 });
+
+/** DummyJSON returns the user's fields beside the tokens. */
+const loginResponse = tokens.extend(userSchema.shape);
 
 export const auth = createAuth({
 	name: "session-kit-example",
@@ -48,8 +40,9 @@ export async function signInWithPassword(username: string, password: string) {
 /**
  * Exchanges the refresh token for new tokens. DummyJSON answers 403 for an
  * invalid or expired refresh token and 401 for a missing one: both mean
- * "sign in again", so return `null`. Other failures are operational.
- * There is no `credentials: "include"`: session-kit keeps tokens out of cookies.
+ * "sign in again", so return `null`. Other failures throw: the session is
+ * kept and the error shows in `state.error`. There is no
+ * `credentials: "include"`: session-kit keeps tokens out of cookies.
  */
 async function refresh({
 	refreshToken,
@@ -87,5 +80,8 @@ async function login(username: string, password: string): Promise<unknown> {
 	return body;
 }
 
-/** Requests to DummyJSON with the access token, refreshing after a 401. */
+/**
+ * Sends requests to DummyJSON with the access token. After a 401 it
+ * refreshes, then replays a GET or HEAD once.
+ */
 export const authFetch = createAuthFetch(auth, `${API}/`);

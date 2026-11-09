@@ -78,6 +78,46 @@ const setups: Record<string, (auth: Client) => Setup> = {
 	},
 };
 
+/**
+ * A TanStack Router whose `/` renders `Home` behind `requireSession` and a
+ * `SessionOutlet` showing `pending`, with a sign-in page that renders "login".
+ */
+function sessionOutletRouter(
+	auth: Client,
+	{ Home, pending }: { Home: FunctionComponent; pending: string },
+) {
+	const {
+		createRouter,
+		createRootRouteWithContext,
+		createRoute,
+		createMemoryHistory,
+	} = routerModule;
+	const { requireSession, SessionOutlet } = routerBinding;
+	const root = createRootRouteWithContext<{ auth: Client }>()({});
+	const login = createRoute({
+		getParentRoute: () => root,
+		path: "/login",
+		component: () => h("output", null, "login"),
+	});
+	const guarded = createRoute({
+		getParentRoute: () => root,
+		id: "guarded",
+		beforeLoad: ({ context, location }) =>
+			requireSession(context.auth, { location, loginPath: "/login" }),
+		component: () => h(SessionOutlet, { pending }),
+	});
+	const home = createRoute({
+		getParentRoute: () => guarded,
+		path: "/",
+		component: Home,
+	});
+	return createRouter({
+		routeTree: root.addChildren([login, guarded.addChildren([home])]),
+		context: { auth },
+		history: createMemoryHistory({ initialEntries: ["/"] }),
+	});
+}
+
 async function fixture(kind: string) {
 	const auth = newClient();
 	await auth.getSession();
@@ -257,7 +297,7 @@ test("without a document, as on React Native, AuthProvider restores in a layout 
 	// restored session only if AuthProvider mounted in a layout effect.
 	let seen: string | undefined;
 	function Probe() {
-		useEffect(() => {
+		useEffect(function recordStatus() {
 			seen = auth.state.get().status;
 		}, []);
 		return null;
@@ -341,53 +381,23 @@ test("hooks without a provider explain what is missing", async () => {
 test("SessionOutlet keeps child routes through profile updates and swaps them on account changes", async () => {
 	const auth = newClient();
 	await signIn(auth);
-	const {
-		createRouter,
-		createRootRouteWithContext,
-		createRoute,
-		createMemoryHistory,
-		RouterProvider,
-	} = routerModule;
-	const { requireSession, SessionOutlet, connectAuth } = routerBinding;
 	const { useAuth } = binding.createAuthHooks({
 		useClient: routerBinding.useRouterAuth as () => Client,
 	});
 	let homeMounts = 0;
 	function Home() {
 		const email = useAuth((state) => state.user?.email);
-		useEffect(() => {
+		useEffect(function countMount() {
 			homeMounts++;
 		}, []);
 		return h("output", null, `home:${email}`);
 	}
-	const root = createRootRouteWithContext<{ auth: Client }>()({});
-	const login = createRoute({
-		getParentRoute: () => root,
-		path: "/login",
-		component: () => h("output", null, "login"),
-	});
-	const guarded = createRoute({
-		getParentRoute: () => root,
-		id: "guarded",
-		beforeLoad: ({ context, location }) =>
-			requireSession(context.auth, { location, loginPath: "/login" }),
-		component: () => h(SessionOutlet, { pending: "checking" }),
-	});
-	const home = createRoute({
-		getParentRoute: () => guarded,
-		path: "/",
-		component: Home,
-	});
-	const router = createRouter({
-		routeTree: root.addChildren([login, guarded.addChildren([home])]),
-		context: { auth },
-		history: createMemoryHistory({ initialEntries: ["/"] }),
-	});
-	const disconnect = connectAuth(router);
+	const router = sessionOutletRouter(auth, { Home, pending: "checking" });
+	const disconnect = routerBinding.connectAuth(router);
 	try {
 		await act(() => router.load());
 		const view = await render(
-			h(RouterProvider, { router: router as AnyRouter }),
+			h(routerModule.RouterProvider, { router: router as AnyRouter }),
 		);
 		await settle();
 		assert.equal(view.container.textContent, "home:alice@example.com");
@@ -418,4 +428,25 @@ test("SessionOutlet keeps child routes through profile updates and swaps them on
 	} finally {
 		disconnect();
 	}
+});
+
+test("SessionOutlet shows pending for a locked session, and the guard sends it to sign in", async () => {
+	const auth = newClient({ locking: true });
+	await signIn(auth);
+	const router = sessionOutletRouter(auth, {
+		Home: () => h("output", null, "home"),
+		pending: "checking",
+	});
+	await act(() => router.load());
+	const view = await render(
+		h(routerModule.RouterProvider, { router: router as AnyRouter }),
+	);
+	await settle();
+	assert.equal(view.container.textContent, "home");
+	// Not connected, so only the outlet sees the lock.
+	await act(() => auth.lock());
+	assert.equal(view.container.textContent, "checking");
+	await act(() => router.invalidate());
+	await settle();
+	assert.equal(view.container.textContent, "login");
 });

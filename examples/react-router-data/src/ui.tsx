@@ -56,7 +56,7 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 	);
 }
 
-const me = (value: unknown) =>
+const emailOf = (value: unknown) =>
 	typeof value === "object" && value !== null && "email" in value
 		? String(value.email)
 		: "";
@@ -70,7 +70,9 @@ export function Profile() {
 	async function loadProfile() {
 		const response = await authFetch("auth/me");
 		setFromApi(
-			response.ok ? me(await response.json()) : `HTTP ${response.status}`,
+			response.ok
+				? emailOf(await response.json())
+				: `HTTP ${response.status}`,
 		);
 	}
 
@@ -97,7 +99,10 @@ export function Pending() {
 	return <p>Checking session…</p>;
 }
 
-/** Shown after a failed refresh; retrying tries the refresh again. */
+/**
+ * Shown after a failed refresh. `retry()` tries the refresh again; if that
+ * fails too, the new error shows here, so the rejection can be ignored.
+ */
 export function Unavailable({ error }: { error: unknown }) {
 	const auth = useAuthClient();
 	return (

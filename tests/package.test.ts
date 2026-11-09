@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
+import { sep } from "node:path";
 import test from "node:test";
 
 import {
@@ -8,6 +9,8 @@ import {
 	memoryStorage,
 	webStorage,
 } from "@monarcode/session-kit";
+import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
+import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import {
@@ -41,8 +44,23 @@ test("all public entry points import without browser globals", () => {
 		RouterSessionOutlet,
 		useAuthRevalidation,
 		createAuthFetch,
+		Auth,
+		AuthFailure,
+		sessionBearer,
 	]) {
 		assert.equal(typeof fn, "function");
+	}
+});
+
+test("only the Effect entries import effect and effetch, optional peers", async () => {
+	const dist = new URL("dist/", packageRoot);
+	for (const file of await readdir(dist, { recursive: true })) {
+		if (!file.endsWith(".js")) continue;
+		const code = await readFile(new URL(file, dist), "utf8");
+		if (!file.startsWith(`effect${sep}`) && !file.startsWith(`effetch${sep}`))
+			assert.doesNotMatch(code, /from "effect[/"]/, file);
+		if (!file.startsWith(`effetch${sep}`))
+			assert.doesNotMatch(code, /from "@monarcode\/effetch/, file);
 	}
 });
 
@@ -58,7 +76,7 @@ test("each entry exports readable JavaScript and declarations", async () => {
 	}
 });
 
-test("React declarations retain consumer Router registration", async () => {
+test("TanStack Router declarations retain consumer Router registration", async () => {
 	const declarations = await readFile(
 		new URL("dist/tanstack-router/index.d.ts", packageRoot),
 		"utf8",

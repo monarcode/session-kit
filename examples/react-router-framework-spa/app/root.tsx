@@ -29,7 +29,11 @@ export function Layout({ children }: { children: ReactNode }) {
 	);
 }
 
-/** Re-runs client loaders after sign-in, sign-out, and profile updates. */
+/**
+ * Re-runs the guards in client loaders after a sign-in, sign-out, account
+ * switch, profile update, or a refresh that fails once access has expired.
+ * Token refreshes alone don't.
+ */
 function Revalidate() {
 	useAuthRevalidation();
 	return <Outlet />;

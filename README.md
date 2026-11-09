@@ -1,9 +1,11 @@
 # @monarcode/session-kit
 
+![session-kit](https://raw.githubusercontent.com/monarcode/session-kit/main/assets/sk-banner.png)
+
 Schema-driven sessions for React, with TanStack Router, React Router, and Expo
 Router support.
 
-**Version: 0.1.0-alpha.5. Early development; not ready for production.**
+**Version: 0.1.0-alpha.6. Early development; not ready for production.**
 
 session-kit keeps the tokens your backend issues and manages the session around
 them. Your backend does the authentication; session-kit does the rest:
@@ -33,12 +35,14 @@ them. Your backend does the authentication; session-kit does the rest:
 - [Quick start: TanStack Router](#quick-start-tanstack-router)
 - [Other setups](#other-setups)
 - [Expo Router](./docs/expo.md)
+- [Effect](./docs/effect.md)
 - [Using the client](#using-the-client)
   - [State](#state)
   - [Sessions and credentials](#sessions-and-credentials)
   - [Signing in and out](#signing-in-and-out)
   - [Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
   - [Users from the access token](#users-from-the-access-token)
+  - [Locking](#locking)
 - [Schemas, refresh, and storage](#schemas-refresh-and-storage)
   - [User schemas](#user-schemas)
   - [Refresh](#refresh)
@@ -46,6 +50,7 @@ them. Your backend does the authentication; session-kit does the rest:
   - [Storage](#storage)
   - [Tabs](#tabs)
   - [Errors](#errors)
+  - [Debugging](#debugging)
 - [Security notes](#security-notes)
 - [Entry points](#entry-points)
 - [Development](#development)
@@ -83,7 +88,7 @@ Alpha releases are published to the `latest` distribution tag:
 pnpm add @monarcode/session-kit
 ```
 
-Pin `@monarcode/session-kit@0.1.0-alpha.5` to use this exact version. Alpha
+Pin `@monarcode/session-kit@0.1.0-alpha.6` to use this exact version. Alpha
 releases may change the public API; see the [release notes](./CHANGELOG.md).
 
 All peer dependencies are optional, so install only what you use:
@@ -503,6 +508,11 @@ app.
 **Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
 in any React app.
 
+**Effect.** `@monarcode/session-kit/effect` provides the client as an Effect
+service, `Auth`, whose Effects fail with a tagged `AuthFailure`, and
+`@monarcode/session-kit/effetch` adds `sessionBearer`, an effetch plugin that
+sends the access token. The [Effect guide](./docs/effect.md) covers both.
+
 ## Using the client
 
 ### State
@@ -521,8 +531,12 @@ error reporting can catch it. Checking `status` narrows `user`:
 | `initializing`    | The saved session is being restored.                                      | `null` |
 | `authenticated`   | Access is usable.                                                         | Set    |
 | `refreshing`      | A refresh is replacing expired or rejected access.                        | Set    |
+| `locked`          | With `locking`, a session is saved, but its tokens wait for `unlock()`.   | Set    |
 | `unauthenticated` | No session; sign-in is needed.                                            | `null` |
 | `unavailable`     | Restoring failed, or a failed refresh left no usable access; see `error`. | `null` |
+
+A locked session keeps its user, so check `status`, not `user`, to know
+whether access is usable.
 
 `state.sessionId` is new on every sign-in and stable across refreshes and
 profile updates; scope private cached data, such as TanStack Query results, to
@@ -609,6 +623,60 @@ access token format, so this suits backends you control. The
 [`tanstack-start-spa`](./examples/tanstack-start-spa) and
 [`react-router-data`](./examples/react-router-data) examples use this source.
 
+### Locking
+
+For native apps that ask a returning user to unlock, for example with
+biometrics, before the app opens. With `locking`, a saved session restores as
+`locked`: `user` and `sessionId` are set, but the tokens wait for
+`auth.unlock()`.
+
+```ts
+const auth = createAuth({
+  ...options,
+  locking: {
+    // Your app's own encryption, with a key it holds in memory.
+    seal: (payload) => encrypt(key, payload),
+    open: (sealed) => decrypt(key, sealed),
+  },
+});
+
+await auth.unlock(); // once the app has its key: `authenticated`
+await auth.lock(); // `locked` again; the saved session stays
+```
+
+- **Sealing.** `seal` encrypts the tokens, a JSON string, whenever they are
+  saved, and `open` decrypts them when unlocking, and only then. The user and
+  session ID are saved beside them, readable while
+  locked. Either function may return a promise. session-kit depends on no
+  crypto or biometrics library. `locking: true` stores the tokens as they are,
+  for a lock screen in front of an otherwise ordinary session.
+- **Unlocking.** `unlock()` resolves the session. Expired access is refreshed
+  at once, and a refresh token the backend rejects signs out and resolves
+  `null`. Any other refresh failure rejects with `REFRESH_FAILED`, but the
+  session is unlocked all the same: `unavailable` until `retry()`, so check
+  `status` rather than treating every rejection as still locked. When `open`
+  throws, `unlock()` rejects with `UNLOCK_FAILED` and the session stays
+  locked. A saved session that can't be used signs out and rejects with
+  `INVALID_SESSION`. Overlapping calls share one unlock.
+- **While locked.** `getSession`, `retry`, `refresh`, `updateUser`,
+  `credentials.get`, and `credentials.renew` reject with `LOCKED`, rather than
+  waiting for an unlock that may never come. Nothing refreshes, and timers are
+  off. `signIn` replaces the session, which is the password path. `signOut`
+  clears it, without calling `revoke`, since the tokens are sealed.
+- **Locking again.** `lock()` takes the tokens out of memory and keeps the
+  saved session. A refresh already running still saves its tokens, so keep
+  the key until the promise settles.
+- **Native apps.** With `locking`, other tabs' changes aren't followed. The
+  router adapters treat a locked session as signed out. Locking needs a user
+  schema: a user read from the access token can't be shown without its token.
+- **Existing sessions.** A session saved before `locking` was added restores
+  as `locked` too, and is sealed when unlocked. If sealing fails then, it stays
+  as it was, and the next save seals it. Turning `locking` off later
+  makes sealed sessions unreadable, which signs those users out.
+
+The [Expo guide](./docs/expo.md#locking) has a worked example: a key behind
+the device's biometrics, AES-GCM sealing, and a welcome-back screen.
+
 ## Schemas, refresh, and storage
 
 ### User schemas
@@ -642,16 +710,9 @@ throwing.
 
 ### Expiry
 
-Expiry comes from the first of these the tokens provide:
-
-1. `expiresAt`: Unix time in milliseconds, compared with the browser clock.
-2. `expiresIn`: lifetime in seconds, as in OAuth `expires_in`, counted from
-   receipt.
-3. A JWT's `exp - iat` lifetime, counted from receipt.
-4. A JWT's `exp` alone, compared with the browser clock.
-
-Browser clocks can be minutes off; options 2 and 3 are unaffected by that.
-Opaque tokens without expiry are refreshed only after a 401.
+Expiry comes from `expiresAt`, `expiresIn`, or a JWT's `exp` and `iat`
+claims; the `Tokens` type documents which one wins and how a wrong browser
+clock affects each.
 
 ### Storage
 
@@ -693,17 +754,42 @@ has one JavaScript context, so it has no tabs to follow and needs no lock.
 
 ### Errors
 
-`state.error` and rejected promises carry an `AuthError` whose `code` is one of
-`USER_VALIDATION_FAILED`, `INVALID_SESSION`, `PERSISTENCE_FAILED`,
-`REFRESH_FAILED`, `REVOKE_FAILED`, `SESSION_CHANGED`, or `UNAUTHENTICATED`.
-Validation errors include the schema's `issues`, and underlying failures appear
-in `cause`. Work superseded by a newer sign-in or sign-out rejects with
-`SESSION_CHANGED`.
+Errors from session-kit's own logic are `AuthError`s, whether thrown,
+rejected with, or published in `state.error`. Match on their `code`, an
+`AuthErrorCode`, such as `REFRESH_FAILED`, `SESSION_CHANGED`,
+`USER_VALIDATION_FAILED`, or `INVALID_OPTIONS` for misuse. `cause` holds
+whatever failed underneath, and `issues` a schema's issues. `authFetch` lets
+`fetch`'s and `Request`'s own failures, such as a network error, through
+unchanged.
 
 If storage cannot be written, the session ends and the error is published. If
 it cannot be cleared, sign-out still takes effect in this tab, but the promise
 rejects and the error stays visible: retry `signOut()` once storage is
 available, because undeleted credentials could survive a reload.
+
+### Debugging
+
+The `debug` option reports what auth does: restores, refreshes and why they
+ran, timers, storage operations and how long they took, other tabs' changes,
+state changes, and what ended a session.
+
+```ts
+const auth = createAuth({ ...options, debug: true });
+// [session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
+```
+
+- `true` logs each event as one `console.info` line.
+- A function receives each `AuthDebugEvent` instead: `{ name, type, message,
+data?, error? }`, for example to add Sentry breadcrumbs. `type` is one of a
+  fixed set, such as `"refresh"` or `"storage"`; the wording of `message` and
+  the fields in `data` may change in any release.
+- Events leave out tokens, saved values, and user fields; a session appears as
+  its `sessionId`, and an error as its code and message, without the cause.
+  `{ sensitive: true }` puts them in, so keep it to development builds.
+  `{ log, sensitive }` sets both.
+
+A storage adapter can add its own events through the optional `debug` member
+of `AuthStorage`, as `secureStorage()` does.
 
 ## Security notes
 
@@ -728,6 +814,8 @@ available, because undeleted credentials could survive a reload.
 | `@monarcode/session-kit/react-router`    | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                            |
 | `@monarcode/session-kit/expo`            | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                 |
 | `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                         |
+| `@monarcode/session-kit/effect`          | `Auth`, `AuthFailure`, `Register`, types                                                                  |
+| `@monarcode/session-kit/effetch`         | `sessionBearer`, types                                                                                    |
 
 Do not import internal `dist` paths.
 
@@ -744,8 +832,9 @@ pnpm run check
 `check` runs Oxlint and Oxfmt, builds the package, runs the tests, and
 type-checks the tests, the consumer declarations, and every TypeScript example
 marked with a `file:` comment: this README's under NodeNext and Bundler
-resolution, and the [Expo guide](./docs/expo.md)'s under Bundler resolution,
-as Metro resolves, without DOM types. `pnpm test` runs the runtime tests
+resolution, the [Expo guide](./docs/expo.md)'s under Bundler resolution,
+as Metro resolves, without DOM types, and the [Effect guide](./docs/effect.md)'s
+under both. `pnpm test` runs the runtime tests
 twice: with synchronous storage, and with storage that settles every operation
 late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
 the package and every example app.

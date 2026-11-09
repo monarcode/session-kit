@@ -21,7 +21,11 @@ import { auth } from "./auth";
 import { AuthProvider } from "./hooks";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";
 
-/** Re-runs loaders after sign-in, sign-out, account switches, and profile updates. */
+/**
+ * Re-runs the guards in loaders after a sign-in, sign-out, account switch,
+ * profile update, or a refresh that fails once access has expired. Token
+ * refreshes alone don't.
+ */
 function Root() {
 	useAuthRevalidation();
 	return <Outlet />;

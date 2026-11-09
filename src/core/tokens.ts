@@ -58,7 +58,10 @@ export function decodeJwtPayload(
 	}
 }
 
-function jwtClaims(token: string): { exp?: number; iat?: number } {
+function jwtClaims(token: string): {
+	exp?: number | undefined;
+	iat?: number | undefined;
+} {
 	const payload = decodeJwtPayload(token);
 	if (!payload) return {};
 	const seconds = (value: unknown) =>
@@ -78,7 +81,10 @@ function positive(value: unknown, message: string): number | undefined {
 	return value;
 }
 
-/** Checks token shape and an explicit `expiresAt`. Restores saved sessions as-is. */
+/**
+ * Checks the token fields, keeping an explicit `expiresAt` as is, as restoring
+ * a saved session needs. Newly issued tokens go through `receiveTokens`.
+ */
 export function validateTokens(value: unknown): SessionTokens {
 	if (
 		!isRecord(value) ||

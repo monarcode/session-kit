@@ -18,8 +18,12 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-	// `user` is set exactly while authenticated or refreshing.
-	const signedIn = useAuth((state) => state.user !== null);
+	// Check `status`, not `user`: a locked session keeps its user. SessionGate
+	// handles `initializing` and `unavailable` before this renders.
+	const signedIn = useAuth(
+		(state) =>
+			state.status === "authenticated" || state.status === "refreshing",
+	);
 	return (
 		<Stack screenOptions={{ headerShown: false }}>
 			<Stack.Protected guard={signedIn}>

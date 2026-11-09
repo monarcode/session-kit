@@ -4,6 +4,12 @@ export { safeReturnTo } from "./core/return-to.js";
 export { fromAccessToken } from "./core/sources.js";
 export { memoryStorage, webStorage } from "./core/storage.js";
 
+export type {
+	AuthDebug,
+	AuthDebugEvent,
+	AuthDebugOptions,
+	AuthDebugType,
+} from "./core/debug.js";
 export type { AuthErrorCode, AuthErrorOptions } from "./core/errors.js";
 export type { SafeReturnToOptions } from "./core/return-to.js";
 export type {
@@ -15,6 +21,7 @@ export type { AuthStorage, WebStorageOptions } from "./core/storage.js";
 
 export type {
 	AuthClient,
+	AuthLocking,
 	AuthOptions,
 	AuthState,
 	AuthStatus,

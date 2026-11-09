@@ -7,8 +7,26 @@ import {
 	type SecureStoreOptions,
 } from "expo-secure-store";
 
+import { AuthError } from "../core/errors.js";
 import type { AuthStorage } from "../core/storage.js";
 
+/**
+ * Options for {@link secureStorage}. Both are for iOS: when the keychain may
+ * be read, and what happens to a session an earlier install left there.
+ *
+ * @example
+ * ```ts
+ * import { secureStorage } from "@monarcode/session-kit/expo";
+ * import { AFTER_FIRST_UNLOCK } from "expo-secure-store";
+ *
+ * // For an app that refreshes in a background task before the first unlock.
+ * export const storage = secureStorage({
+ * 	keychainAccessible: AFTER_FIRST_UNLOCK,
+ * });
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type SecureStorageOptions = {
 	/**
 	 * When iOS lets the app read the session: one of SecureStore's constants,
@@ -18,14 +36,14 @@ export type SecureStorageOptions = {
 	 * keychain can't be read, the session is `unavailable`; it is never signed
 	 * out for that.
 	 */
-	keychainAccessible?: KeychainAccessibilityConstant;
+	keychainAccessible?: KeychainAccessibilityConstant | undefined;
 	/**
 	 * iOS keeps keychain items after the app is deleted. By default, a session
 	 * an earlier install left there is removed before it is read, so a
 	 * reinstalled app starts signed out. `false` restores it instead.
 	 * Default: `true`.
 	 */
-	clearOnReinstall?: boolean;
+	clearOnReinstall?: boolean | undefined;
 };
 
 /** SecureStore may reject values longer than this, in UTF-8 bytes. */
@@ -94,8 +112,10 @@ const undecryptable = (error: unknown) =>
 	error.code === "ERR_DECRYPT";
 
 /**
- * Saves the session with `expo-secure-store`: in the iOS keychain, and
- * encrypted with an Android Keystore key. For Expo apps on iOS and Android.
+ * An {@link AuthStorage} that saves the session with `expo-secure-store`: in
+ * the iOS keychain, and encrypted with an Android Keystore key. For Expo apps
+ * on iOS and Android; pass it as `createAuth`'s `storage`. See
+ * {@link SecureStorageOptions}.
  *
  * - Values longer than SecureStore's 2048-byte limit are split across keys.
  *   The value is replaced only once every piece of the new one is written, so
@@ -103,15 +123,31 @@ const undecryptable = (error: unknown) =>
  *   value whole.
  * - Reads are synchronous, so with a synchronous user schema the session is
  *   restored before the first render. Writes and removals are asynchronous.
- * - A session left in the keychain by an earlier install is removed unless
- *   `clearOnReinstall` is `false`. A marker file in the app's documents
+ * - On iOS, a session left in the keychain by an earlier install is removed
+ *   unless `clearOnReinstall` is `false`. A marker file in the app's documents
  *   directory, which deleting the app removes, tells installs apart.
  * - Data that can't be decrypted, as after Android restores a backup onto
  *   another device, reads as signed out and is removed. Other read failures,
  *   such as a locked iOS keychain, make the session `unavailable`.
  *
  * There is one JavaScript context in an app, so it has no `subscribe` or
- * `lock`.
+ * `lock`: there are no tabs to follow, and the client runs one refresh at a
+ * time itself.
+ *
+ * @example
+ * ```ts
+ * import { createAuth } from "@monarcode/session-kit";
+ * import { secureStorage } from "@monarcode/session-kit/expo";
+ * import { z } from "zod";
+ *
+ * export const auth = createAuth({
+ * 	name: "my-app",
+ * 	user: z.object({ id: z.number(), name: z.string() }),
+ * 	storage: secureStorage(),
+ * });
+ * ```
+ *
+ * @since 0.1.0
  */
 export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	const clearOnReinstall = options.clearOnReinstall ?? true;
@@ -119,6 +155,18 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		options.keychainAccessible === undefined
 			? {}
 			: { keychainAccessible: options.keychainAccessible };
+
+	// Set by each auth whose `debug` option is on, per SecureStore key, so an
+	// adapter shared by several auth names reports to the right one.
+	const reporters = new Map<
+		string,
+		(message: string, data?: Record<string, unknown>) => void
+	>();
+	const report = (
+		base: string,
+		message: string,
+		data?: Record<string, unknown>,
+	) => reporters.get(base)?.(message, { entry: base, ...data });
 
 	// Auth runs storage operations one at a time, in order, and waits for a
 	// read that returns a promise. So cleanup this adapter needs is returned
@@ -172,7 +220,8 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	 * Reads as signed out once the unreadable value is removed. A failed
 	 * removal reads as signed out too: the next write replaces what is left.
 	 */
-	function discard(base: string): Promise<null> {
+	function discard(base: string, reason: string): Promise<null> {
+		report(base, `discarded the saved value: ${reason}`);
 		return removeAll(base).then(
 			() => null,
 			() => null,
@@ -181,7 +230,7 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 
 	function readValue(base: string): string | null | Promise<null> {
 		const head = readItem(base);
-		if (head === undefined) return discard(base);
+		if (head === undefined) return discard(base, "Android can't decrypt it");
 		if (head === null) return null;
 		if (head.startsWith("0:")) return head.slice(2);
 		const layout = layoutOf(head);
@@ -190,7 +239,13 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		let value = "";
 		for (let index = 0; index < layout.count; index++) {
 			const chunk = readItem(chunkKey(base, layout.slot, index));
-			if (chunk == null) return discard(base);
+			if (chunk == null)
+				return discard(
+					base,
+					chunk === undefined
+						? "Android can't decrypt a piece of it"
+						: "a piece of it is missing",
+				);
 			value += chunk;
 		}
 		return value;
@@ -203,7 +258,8 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		} else {
 			const chunks = split(value);
 			if (chunks.length > MAX_CHUNKS) {
-				throw new Error(
+				throw new AuthError(
+					"PERSISTENCE_FAILED",
 					`secureStorage cannot save more than ${MAX_CHUNKS * MAX_BYTES} bytes`,
 				);
 			}
@@ -215,10 +271,26 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			// Leftovers from a longer write that was cut short.
 			await removeChunks(base, slot, chunks.length);
 			await setItemAsync(base, `1:${slot}:${chunks.length}`, store);
+			report(base, `split the value across ${chunks.length} keys`, {
+				slot,
+				chunks: chunks.length,
+			});
 		}
 		// The previous chunks are unreachable now. Failing to remove them
 		// doesn't undo the write, and the next write to that slot replaces them.
 		if (previous) await removeChunks(base, previous.slot, 0).catch(() => {});
+	}
+
+	/**
+	 * Whether `base` holds anything, read only to report it, and only while
+	 * debugging. A failure here leaves it to the removal, which reports it.
+	 */
+	function hasLeftover(base: string): boolean {
+		try {
+			return readItem(base) !== null;
+		} catch {
+			return false;
+		}
 	}
 
 	// Keys checked for a session left by an earlier install. A failed check
@@ -238,9 +310,16 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		}
 		// The marker is created only after the removal, so an install cut short
 		// before then removes again on the next launch.
+		const leftover = reporters.has(base) && hasLeftover(base);
 		return removeAll(base).then(() => {
 			if (!marker.exists) marker.create();
 			checked.add(base);
+			report(
+				base,
+				leftover
+					? "removed a session an earlier install left in the keychain"
+					: "first use on this install: nothing from an earlier install",
+			);
 		});
 	}
 
@@ -259,6 +338,9 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 			const base = encodeKey(key);
 			await ready(base);
 			await removeAll(base);
+		},
+		debug(key, next) {
+			reporters.set(encodeKey(key), next);
 		},
 	};
 }

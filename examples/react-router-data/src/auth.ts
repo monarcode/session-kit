@@ -12,22 +12,13 @@ const API = "https://dummyjson.com";
 /** One-minute tokens make the early refresh visible after about 30 seconds. */
 const expiresInMins = 1;
 
-/** DummyJSON returns the user's fields beside the tokens. */
-const loginResponse = z.object({
-	accessToken: z.string(),
-	refreshToken: z.string(),
-	id: z.number(),
-	username: z.string(),
-	email: z.string(),
-	firstName: z.string(),
-	lastName: z.string(),
-	image: z.string(),
-});
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
 
 /**
  * DummyJSON's access tokens are JWTs carrying the user, so this app reads the
- * user from the token instead of the login response.
+ * user from the token instead of the login response. `z.object` drops the
+ * claims it doesn't list, such as `exp` and `iat`, which change on every
+ * refresh.
  */
 const claims = z.object({
 	id: z.number(),
@@ -40,34 +31,22 @@ const claims = z.object({
 
 export const auth = createAuth({
 	name: "session-kit-example",
-	user: fromAccessToken(
-		claims,
-		({ id, username, email, firstName, lastName, image }) => ({
-			id,
-			username,
-			email,
-			firstName,
-			lastName,
-			image,
-		}),
-	),
+	user: fromAccessToken(claims),
 	storage: webStorage(),
 	refresh,
 });
 
-/** Signs in with DummyJSON, then saves the tokens; the user comes from the token. */
+/** Signs in with DummyJSON and saves the tokens, which carry the user. */
 export async function signInWithPassword(username: string, password: string) {
-	const { accessToken, refreshToken } = loginResponse.parse(
-		await login(username, password),
-	);
-	await auth.signIn({ accessToken, refreshToken });
+	await auth.signIn(tokens.parse(await login(username, password)));
 }
 
 /**
  * Exchanges the refresh token for new tokens. DummyJSON answers 403 for an
  * invalid or expired refresh token and 401 for a missing one: both mean
- * "sign in again", so return `null`. Other failures are operational.
- * There is no `credentials: "include"`: session-kit keeps tokens out of cookies.
+ * "sign in again", so return `null`. Other failures throw: the session is
+ * kept and the error shows in `state.error`. There is no
+ * `credentials: "include"`: session-kit keeps tokens out of cookies.
  */
 async function refresh({
 	refreshToken,
@@ -105,5 +84,8 @@ async function login(username: string, password: string): Promise<unknown> {
 	return body;
 }
 
-/** Requests to DummyJSON with the access token, refreshing after a 401. */
+/**
+ * Sends requests to DummyJSON with the access token. After a 401 it
+ * refreshes, then replays a GET or HEAD once.
+ */
 export const authFetch = createAuthFetch(auth, `${API}/`);

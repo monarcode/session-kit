@@ -11,7 +11,7 @@ export default function Home() {
 		<View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
 			<Text accessibilityRole="header">Welcome, {firstName}</Text>
 			<Link href="/profile">Profile</Link>
-			{/* Stack.Protected then removes this screen and shows the sign-in screen. */}
+			{/* No navigation: Stack.Protected then shows the sign-in screen. */}
 			<Button
 				title="Sign out"
 				onPress={() => void auth.signOut().catch(() => {})}

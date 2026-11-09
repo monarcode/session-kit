@@ -18,9 +18,9 @@ import type { AuthClient, AuthState } from "../core/types.js";
 /**
  * A layout effect where there is a screen, otherwise a passive one. Layout
  * effects run before the screen paints, so a session restored at mount
- * replaces the "initializing" state before anyone sees it. React warns about
- * layout effects on a server, where neither kind of effect runs. Browsers and
- * React Native define `window`; servers don't.
+ * replaces the "initializing" state before anyone sees it. On a server, where
+ * neither kind runs, React warns about layout effects. Browsers and React
+ * Native define `window`; servers don't.
  */
 export function useMountEffect(
 	effect: () => void | (() => void),
@@ -32,12 +32,42 @@ export function useMountEffect(
 }
 
 /**
- * What React bindings need from an auth client: reactive state, and `mount`
- * to start background work while rendered. Any `createAuth` client fits.
+ * What React bindings need from an auth client: reactive `state`, and `mount`
+ * to start background work while rendered. Any `createAuth` client
+ * fits. See `createAuthHooks`.
+ *
+ * @example
+ * ```ts
+ * import type { AuthSource } from "@monarcode/session-kit/react";
+ *
+ * export function isSignedIn(auth: AuthSource): boolean {
+ * 	const { status } = auth.state.get();
+ * 	return status === "authenticated" || status === "refreshing";
+ * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export type AuthSource = Pick<AuthClient<unknown, unknown>, "state" | "mount">;
 
-/** The state type of a client. */
+/**
+ * The state type of a client: what `useAuth()` returns. See
+ * {@link AuthState}.
+ *
+ * @example
+ * ```ts
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import type { StateOf } from "@monarcode/session-kit/react";
+ *
+ * type User = { name: string };
+ * type AppAuth = AuthClient<User, User>;
+ *
+ * export const displayName = (state: StateOf<AppAuth>) =>
+ * 	state.user?.name ?? "Guest";
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type StateOf<Client extends AuthSource> = ReturnType<
 	Client["state"]["get"]
 >;
@@ -65,7 +95,7 @@ export function assertAuthSource(
 		!("mount" in value) ||
 		typeof value.mount !== "function"
 	) {
-		throw new Error(message);
+		throw new AuthError("INVALID_OPTIONS", message);
 	}
 }
 
@@ -75,7 +105,7 @@ export function useProvidedClient(client?: AuthSource): AuthSource | null {
 	return client ?? provided;
 }
 
-/** Subscribes to `client`'s state, re-rendering only when the selection changes. */
+/** Subscribes to `client`'s state; re-renders only when the selection changes. */
 export function useAuthState<Client extends AuthSource, T>(
 	client: Client,
 	selector: (state: StateOf<Client>) => T,
@@ -97,11 +127,40 @@ export function useAuthState<Client extends AuthSource, T>(
 export type RetryableSource = AuthSource &
 	Pick<AuthClient<unknown, unknown>, "retry">;
 
-/** What an adapter component's `unavailable` render prop receives. */
+/**
+ * What the `unavailable` render prop of an adapter component, such as React
+ * Router's `SessionOutlet` or Expo's `SessionGate`, receives.
+ *
+ * @example
+ * ```tsx
+ * import {
+ * 	SessionOutlet,
+ * 	type UnavailableProps,
+ * } from "@monarcode/session-kit/react-router";
+ *
+ * function SessionUnavailable({ error, retry }: UnavailableProps) {
+ * 	return (
+ * 		<div role="alert">
+ * 			<p>{error?.message ?? "Can't reach the server."}</p>
+ * 			<button onClick={retry}>Try again</button>
+ * 		</div>
+ * 	);
+ * }
+ *
+ * export const layout = (
+ * 	<SessionOutlet loginPath="/login" unavailable={SessionUnavailable} />
+ * );
+ * ```
+ *
+ * @since 0.1.0
+ */
 export type UnavailableProps = {
 	/** Why access is unavailable, such as a failed refresh or a locked keychain. */
 	error: AuthError | null;
-	/** Tries again. A repeated failure stays in `state.error`. */
+	/**
+	 * Tries again, as `auth.retry()` does. A repeated failure stays in
+	 * `state.error`.
+	 */
 	retry: () => void;
 };
 
@@ -122,7 +181,12 @@ export function useAdapterClient(
 		`Render AuthProvider, or pass a client, before rendering ${component}`,
 	);
 	const auth = provided as RetryableSource;
-	useMountEffect(() => auth.mount(), [auth]);
+	useMountEffect(
+		function mountClient() {
+			return auth.mount();
+		},
+		[auth],
+	);
 	return auth;
 }
 

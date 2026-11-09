@@ -1,5 +1,99 @@
 # Changelog
 
+## 0.1.0-alpha.6
+
+### Added
+
+- `@monarcode/session-kit/effect` provides the client as an Effect
+  service, `Auth`, for apps built on `effect` 4.1 or newer, an optional peer
+  dependency. Register the client's type once through `Register`, provide
+  it with `Auth.layer(auth)`, and use `Auth.session`, `Auth.sessionOption`,
+  `Auth.credentials`, `Auth.renew`, `Auth.signIn`, `Auth.signOut`,
+  `Auth.updateUser` (which also takes an Effect that fetches the user) and
+  `Auth.changes`, a `Stream` of the state. They fail with `AuthFailure`, a
+  tagged error carrying the `AuthErrorCode` as `code`; `INVALID_OPTIONS` is
+  a defect. The [Effect guide](./docs/effect.md) walks through it.
+- `@monarcode/session-kit/effetch` adds `sessionBearer({ baseUrl })`, a
+  plugin for `@monarcode/effetch` (an optional peer dependency) with
+  `createAuthFetch`'s behaviour: it sends the access token only to
+  `baseUrl`'s origin, refuses redirects with Effect's `FetchHttpClient`,
+  renews once after a 401 and replays `GET` and `HEAD`, signs out after a
+  second 401 unless `signOutOnRepeated401` is `false` (calls can override
+  it), and fails with `AuthFailure` (`UNAUTHENTICATED`, `LOCKED`,
+  `SESSION_CHANGED`, …) instead of sending a request without a token or
+  returning another account's response. With `optional: true`, a call made
+  while signed out is sent without a token instead, for one client that
+  serves public and private endpoints; calls can override it. A request
+  that already has an `Authorization` header is sent as it is, like
+  effetch's `bearer`. `Fetch.make` needs the `Auth` service.
+- A `debug` option on `createAuth` reports what auth does: restores,
+  refreshes and why they ran, timers, storage operations, other tabs'
+  changes, state changes, and what ended a session. `true` logs to
+  `console.info`; a function, or `{ log }`, receives each `AuthDebugEvent`
+  instead. Tokens, saved values, user fields, and errors' causes are left
+  out unless `{ sensitive: true }`. `SessionGate`, deep links, and
+  foreground handling report through the same option, and storage adapters
+  can add their own events, per key, through the new optional `AuthStorage`
+  member `debug`, as `secureStorage()` does.
+- `SessionGate` takes `ready`, `true` by default. Until it is `true`, as well
+  as while the session is restored, the gate renders nothing and keeps the
+  splash screen up; that applies only until the splash screen is first
+  hidden, even if the gate remounts. The deep link opened after a sign-in
+  waits for `ready` too.
+
+- `locking` on `createAuth` restores a saved session as the new `locked`
+  status, with `user` and `sessionId` set and its tokens waiting for
+  `auth.unlock()`, for native apps that ask a returning user to unlock, for
+  example with biometrics. `{ seal, open }` encrypts the saved tokens with a
+  key the app holds; `locking: true` stores them as they are. `auth.lock()`
+  locks again, keeping the saved session. While locked, `getSession`,
+  `retry`, `refresh`, `updateUser`, `credentials.get`, and
+  `credentials.renew` reject with `LOCKED`, and nothing refreshes.
+  `unlock()` refreshes expired access at once; if that refresh fails, it
+  rejects with `REFRESH_FAILED`, and the session is unlocked but
+  `unavailable`. `open` runs only when unlocking. `SessionGate` renders the navigator for a locked session, and a remembered
+  deep link opens after the unlock. The router adapters treat a locked
+  session as signed out.
+
+### Changed
+
+- `AuthStatus` adds `"locked"`, and `AuthErrorCode` adds `"LOCKED"` and
+  `"UNLOCK_FAILED"`, so a `switch` that covers every value needs the new
+  cases. `AuthClient` adds `lock` and `unlock`, which reject without
+  `locking`. Without `locking`, no state is ever `locked`.
+- TanStack Router's `SessionOutlet` reads `status` rather than `user`, so a
+  locked session shows `pending`.
+- Errors from session-kit's own logic are `AuthError`s, under the new code
+  `"INVALID_OPTIONS"` for misuse, so a `switch` that covers every
+  `AuthErrorCode` needs that case too. Misuse that threw a plain `Error` now
+  throws or rejects with `INVALID_OPTIONS`, with the same message: an invalid
+  `createAuth` option, a `loginPath` or `basename` without a leading `/`, an
+  unknown `webStorage` area, hooks with no client, and `lock()` or `unlock()`
+  without `locking`. `createAuthFetch` throws it for an invalid `baseUrl`,
+  and `authFetch` rejects with it for an invalid path or one off the API
+  origin; `fetch`'s own failures still pass through.
+- `webStorage()` outside a browser and a value too large for
+  `secureStorage()` fail with `PERSISTENCE_FAILED` carrying their own
+  message, rather than a generic one whose `cause` held it.
+- `updateUser` rejects with `USER_VALIDATION_FAILED` when its input function
+  rejects or times out, with the failure as `cause`, as `signIn` already
+  did. It used to reject with that failure itself.
+- Optional properties of the public types accept `undefined` explicitly
+  (`foo?: T | undefined`), so apps using `exactOptionalPropertyTypes` can
+  pass `undefined` to them.
+- Every public export has JSDoc with an example, which the published `.d.ts`
+  files carry to editors.
+
+### Fixed
+
+- A cold-start deep link to a guarded screen is no longer dropped as
+  "already showing" while Expo Router's pathname still reads the launch URL,
+  as it can while the gate holds the splash screen and as the navigator
+  first mounts. A cold-start link to a screen anyone may see is dropped at
+  the sign-in instead of once shown.
+- `SessionGate` and `rememberDeepLink` recognise a client passed as a copy,
+  such as `client={{ ...auth }}`, so a remembered link still opens.
+
 ## 0.1.0-alpha.5
 
 ### Added

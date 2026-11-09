@@ -13,9 +13,9 @@ import "./expo-modules.ts";
 import { lockable } from "./helpers.ts";
 import { appState } from "./mocks/react-native.ts";
 
-// Foreground handling is internal, so it comes from the build. After
-// expo-modules.ts, so `react-native` is the mock. SessionGate's own test
-// checks that it is wired up.
+// `watchForeground` is internal, so it is loaded from the build, after
+// expo-modules.ts so that `react-native` resolves to the mock. gate.test.ts
+// checks that SessionGate wires it up.
 const { watchForeground }: typeof import("../dist/expo/foreground.js") =
 	await import(
 		new URL(
