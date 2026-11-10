@@ -305,6 +305,32 @@ test("parallel requests with the same expired cookie share one refresh", async (
 	assert.equal(calls, 1);
 });
 
+test("parallel requests share a failed refresh, and retry after ten seconds", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let calls = 0;
+	const app = server({
+		refresh: async () => {
+			calls++;
+			throw new Error("backend down");
+		},
+	});
+	const tab = browser();
+	await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+	const results = await Promise.allSettled(
+		[1, 2, 3, 4].map(() => app.getSession(tab.request())),
+	);
+	assert.equal(calls, 1);
+	for (const result of results)
+		assert.ok(
+			result.status === "rejected" && code("REFRESH_FAILED")(result.reason),
+		);
+
+	t.mock.timers.tick(10_000);
+	await assert.rejects(app.getSession(tab.request()), code("REFRESH_FAILED"));
+	assert.equal(calls, 2);
+});
+
 test("a refresh token the backend rejects signs out every request that carries it", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	let calls = 0;

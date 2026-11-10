@@ -19,6 +19,7 @@ import { readRejected, toClientCredentials } from "../core/wire.js";
 import {
 	createShared,
 	jarStorage,
+	writableSibling,
 	type CookieJar,
 	type CookieOptions,
 } from "./cookies.js";
@@ -339,7 +340,7 @@ export function createServerAuth<Src extends UserSource>(
 	// One storage and one client per jar, so calls during a request share what
 	// it read and wrote, and one refresh.
 	const storages = new WeakMap<CookieJar, AuthStorage>();
-	const clients = new WeakMap<CookieJar, AuthClient<U, unknown>>();
+	const clients = new WeakMap<CookieJar, AuthClient<U, I>>();
 	// Jars whose request has called `refresh`, so `refreshIfDue` doesn't again.
 	const refreshed = new WeakSet<CookieJar>();
 
@@ -361,7 +362,7 @@ export function createServerAuth<Src extends UserSource>(
 		return storage;
 	}
 
-	function writable(jar: CookieJar, method: string) {
+	function requireWritable(jar: CookieJar, method: string) {
 		if (!jar.writable)
 			throw new AuthError(
 				"INVALID_OPTIONS",
@@ -369,7 +370,7 @@ export function createServerAuth<Src extends UserSource>(
 			);
 	}
 
-	function clientOf(jar: CookieJar): AuthClient<U, unknown> {
+	function clientOf(jar: CookieJar): AuthClient<U, I> {
 		let client = clients.get(jar);
 		if (!client) {
 			client = createAuth({
@@ -385,16 +386,24 @@ export function createServerAuth<Src extends UserSource>(
 				revoke: options.revoke,
 				maxAge: options.maxAge,
 				debug: options.debug,
-			}) as unknown as AuthClient<U, unknown>;
+			});
 			clients.set(jar, client);
 		}
 		return client;
 	}
 
+	/**
+	 * The client that reads read-only `jar`: its writable sibling's, once that
+	 * has one, so a sign-in through the sibling shows here.
+	 */
+	function readerOf(jar: CookieJar): AuthClient<U, I> {
+		const sibling = writableSibling(jar);
+		return (sibling && clients.get(sibling)) ?? clientOf(jar);
+	}
+
 	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
-		const client = clientOf(jar);
-		if (jar.writable) return client.credentials.get();
-		const stored = await restoreSaved(client);
+		if (jar.writable) return clientOf(jar).credentials.get();
+		const stored = await restoreSaved(readerOf(jar));
 		if (!stored) return null;
 		if (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
 			throw new AuthError(
@@ -431,7 +440,7 @@ export function createServerAuth<Src extends UserSource>(
 			);
 	}
 
-	async function current(client: AuthClient<U, unknown>): Promise<Session<U>> {
+	async function current(client: AuthClient<U, I>): Promise<Session<U>> {
 		const session = await client.getSession();
 		if (!session) throw sessionChanged();
 		return session;
@@ -439,15 +448,14 @@ export function createServerAuth<Src extends UserSource>(
 
 	const serverAuth: ServerAuthBase<U, I> = {
 		async getSession(jar) {
-			const client = clientOf(jar);
-			if (jar.writable) return client.getSession();
-			const stored = await restoreSaved(client);
+			if (jar.writable) return clientOf(jar).getSession();
+			const stored = await restoreSaved(readerOf(jar));
 			return (
 				stored && Object.freeze({ sessionId: stored.id, user: stored.user })
 			);
 		},
 		async refreshIfDue(jar, refreshOptions = {}) {
-			writable(jar, "refreshIfDue");
+			requireWritable(jar, "refreshIfDue");
 			const within = refreshOptions.within ?? DEFAULT_WITHIN;
 			if (!Number.isFinite(within) || within < 0)
 				throw new AuthError(
@@ -476,13 +484,13 @@ export function createServerAuth<Src extends UserSource>(
 			return client.getSession();
 		},
 		async signIn(jar, input) {
-			writable(jar, "signIn");
+			requireWritable(jar, "signIn");
 			const client = clientOf(jar);
-			await client.signIn(input as SignInInput<unknown>);
+			await client.signIn(input);
 			return current(client);
 		},
 		async signOut(jar) {
-			writable(jar, "signOut");
+			requireWritable(jar, "signOut");
 			const client = clientOf(jar);
 			// Restores the cookie's session, so revoke receives its tokens. A
 			// cookie that can't be read is cleared all the same.
@@ -493,7 +501,7 @@ export function createServerAuth<Src extends UserSource>(
 			get: getCredentials,
 			renew,
 			async reject(jar, credentials) {
-				writable(jar, "credentials.reject");
+				requireWritable(jar, "credentials.reject");
 				const client = clientOf(jar);
 				// Restores the cookie's session to compare against.
 				await restoreSaved(client);
@@ -517,7 +525,7 @@ export function createServerAuth<Src extends UserSource>(
 	return {
 		...serverAuth,
 		async updateUser(jar: CookieJar, input: I | (() => Promise<I>)) {
-			writable(jar, "updateUser");
+			requireWritable(jar, "updateUser");
 			const client = clientOf(jar);
 			await (
 				client as unknown as {

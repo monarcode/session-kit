@@ -75,8 +75,12 @@ export type CookieJar = {
 	delete: (name: string, options: CookieOptions) => void;
 	/**
 	 * Whether the response can still set cookies. `false` where the framework
-	 * can't, such as while a Next.js server component renders: then nothing is
-	 * refreshed or saved, and methods that must save reject.
+	 * can't, such as while a Next.js Server Component renders: then nothing is
+	 * refreshed or saved. Calls that need a fresh token reject with
+	 * `REFRESH_FAILED`: `credentials.get` with expired access, and
+	 * `credentials.renew`. Calls that must change the cookie reject with
+	 * `INVALID_OPTIONS`: `signIn`, `signOut`, `credentials.reject`,
+	 * `updateUser` and `refreshIfDue`.
 	 */
 	readonly writable: boolean;
 };
@@ -104,6 +108,21 @@ type Reused = Save & { until: number };
 // stops setting cookies.
 const refreshing = new WeakMap<CookieJar, Set<Promise<unknown>>>();
 
+// Read-only jars over the same cookies as a writable one, as Next's two jars
+// for one store: reads follow the writable jar's session, so a sign-in there
+// shows here.
+const writableSiblings = new WeakMap<CookieJar, CookieJar>();
+
+/** Records that `readOnly` reads the cookies `writable` writes. */
+export function pairJars(readOnly: CookieJar, writable: CookieJar): void {
+	writableSiblings.set(readOnly, writable);
+}
+
+/** The writable jar over the same cookies as `jar`, if an adapter paired them. */
+export function writableSibling(jar: CookieJar): CookieJar | undefined {
+	return writableSiblings.get(jar);
+}
+
 /** Resolves once no refresh is under way on `jar`, counting those begun meanwhile. */
 export async function refreshesSettled(jar: CookieJar): Promise<void> {
 	const pending = refreshing.get(jar);
@@ -122,11 +141,16 @@ export function createShared() {
 	const saves = new Map<string, Reused>();
 	const keyOf = (id: string, accessToken: string) => `${id}\n${accessToken}`;
 
+	// Refreshes the backend failed, by the same key: requests waiting on the
+	// same token fail with them rather than call the backend again.
+	const failures = new Map<string, { error: unknown; until: number }>();
+
 	function prune(now: number) {
-		for (const [key, entry] of saves) {
-			if (entry.until > now && saves.size <= MAX_REUSED) break;
-			saves.delete(key);
-		}
+		for (const entries of [saves, failures])
+			for (const [key, entry] of entries) {
+				if (entry.until > now && entries.size <= MAX_REUSED) break;
+				entries.delete(key);
+			}
 	}
 
 	return {
@@ -153,6 +177,19 @@ export function createShared() {
 				current = next;
 			}
 			return newest;
+		},
+		/** Records that refreshing the session saved as `previous` failed with `error`. */
+		failed(previous: { id: string; accessToken: string }, error: unknown) {
+			const now = Date.now();
+			const key = keyOf(previous.id, previous.accessToken);
+			failures.delete(key);
+			failures.set(key, { error, until: now + REUSE_MS });
+			prune(now);
+		},
+		/** The recent failure to refresh the session saved as `previous`, if any. */
+		failure(previous: { id: string; accessToken: string }): unknown {
+			const entry = failures.get(keyOf(previous.id, previous.accessToken));
+			return entry && entry.until > Date.now() ? entry.error : undefined;
 		},
 		/** Runs `work` after earlier work for session `id` settles. */
 		async exclusive<T>(
@@ -185,6 +222,18 @@ export function createShared() {
 }
 
 export type Shared = ReturnType<typeof createShared>;
+
+/** Failures of this server, not the backend's: retrying may work. */
+const LOCAL_FAILURES = new Set([
+	"SESSION_CHANGED",
+	"PERSISTENCE_FAILED",
+	"INVALID_OPTIONS",
+]);
+
+/** Whether a refresh failed at the backend, and would fail again if retried at once. */
+function failedOnTheBackend(error: unknown): boolean {
+	return !(error instanceof AuthError && LOCAL_FAILURES.has(error.code));
+}
 
 /**
  * The session cookie of one request as auth storage: the engine reads and
@@ -330,7 +379,16 @@ export function jarStorage(input: {
 						"REFRESH_FAILED",
 						"This cookie jar can't set cookies any more, so the session isn't refreshed here",
 					);
-				return work();
+				const tried = session;
+				const failure = tried && shared.failure(tried);
+				if (failure) throw failure;
+				try {
+					return await work();
+				} catch (error) {
+					if (tried && failedOnTheBackend(error))
+						shared.failed(tried, error);
+					throw error;
+				}
 			};
 			const held = session
 				? shared.exclusive(session.id, signal, run)

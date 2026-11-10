@@ -1,4 +1,8 @@
-import type { CookieJar, CookieOptions } from "../server/cookies.js";
+import {
+	pairJars,
+	type CookieJar,
+	type CookieOptions,
+} from "../server/cookies.js";
 
 /**
  * A request's cookie store, as `cookies()` from `next/headers` resolves it:
@@ -152,10 +156,13 @@ export function nextJar(
 		jars.set(store, cached);
 	}
 	const key = writable ? "writable" : "readOnly";
-	return (cached[key] ??= cookieJar(
+	const jar = (cached[key] ??= cookieJar(
 		(name) => store.get(name)?.value,
 		writable ? store : undefined,
 	));
+	if (cached.readOnly && cached.writable)
+		pairJars(cached.readOnly, cached.writable);
+	return jar;
 }
 
 const proxyJars = new WeakMap<object, CookieJar>();

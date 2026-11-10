@@ -85,6 +85,20 @@ test("nextJar is read-only unless writable, with one jar per store and mode", as
 	assert.deepEqual(deleted(signingOut), ["app.session"]);
 });
 
+test("a read-only nextJar sees a sign-in through the writable jar for its store", async () => {
+	const store = actionStore(nextRequest(), NextResponse.next());
+	assert.equal(await serverAuth.getSession(nextJar(store)), null);
+	const session = await serverAuth.signIn(
+		nextJar(store, { writable: true }),
+		tokens(),
+	);
+	assert.deepEqual(await serverAuth.getSession(nextJar(store)), session);
+	assert.equal(
+		(await serverAuth.credentials.get(nextJar(store)))?.accessToken,
+		"access-1",
+	);
+});
+
 test("nextJar deletes every chunk of a large session", async () => {
 	const response = NextResponse.next();
 	await serverAuth.signIn(
