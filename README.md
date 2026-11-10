@@ -910,7 +910,8 @@ the package and every example app.
 Tests are TypeScript files that Node runs directly. Behavior tests are split by
 area and share the browser mocks in `tests/helpers.ts`; React tests mount real
 React DOM, TanStack Router, and React Router in jsdom, and server tests run
-real TanStack Start, Next.js, and React Router request handling. Expo tests replace
+TanStack Start's and React Router's real request handling and use Next.js's
+own request, response and cookie classes. Expo tests replace
 `expo-secure-store`, `expo-file-system`, `expo-router`, and `react-native` with
 the mocks in `tests/mocks/`. CI also runs the tests and type tests against the
 oldest supported peers, and builds the examples. Before each commit, Husky runs

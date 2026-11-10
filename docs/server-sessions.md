@@ -11,6 +11,7 @@ framework guides show the code:
 - [The secret](#the-secret)
 - [Cookie jars](#cookie-jars)
 - [Refreshing](#refreshing)
+- [Signing out](#signing-out)
 - [The access token in the browser](#the-access-token-in-the-browser)
 - [Limits](#limits)
 
@@ -59,6 +60,20 @@ functions are separate instances too. Across instances, nothing is shared:
 with rotating refresh tokens, give your backend a short reuse window, so two
 instances refreshing the same session don't sign it out.
 
+## Signing out
+
+`serverAuth.signOut` clears the cookie in this browser, then calls your
+`revoke`. The cookie holds the whole session and the server keeps no list of
+sessions, so a copy of the cookie made before sign-out still reads as signed
+in. For ten seconds the instance that signed out treats such a copy as
+signed out, as it treats an old cookie after a refresh; after that, the copy
+works for as long as its tokens do.
+
+`revoke` is what ends the session: have your backend revoke the refresh
+token there, so a copy can't refresh, and keep access tokens short-lived,
+since the backend accepts one until it expires unless it checks for
+revocation.
+
 ## The access token in the browser
 
 Server code calls your API with `serverAuth.credentials`. To call it from the
@@ -75,8 +90,10 @@ since 2023 (Safari 16.4), and older ones are refused.
 
 ## Limits
 
-- **Size.** The cookie can take about 11 KB across three cookies, since
-  servers refuse larger request headers. A larger user rejects at sign-in
+- **Size.** The cookie can take about 7.5 KB across two cookies, since
+  servers and proxies refuse larger request headers (nginx: 8 KB for the
+  `Cookie` line, shared with the site's other cookies), and go on refusing
+  every page until the cookie is cleared. A larger user rejects at sign-in
   with `PERSISTENCE_FAILED`; keep it small.
 - **Plain http.** The cookie is `Secure` by default. Browsers accept that on
   `http://localhost` except Safari: pass `cookie: { secure: false }` for

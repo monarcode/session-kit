@@ -90,10 +90,11 @@ const CHUNK_SIZE = 3800;
 /** A head naming its chunks: `c` and their count. Sealed values start with a digit. */
 const CHUNKED = /^c([1-9])$/;
 /**
- * Servers refuse requests whose headers are too large (Node: 16 KB in all),
- * so a session that needs more is refused at sign-in rather than sent.
+ * Servers and proxies refuse requests whose headers are too large (nginx:
+ * 8 KB for the `Cookie` line), and keep refusing until the cookie is gone, so
+ * a session that needs more is refused at sign-in rather than sent.
  */
-const MAX_CHUNKS = 3;
+const MAX_CHUNKS = 2;
 /** How long a refresh's result serves requests that still carry the old cookie. */
 const REUSE_MS = 10_000;
 const MAX_REUSED = 10_000;

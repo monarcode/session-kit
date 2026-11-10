@@ -182,7 +182,7 @@ test("a tampered or moved cookie reads as signed out", async () => {
 
 test("a large session is split across cookies, and stale chunks are deleted", async () => {
 	const tab = browser();
-	const bio = "x".repeat(6000);
+	const bio = "x".repeat(4500);
 	const schema = z.object({ id: z.string(), bio: z.string() });
 	const big = createServerAuth({ name: "test", user: schema, secret: SECRET });
 	const session = await big.signIn(tab.request(), {
@@ -190,7 +190,8 @@ test("a large session is split across cookies, and stale chunks are deleted", as
 		user: { id: "alice", bio },
 	});
 	assert.match(tab.cookies.get("test.session")!, /^c\d+$/);
-	assert.ok(tab.cookies.has("test.session.2"));
+	assert.equal(tab.cookies.get("test.session"), "c2");
+	assert.ok(tab.cookies.has("test.session.1"));
 	assert.deepEqual(await big.getSession(tab.request()), session);
 
 	await big.updateUser(tab.request(), { id: "alice", bio: "short" });
@@ -554,14 +555,14 @@ test("calls in one request share what it read and wrote", async () => {
 	assert.equal(await app.getSession(jar), null);
 });
 
-test("a session too large for three cookies is refused at sign-in", async () => {
+test("a session too large for two cookies is refused at sign-in", async () => {
 	const schema = z.object({ id: z.string(), bio: z.string() });
 	const big = createServerAuth({ name: "test", user: schema, secret: SECRET });
 	const tab = browser();
 	await assert.rejects(
 		big.signIn(tab.request(), {
 			accessToken: "access-1",
-			user: { id: "alice", bio: "x".repeat(20_000) },
+			user: { id: "alice", bio: "x".repeat(6000) },
 		}),
 		code("PERSISTENCE_FAILED"),
 	);
@@ -574,7 +575,7 @@ test("a chunked cookie missing a part reads as signed out and is deleted", async
 	const tab = browser();
 	await big.signIn(tab.request(), {
 		accessToken: "access-1",
-		user: { id: "alice", bio: "x".repeat(6000) },
+		user: { id: "alice", bio: "x".repeat(4500) },
 	});
 	tab.cookies.delete("test.session.1");
 	assert.equal(await big.getSession(tab.request()), null);

@@ -83,7 +83,7 @@ export async function logIn(username: string, password: string) {
 ```
 
 [Server sessions](./server-sessions.md) covers the cookie, rotating the
-secret, and the limits every setup shares.
+secret, signing out, and the limits every setup shares.
 
 ## 2. Read the session in Server Components
 
@@ -449,6 +449,9 @@ example app does this.
 
 ## Things to know
 
+- **Signing out ends the session only with `revoke`.** A copy of the cookie
+  works again ten seconds after sign-out: see
+  [Signing out](./server-sessions.md#signing-out).
 - **Writable jars only where Next allows writes.** Pass `{ writable: true }`
   in Server Functions and Route Handlers only. In a Server Component, a
   writable jar would refresh and then fail to save the new tokens, which

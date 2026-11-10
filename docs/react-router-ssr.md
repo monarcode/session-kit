@@ -95,7 +95,7 @@ export async function logIn(username: string, password: string) {
 ```
 
 [Server sessions](./server-sessions.md) covers the cookie, rotating the
-secret, and the limits every setup shares.
+secret, signing out, and the limits every setup shares.
 
 ## 2. Middleware
 
@@ -451,6 +451,9 @@ example app does this.
 
 ## Things to know
 
+- **Signing out ends the session only with `revoke`.** A copy of the cookie
+  works again ten seconds after sign-out: see
+  [Signing out](./server-sessions.md#signing-out).
 - **Refresh in middleware.** The jar sets cookies until the response leaves
   `cookieJarMiddleware`, which first waits for a refresh under way. A
   loader's deferred data that reads the session later, while the page

@@ -120,7 +120,7 @@ test("nextJar deletes every chunk of a large session", async () => {
 	]);
 });
 
-test("proxyJar refreshes in Proxy, and Next passes the new cookie to the render", async () => {
+test("proxyJar refreshes in Proxy, and sets the cookie for the browser and, through Next's header, for the render", async () => {
 	const signedIn = NextResponse.next();
 	await serverAuth.signIn(
 		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
@@ -137,7 +137,8 @@ test("proxyJar refreshes in Proxy, and Next passes the new cookie to the render"
 	await serverAuth.refreshIfDue(jar);
 	assert.equal(refreshes, 1);
 	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
-	// What Next merges into `cookies()` for the Server Components.
+	// The header Next merges into `cookies()` for the Server Components; the
+	// render's request below stands in for that merge.
 	assert.match(
 		response.headers.get("x-middleware-set-cookie") ?? "",
 		/^app\.session=1\./,

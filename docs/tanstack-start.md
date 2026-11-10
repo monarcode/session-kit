@@ -84,7 +84,7 @@ export async function logIn(username: string, password: string) {
 ```
 
 [Server sessions](./server-sessions.md) covers the cookie, rotating the
-secret, and the limits every setup shares.
+secret, signing out, and the limits every setup shares.
 
 ## 2. Server functions
 
@@ -330,6 +330,9 @@ does this.
 
 ## Things to know
 
+- **Signing out ends the session only with `revoke`.** A copy of the cookie
+  works again ten seconds after sign-out: see
+  [Signing out](./server-sessions.md#signing-out).
 - **One jar per request.** `startJar()` returns the same jar for every call
   while Start handles a request.
 - **Caching.** Pages and server functions that read the session differ per
