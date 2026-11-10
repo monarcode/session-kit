@@ -6,7 +6,8 @@ import { nextJar } from "@monarcode/session-kit/next";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { login, serverAuth } from "../lib/auth/server";
+import { login } from "../lib/auth/backend";
+import { serverAuth } from "../lib/auth/server";
 
 async function jar() {
 	return nextJar(await cookies(), { writable: true });

@@ -35,10 +35,24 @@ const copies = {
 		"tanstack-start-spa/src/routes/login.tsx",
 		"tanstack-start-ssr/src/routes/login.tsx",
 	],
+	"the TanStack Router home page": [
+		"tanstack-router/src/routes/_authenticated/index.tsx",
+		"tanstack-start-spa/src/routes/_authenticated/index.tsx",
+	],
+	"the React Router hooks": [
+		"react-router-declarative/src/hooks.ts",
+		"react-router-data/src/hooks.ts",
+		"react-router-framework-spa/app/hooks.ts",
+	],
 	"the DummyJSON address": [
 		"tanstack-start-ssr/src/auth/api.ts",
 		"next-app/lib/auth/api.ts",
 		"react-router-framework-ssr/app/auth/api.ts",
+	],
+	"the server's DummyJSON sign-in and refresh": [
+		"tanstack-start-ssr/src/auth/backend.ts",
+		"next-app/lib/auth/backend.ts",
+		"react-router-framework-ssr/app/auth/backend.ts",
 	],
 	"auth with the user from the access token": [
 		"tanstack-start-spa/src/auth.ts",

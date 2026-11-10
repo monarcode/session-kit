@@ -3,7 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { API } from "./api";
-import { login, serverAuth } from "./server";
+import { login } from "./backend";
+import { serverAuth } from "./server";
 
 // Each handler runs on the server; Start's compiler replaces it with a fetch
 // in the browser, and leaves `startJar` and `serverAuth` out of that bundle.

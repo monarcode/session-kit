@@ -4,7 +4,7 @@ import {
 	type Session,
 } from "@monarcode/session-kit";
 
-import type { User } from "./user";
+import type { User } from "./backend";
 
 export type AppSession = Session<User>;
 

@@ -166,7 +166,7 @@ test("a tampered or moved cookie reads as signed out", async () => {
 	const sealed = tab.cookies.get("test.session")!;
 	const flipped =
 		sealed.slice(0, -2) +
-		(sealed.endsWith("A") ? "B" : "A") +
+		(sealed.at(-2) === "A" ? "B" : "A") +
 		sealed.slice(-1);
 	assert.equal(
 		await server().getSession(browser({ "test.session": flipped }).request()),
