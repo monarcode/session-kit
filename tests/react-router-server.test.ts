@@ -1,15 +1,9 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
 
-import { createElement as h } from "react";
 import * as reactRouter from "react-router";
 
-import {
-	createMirrorAuth,
-	type Credentials,
-	type MirrorAuth,
-	type Session,
-} from "@monarcode/session-kit";
+import type { Credentials, Session } from "@monarcode/session-kit";
 import {
 	cookieJarMiddleware,
 	routerJar,
@@ -17,8 +11,16 @@ import {
 } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 
-import { act, render, settle, useDom } from "./dom.ts";
-import { code, deferred, user, userSchema } from "./helpers.ts";
+import {
+	code,
+	cookieHeader,
+	deferred,
+	deleted,
+	SECRET,
+	tokens,
+	user,
+	userSchema,
+} from "./helpers.ts";
 
 type User = typeof user;
 
@@ -35,7 +37,7 @@ let refreshAnswer: object | null = {
 const serverAuth = createServerAuth({
 	name: "app",
 	user: userSchema,
-	secret: "a-test-secret-that-is-at-least-32-chars",
+	secret: SECRET,
 	refresh: async () => {
 		refreshes++;
 		return refreshAnswer as never;
@@ -51,24 +53,8 @@ beforeEach(() => {
 	};
 });
 
-const tokens = (overrides: object = {}) => ({
-	accessToken: "access-1",
-	refreshToken: "refresh-1",
-	expiresIn: 900,
-	user,
-	...overrides,
-});
-
 /** A request's `context`, as React Router makes one per request. */
 const newContext = (): RouterContextLike => ({ get() {}, set() {} });
-
-/** The `Cookie` header a browser sends after `response`, without deleted cookies. */
-const cookieHeader = (response: Response) =>
-	response.headers
-		.getSetCookie()
-		.filter((line) => !/Max-Age=0/.test(line))
-		.map((line) => line.split(";")[0])
-		.join("; ");
 
 const request = (cookie = "", url = "https://app.test/") =>
 	new Request(url, { headers: { cookie } });
@@ -88,13 +74,6 @@ function handle(
 		},
 	);
 }
-
-const deleted = (response: Response) =>
-	response.headers
-		.getSetCookie()
-		.filter((line) => /Max-Age=0; Expires=Thu, 01 Jan 1970/.test(line))
-		.map((line) => line.split("=")[0])
-		.sort();
 
 test("routerJar needs cookieJarMiddleware", () => {
 	assert.throws(() => routerJar(newContext()), code("INVALID_OPTIONS"));
@@ -471,152 +450,3 @@ test(
 		assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
 	},
 );
-
-useDom();
-
-type Binding = typeof import("@monarcode/session-kit/react-router");
-let binding: Binding;
-let router: typeof import("react-router");
-
-beforeEach(async () => {
-	binding = await import("@monarcode/session-kit/react-router");
-	router = await import("react-router");
-});
-
-const alice: Session<User> = { sessionId: "s1", user };
-const bob: Session<User> = {
-	sessionId: "s2",
-	user: { ...user, id: "bob", email: "bob@example.com" },
-};
-
-/**
- * Renders `useMirrorAuth` in a root route whose loader returns the server's
- * session, counting loader runs, and returns a way to change that session
- * and run the loader again.
- */
-async function mount(
-	initial: Session<User> | null,
-	revalidate: () => Promise<Session<User> | null> = async () => null,
-) {
-	const counts = { loads: 0, created: 0 };
-	let server = initial;
-	let client!: MirrorAuth<User>;
-	function Root() {
-		const { session } = router.useLoaderData() as {
-			session: Session<User> | null;
-		};
-		client = binding.useMirrorAuth((first) => {
-			counts.created++;
-			return createMirrorAuth({
-				name: "react-router-test",
-				session: first,
-				revalidate,
-				signOut: async () => {},
-			});
-		}, session);
-		return null;
-	}
-	const memory = router.createMemoryRouter([
-		{
-			path: "/",
-			loader: () => {
-				counts.loads++;
-				return { session: server };
-			},
-			element: h(Root),
-			HydrateFallback: () => null,
-		},
-	]);
-	await render(h(router.RouterProvider, { router: memory }));
-	await settle();
-	return {
-		counts,
-		client: () => client,
-		set server(session: Session<User> | null) {
-			server = session;
-		},
-		/** The loader reads `session` and the root renders it. */
-		async serverRender(session: Session<User> | null) {
-			server = session;
-			await act(() => memory.revalidate());
-			await settle();
-		},
-	};
-}
-
-test("useMirrorAuth creates the client once and follows the root loader's session", async () => {
-	const app = await mount(alice);
-	assert.equal(app.client().state.get().sessionId, "s1");
-	const version = app.client().state.get().version;
-
-	await app.serverRender(bob);
-	assert.equal(app.client().state.get().sessionId, "s2");
-	assert.equal(app.client().state.get().version, version + 1);
-	await app.serverRender(structuredClone(bob));
-	await app.serverRender(null);
-	assert.equal(app.client().state.get().status, "unauthenticated");
-	assert.equal(app.counts.created, 1);
-	// One load at start and one per server render: adopting runs none.
-	assert.equal(app.counts.loads, 4);
-});
-
-test("useMirrorAuth runs loaders again when the browser's session changes", async () => {
-	const app = await mount(alice);
-	app.server = null;
-	await act(async () => app.client().adopt(null));
-	await settle();
-	assert.equal(app.counts.loads, 2);
-	assert.equal(app.client().state.get().status, "unauthenticated");
-
-	app.server = alice;
-	await act(async () => app.client().adopt(alice));
-	await settle();
-	assert.equal(app.counts.loads, 3);
-
-	const renamed = { ...alice, user: { ...user, email: "new@example.com" } };
-	app.server = renamed;
-	await act(async () => app.client().adopt(renamed));
-	await settle();
-	assert.equal(app.counts.loads, 4);
-});
-
-test("useMirrorAuth keeps a revalidation when the loader returns the same session", async () => {
-	const answer = deferred<Session<User> | null>();
-	const app = await mount(alice, () => answer.promise);
-	let revalidated: Promise<unknown> | undefined;
-	await act(async () => {
-		revalidated = app.client().retry();
-	});
-	await app.serverRender(structuredClone(alice));
-	answer.resolve(bob);
-	app.server = bob;
-	await act(async () => {
-		await revalidated;
-	});
-	await settle();
-	assert.equal(app.client().state.get().sessionId, "s2");
-});
-
-test("useMirrorAuth runs loaders again after a sign-out in another tab", async () => {
-	let server: Session<User> | null = alice;
-	const app = await mount(alice, async () => server);
-	const unmount = app.client().mount();
-	const otherTab = createMirrorAuth({
-		name: "react-router-test",
-		session: alice,
-		revalidate: async () => server,
-		signOut: async () => {
-			server = null;
-			app.server = null;
-		},
-	});
-	try {
-		await otherTab.signOut();
-		for (let turn = 0; turn < 5 && app.counts.loads === 1; turn++)
-			await settle();
-		assert.equal(app.client().state.get().status, "unauthenticated");
-		assert.equal(app.counts.loads, 2);
-	} finally {
-		unmount();
-	}
-});

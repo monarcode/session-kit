@@ -18,7 +18,7 @@ import {
 	getResponseHeaders,
 } from "@tanstack/react-start/server";
 
-import { code, user, userSchema } from "./helpers.ts";
+import { code, SECRET, user, userSchema } from "./helpers.ts";
 
 type User = typeof user;
 
@@ -27,7 +27,7 @@ const alice: Session<User> = { sessionId: "s1", user };
 const serverAuth = createServerAuth({
 	name: "app",
 	user: userSchema,
-	secret: "a-test-secret-that-is-at-least-32-chars",
+	secret: SECRET,
 });
 
 /** Handles one request in Start's request scope, returning `work`'s result and the cookies it set. */

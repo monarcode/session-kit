@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
-import { beforeEach, test } from "node:test";
+import { test } from "node:test";
 
-import { createElement as h, useState } from "react";
-
-import {
-	createMirrorAuth,
-	type MirrorAuth,
-	type Session,
-} from "@monarcode/session-kit";
 import {
 	nextJar,
 	proxyJar,
@@ -16,16 +9,20 @@ import {
 import { createServerAuth } from "@monarcode/session-kit/server";
 import { NextRequest, NextResponse } from "next/server.js";
 
-import { act, render, settle, useDom } from "./dom.ts";
-import { code, deferred, user, userSchema } from "./helpers.ts";
-
-type User = typeof user;
+import {
+	code,
+	cookieHeader,
+	deleted,
+	SECRET,
+	tokens,
+	userSchema,
+} from "./helpers.ts";
 
 let refreshes = 0;
 const serverAuth = createServerAuth({
 	name: "app",
 	user: userSchema,
-	secret: "a-test-secret-that-is-at-least-32-chars",
+	secret: SECRET,
 	refresh: async () => {
 		refreshes++;
 		return {
@@ -36,22 +33,10 @@ const serverAuth = createServerAuth({
 	},
 });
 
-const tokens = (overrides: object = {}) => ({
-	accessToken: "access-1",
-	refreshToken: "refresh-1",
-	expiresIn: 900,
-	user,
-	...overrides,
-});
-
 /** A request carrying the cookies `response` set, as a browser sends them. */
 const nextRequest = (response?: NextResponse) =>
 	new NextRequest("https://app.test/", {
-		headers: {
-			cookie: (response?.headers.getSetCookie() ?? [])
-				.map((line) => line.split(";")[0])
-				.join("; "),
-		},
+		headers: { cookie: response ? cookieHeader(response) : "" },
 	});
 
 /**
@@ -64,13 +49,6 @@ function actionStore(request: NextRequest, response: NextResponse) {
 	response.headers.delete("set-cookie");
 	return response.cookies as unknown as NextCookies;
 }
-
-const deleted = (response: NextResponse) =>
-	response.headers
-		.getSetCookie()
-		.filter((line) => /Expires=Thu, 01 Jan 1970/.test(line))
-		.map((line) => line.split("=")[0])
-		.sort();
 
 test("nextJar is read-only unless writable, with one jar per store and mode", async () => {
 	const response = NextResponse.next();
@@ -178,137 +156,4 @@ test("a read-only nextJar never refreshes an expired token", async (t) => {
 		code("REFRESH_FAILED"),
 	);
 	assert.equal(refreshes, 0);
-});
-
-useDom();
-
-type Hook = typeof import("@monarcode/session-kit/next/client");
-let hook: Hook;
-let AppRouterContext: typeof import("next/dist/shared/lib/app-router-context.shared-runtime.js").AppRouterContext;
-
-beforeEach(async () => {
-	hook = await import("@monarcode/session-kit/next/client");
-	({ AppRouterContext } =
-		await import("next/dist/shared/lib/app-router-context.shared-runtime.js"));
-});
-
-const alice: Session<User> = { sessionId: "s1", user };
-const bob: Session<User> = {
-	sessionId: "s2",
-	user: { ...user, id: "bob", email: "bob@example.com" },
-};
-
-/**
- * Renders `useMirrorAuth` as a layout would, under a router whose refreshes
- * it counts, and returns a way to render the server's next session.
- */
-async function mount(
-	initial: Session<User> | null,
-	revalidate: () => Promise<Session<User> | null> = async () => null,
-) {
-	const router = { refreshes: 0, created: 0 };
-	let client!: MirrorAuth<User>;
-	let serverRenders!: (session: Session<User> | null) => void;
-	function Providers() {
-		const [session, setSession] = useState(initial);
-		serverRenders = setSession;
-		client = hook.useMirrorAuth((first) => {
-			router.created++;
-			return createMirrorAuth({
-				name: "next-test",
-				session: first,
-				revalidate,
-				signOut: async () => {},
-			});
-		}, session);
-		return null;
-	}
-	const appRouter = { refresh: () => router.refreshes++ };
-	await render(
-		h(AppRouterContext.Provider, { value: appRouter as never }, h(Providers)),
-	);
-	return {
-		router,
-		client: () => client,
-		async serverRender(session: Session<User> | null) {
-			await act(async () => serverRenders(session));
-			await settle();
-		},
-	};
-}
-
-test("useMirrorAuth creates the client once and follows the server's session", async () => {
-	const app = await mount(alice);
-	assert.equal(app.client().state.get().sessionId, "s1");
-	const version = app.client().state.get().version;
-
-	await app.serverRender(bob);
-	assert.equal(app.client().state.get().sessionId, "s2");
-	assert.equal(app.client().state.get().version, version + 1);
-	await app.serverRender(structuredClone(bob));
-	await app.serverRender(null);
-	assert.equal(app.client().state.get().status, "unauthenticated");
-	assert.equal(app.router.created, 1);
-	assert.equal(app.router.refreshes, 0);
-});
-
-test("useMirrorAuth refreshes the router when the browser's session changes", async () => {
-	const app = await mount(alice);
-	await act(async () => app.client().adopt(null));
-	await settle();
-	assert.equal(app.router.refreshes, 1);
-	// The server catches up: nothing more to do.
-	await app.serverRender(null);
-	assert.equal(app.router.refreshes, 1);
-
-	await act(async () => app.client().adopt(alice));
-	await settle();
-	assert.equal(app.router.refreshes, 2);
-	await app.serverRender(alice);
-
-	await act(async () =>
-		app
-			.client()
-			.adopt({ ...alice, user: { ...user, email: "new@example.com" } }),
-	);
-	await settle();
-	assert.equal(app.router.refreshes, 3);
-});
-
-test("useMirrorAuth keeps a revalidation when the server renders the same session", async () => {
-	const answer = deferred<Session<User> | null>();
-	const app = await mount(alice, () => answer.promise);
-	let revalidated: Promise<unknown> | undefined;
-	await act(async () => {
-		revalidated = app.client().retry();
-	});
-	await app.serverRender(structuredClone(alice));
-	answer.resolve(bob);
-	await act(async () => {
-		await revalidated;
-	});
-	assert.equal(app.client().state.get().sessionId, "s2");
-});
-
-test("useMirrorAuth refreshes the router after a sign-out in another tab", async () => {
-	let server: Session<User> | null = alice;
-	const app = await mount(alice, async () => server);
-	const unmount = app.client().mount();
-	const otherTab = createMirrorAuth({
-		name: "next-test",
-		session: alice,
-		revalidate: async () => server,
-		signOut: async () => {
-			server = null;
-		},
-	});
-	try {
-		await otherTab.signOut();
-		for (let turn = 0; turn < 5 && app.router.refreshes === 0; turn++)
-			await settle();
-		assert.equal(app.client().state.get().status, "unauthenticated");
-		assert.equal(app.router.refreshes, 1);
-	} finally {
-		unmount();
-	}
 });

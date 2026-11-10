@@ -13,7 +13,7 @@ import {
 	type CookieJar,
 } from "@monarcode/session-kit/server";
 
-import { code, deferred, user, userSchema } from "./helpers.ts";
+import { code, deferred, SECRET, user, userSchema } from "./helpers.ts";
 
 type User = typeof user;
 
@@ -372,7 +372,7 @@ test("end to end: browser sign-in sealed on the server, then authFetch", async (
 	const serverAuth = createServerAuth({
 		name: "app",
 		user: userSchema,
-		secret: "a-test-secret-that-is-at-least-32-chars",
+		secret: SECRET,
 		clientCredentials: true,
 		refresh: async () => ({ accessToken: "access-2", expiresIn: 900 }),
 	});

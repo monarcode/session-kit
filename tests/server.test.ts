@@ -10,9 +10,16 @@ import {
 } from "@monarcode/session-kit/server";
 import { z } from "zod";
 
-import { code, deferred, jwt, user, userSchema } from "./helpers.ts";
+import {
+	code,
+	deferred,
+	jwt,
+	SECRET,
+	tokens,
+	user,
+	userSchema,
+} from "./helpers.ts";
 
-const SECRET = "a-test-secret-that-is-at-least-32-chars";
 const OTHER_SECRET = "another-test-secret-at-least-32-chars!";
 
 /**
@@ -55,14 +62,6 @@ function server(options: Partial<ServerAuthOptions<typeof userSchema>> = {}) {
 		...options,
 	});
 }
-
-const tokens = (overrides: object = {}) => ({
-	accessToken: "access-1",
-	refreshToken: "refresh-1",
-	expiresIn: 900,
-	user,
-	...overrides,
-});
 
 test("signIn seals the session into an httpOnly cookie that later requests read", async () => {
 	const app = server();

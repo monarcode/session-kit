@@ -74,6 +74,36 @@ export const setGlobal = (name: string, value: unknown) =>
  * A promise with its settle functions exposed. The value type defaults to
  * `any` so a deferred can stand in for any callback's result.
  */
+/** A secret `createServerAuth` accepts. */
+export const SECRET = "a-test-secret-that-is-at-least-32-chars";
+
+/** What a backend's sign-in returns, for `serverAuth.signIn`. */
+export const tokens = (overrides: object = {}) => ({
+	accessToken: "access-1",
+	refreshToken: "refresh-1",
+	expiresIn: 900,
+	user,
+	...overrides,
+});
+
+const DELETED = /Expires=Thu, 01 Jan 1970/;
+
+/** The `Cookie` header a browser sends after `response`, without deleted cookies. */
+export const cookieHeader = (response: { headers: Headers }) =>
+	response.headers
+		.getSetCookie()
+		.filter((line) => !DELETED.test(line))
+		.map((line) => line.split(";")[0])
+		.join("; ");
+
+/** The names of the cookies `response` deletes. */
+export const deleted = (response: { headers: Headers }) =>
+	response.headers
+		.getSetCookie()
+		.filter((line) => DELETED.test(line))
+		.map((line) => line.split("=")[0])
+		.sort();
+
 export const deferred = <T = any>() => {
 	let resolve!: (value?: T | PromiseLike<T>) => void;
 	let reject!: (reason?: unknown) => void;
