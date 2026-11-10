@@ -56,10 +56,12 @@ server with TanStack Start, Next.js, and React Router, and comes with an
   - [State](#state)
   - [Sessions and credentials](#sessions-and-credentials)
   - [Signing in and out](#signing-in-and-out)
-  - [Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
+  - [Updating the user](#updating-the-user)
+  - [Authenticated requests](#authenticated-requests)
+  - [Other HTTP clients](#other-http-clients)
   - [Users from the access token](#users-from-the-access-token)
   - [Locking](#locking)
-- [Schemas, refresh, and storage](#schemas-refresh-and-storage)
+- [Configuring the client](#configuring-the-client)
   - [User schemas](#user-schemas)
   - [Refresh](#refresh)
   - [Expiry](#expiry)
@@ -67,6 +69,7 @@ server with TanStack Start, Next.js, and React Router, and comes with an
   - [Tabs](#tabs)
   - [Errors](#errors)
   - [Debugging](#debugging)
+- [Common questions](#common-questions)
 - [Security notes](#security-notes)
 - [Entry points](#entry-points)
 - [Compatibility](#compatibility)
@@ -605,8 +608,8 @@ export async function fetchProfile() {
 
 When a request gets a 401, `authFetch` refreshes, then sends a GET or HEAD
 again. Other methods are never sent twice.
-[Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
-covers its options.
+[Authenticated requests](#authenticated-requests) covers the rest of its
+behaviour and its options.
 
 ### 6. Protect your routes
 
@@ -1250,54 +1253,143 @@ watching the session as a `Stream`.
 
 ## Using the client
 
+Components read the session with hooks. Everything else, such as loaders,
+event handlers, and request code, talks to the client that `createAuth`
+returned. This is the whole of it:
+
+| Call                               | What it does                                                         |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `auth.state.get()`, `.subscribe()` | Reads the [state](#state), or follows its changes.                   |
+| `auth.getSession()`                | Resolves who is signed in, restoring or refreshing first, or `null`. |
+| `auth.signIn(tokens)`              | Saves a new session, replacing any current one.                      |
+| `auth.signOut()`                   | Ends the session in every tab and clears storage.                    |
+| `auth.updateUser(user)`            | Replaces the user and keeps the session.                             |
+| `auth.refresh()`                   | Refreshes now, even while the access token is usable.                |
+| `auth.retry()`                     | Tries again after a failed refresh.                                  |
+| `auth.isCurrent(session)`          | Tells whether a session is still the signed-in one.                  |
+| `auth.credentials.get()`           | Resolves the access token, for code that sends requests.             |
+| `auth.lock()`, `auth.unlock()`     | Locks and unlocks a saved session, with [`locking`](#locking).       |
+| `auth.mount()`                     | Starts timers and tab sync. `AuthProvider` and the routers call it.  |
+
+Each method's JSDoc says what it resolves and which `AuthError` it rejects
+with, so your editor shows the details where you use them.
+
 ### State
 
+`auth.state` is what `useAuth` reads. Outside React, read it once with `get`,
+or follow it with `subscribe`:
+
+<!-- file: src/status-log.ts -->
+
 ```ts
-const state = auth.state.get();
-const { unsubscribe } = auth.state.subscribe((next) => {});
+import { auth } from "./auth.js";
+
+/** Logs each change of status. Returns a function that stops it. */
+export function logStatus() {
+  let last = auth.state.get().status;
+  const { unsubscribe } = auth.state.subscribe(({ status }) => {
+    if (status === last) return;
+    last = status;
+    console.info(`Auth is ${status}`);
+  });
+  return unsubscribe;
+}
 ```
 
 `subscribe` reports later changes, not the current value. A listener that
-throws does not interrupt auth; its error is rethrown asynchronously, where
-error reporting can catch it. Checking `status` narrows `user`;
-[How it works](#how-it-works) lists each status. A locked session keeps its
-user, so check `status`, not `user`, to know whether access is usable.
+throws doesn't interrupt auth: its error is rethrown asynchronously, where
+error reporting can catch it.
 
-`state.sessionId` is new on every sign-in and stable across refreshes and
-profile updates; scope private cached data, such as TanStack Query results, to
-it. `state.version` changes when guards must run again, which is what
-`connectAuth` and `useAuthRevalidation` watch. `state.error` holds the latest
-failure.
+| Field       | Holds                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `status`    | Where the session stands; [How it works](#how-it-works) lists each one.               |
+| `user`      | The signed-in user, or `null`. Checking `status` narrows it.                          |
+| `sessionId` | New on every sign-in, and stable across refreshes and profile updates.                |
+| `error`     | The latest failure, as an [`AuthError`](#errors), or `null`.                          |
+| `version`   | Changes when guards must run again. `connectAuth` and `useAuthRevalidation` watch it. |
+
+Two habits follow from this. Scope private cached data, such as TanStack Query
+results, to `sessionId`, so one account never sees another's. And to know
+whether access is usable, check `status`, not `user`: a
+[locked](#locking) session keeps its user.
 
 ### Sessions and credentials
 
-- `auth.getSession()` resolves who is signed in, `{ sessionId, user }`, or
-  `null`, restoring or refreshing first if needed. It never holds tokens.
-- `auth.credentials.get()` resolves `{ sessionId, accessToken, expiresAt }` for
-  code that attaches tokens to requests. `credentials.renew(credentials)`
-  recovers after a 401, and `credentials.reject(credentials)` ends a session
-  the server keeps refusing.
-- `auth.isCurrent({ sessionId })` tells whether a session is still the current
-  one.
+A **session** is who is signed in, `{ sessionId, user }`, and never holds
+tokens. `getSession()` is how code outside React asks for it. It waits for a
+restore or a refresh that is under way, so a loader never acts on a stale
+answer:
+
+<!-- file: src/cart.ts -->
+
+```ts
+import { authFetch } from "./api.js";
+import { auth } from "./auth.js";
+
+/** A loader: it runs outside React, so it asks the client. */
+export async function loadCart(): Promise<unknown> {
+  const session = await auth.getSession();
+  if (!session) return null;
+  const response = await authFetch(`auth/carts/user/${session.user.id}`);
+  if (!response.ok) throw new Error(`Cart failed (${response.status})`);
+  return response.json();
+}
+```
+
+**Credentials** are the access token, `{ sessionId, accessToken, expiresAt }`,
+kept apart so that code which only needs the user never holds one.
+`createAuthFetch` uses them for you, through three calls.
+[Other HTTP clients](#other-http-clients) shows them with axios and ky:
+
+- `auth.credentials.get()` resolves the current credentials, or `null`.
+- `auth.credentials.renew(credentials)` recovers after a 401. However many
+  requests failed, they share one refresh.
+- `auth.credentials.reject(credentials)` ends a session the server keeps
+  refusing, unless a newer one has replaced it.
+
+`auth.isCurrent({ sessionId })` tells whether a session you are holding is
+still the signed-in one, for work that may finish after an account switch.
 
 ### Signing in and out
 
-- `auth.signIn({ accessToken, refreshToken?, expiresIn?, user })` validates and
-  saves a new session, replacing any current one. The latest call wins, and
-  invalid input keeps the previous session.
-- `auth.signOut()` ends the session in every tab and clears storage. The
-  optional `revoke` callback then receives the ended tokens, so your backend can
-  revoke them; a failed revocation is reported as `REVOKE_FAILED` without
-  undoing the sign-out.
-- `auth.refresh()` refreshes now, even while the access token is usable.
-  `auth.retry()` tries again after a failed refresh.
+`auth.signIn({ accessToken, refreshToken?, expiresIn?, user })` validates and
+saves a new session, replacing any current one. The latest call wins, and
+invalid input keeps the previous session. [Expiry](#expiry) covers how the
+token's lifetime is found.
 
-### Profile updates and authenticated requests
+`auth.signOut()` ends the session in every tab and clears storage. If your
+backend can revoke tokens, give the client a `revoke` callback: it receives
+the ended tokens once the user is already signed out.
 
-`updateUser` replaces the user and keeps the session. Pass a function to fetch
-the new user: if the session changes meanwhile, the result is discarded instead
-of landing on another account. `fetchProfile` is the request from
-[Getting started](#5-call-your-api), sent with `createAuthFetch`:
+<!-- file: src/revoke.ts -->
+
+```ts
+import type { RevokeFn } from "@monarcode/session-kit";
+
+/** Pass as `createAuth`'s `revoke` option. */
+export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
+  if (!refreshToken) return;
+  const response = await fetch("https://api.example.com/auth/revoke", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!response.ok) throw new Error(`Revoke failed (${response.status})`);
+};
+```
+
+A failed revocation is reported in `state.error` as `REVOKE_FAILED` without
+undoing the sign-out: the user asked to leave, and has. A session the backend
+already rejected is not revoked.
+
+### Updating the user
+
+`auth.updateUser` replaces the user and keeps the session. Pass it a function
+that fetches the new user, rather than the user itself, whenever a request is
+involved. The session is noted before the function runs, so if it changes
+meanwhile the result is discarded instead of landing on another account.
+`fetchProfile` is the request from [Getting started](#5-call-your-api):
 
 <!-- file: src/profile.ts -->
 
@@ -1308,112 +1400,343 @@ import { auth } from "./auth.js";
 export const reloadProfile = () => auth.updateUser(fetchProfile);
 ```
 
-`createAuthFetch` restricts requests to the configured origin and rejects
-redirects. After a 401 it refreshes, then replays GET and HEAD once; other
-methods are never replayed. A second 401 ends that session, unless you pass
-`{ signOutOnRepeated401: false }` for APIs that answer 401 for other reasons.
-Signed out, it rejects with `UNAUTHENTICATED`; pass `{ optional: true }` when
-one `authFetch` serves public and private endpoints, to send those requests
-without a token instead.
+### Authenticated requests
+
+`createAuthFetch(auth, baseUrl)` returns a `fetch` for one API. It is built so
+that a token can't leak and a user can't be signed out by accident:
+
+| When…                                   | `authFetch`…                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| The path is on another origin           | Rejects with `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.   |
+| The response is a redirect              | Rejects rather than following it.                                            |
+| The response is a 401                   | Refreshes once, then sends a GET or HEAD again with the new token.           |
+| A POST, PUT, PATCH or DELETE gets a 401 | Refreshes, and resolves the 401. It never sends a request twice on its own.  |
+| The replayed request gets a 401 too     | Signs out, unless `signOutOnRepeated401` is `false`.                         |
+| The session changes during the request  | Rejects with `SESSION_CHANGED` rather than resolve another account's answer. |
+| Nobody is signed in                     | Rejects with `UNAUTHENTICATED`, unless `optional` is `true`.                 |
+| The network fails                       | Rejects as `fetch` does, unchanged.                                          |
+
+Because a write is never replayed for you, retry it yourself where sending it
+twice is safe. By then the token has been refreshed:
+
+<!-- file: src/add-to-cart.ts -->
+
+```ts
+import { authFetch } from "./api.js";
+
+export async function addToCart(userId: number, productId: number) {
+  const send = () =>
+    authFetch("auth/carts/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        products: [{ id: productId, quantity: 1 }],
+      }),
+    });
+
+  let response = await send();
+  // The 401 refreshed the token, so one more try uses the new one.
+  if (response.status === 401) response = await send();
+  if (!response.ok) throw new Error(`Add to cart failed (${response.status})`);
+}
+```
+
+Two options change the defaults:
+
+<!-- file: src/public-api.ts -->
+
+```ts
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+export const publicFetch = createAuthFetch(auth, `${API}/`, {
+  // One `fetch` for public and private endpoints: signed out, requests are
+  // sent without a token instead of rejecting.
+  optional: true,
+  // For APIs that answer 401 for reasons other than a rejected token, so one
+  // of those endpoints can't sign users out.
+  signOutOnRepeated401: false,
+});
+```
+
+### Other HTTP clients
+
+`createAuthFetch` and the effetch plugin are built on three calls, and any
+other HTTP client can use the same ones:
+
+1. **Before a request**, `auth.credentials.get()` resolves the credentials to
+   send, waiting for a restore or a refresh that is under way. It resolves
+   `null` when nobody is signed in.
+2. **After a 401**, `auth.credentials.renew(credentials)` takes the
+   credentials that request was sent with, and resolves new ones. However many
+   requests failed, they share one refresh. It resolves `null` when the user
+   was signed out instead.
+3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
+   session, unless a newer one has replaced it.
+
+With [axios](https://axios-http.com), that is two interceptors:
+
+<!-- file: src/axios.ts -->
+
+```ts
+import type { Credentials } from "@monarcode/session-kit";
+import axios, { type InternalAxiosRequestConfig } from "axios";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+type Config = InternalAxiosRequestConfig & { replayed?: boolean };
+
+// One instance for one API, so the token goes nowhere else.
+export const http = axios.create({ baseURL: API });
+
+/** The credentials each request was sent with. */
+const sent = new WeakMap<Config, Credentials>();
+
+http.interceptors.request.use(async (config) => {
+  const credentials = await auth.credentials.get();
+  // Signed out, the request goes without a token, as a public one would.
+  if (credentials) {
+    config.headers.set("Authorization", `Bearer ${credentials.accessToken}`);
+    sent.set(config, credentials);
+  }
+  return config;
+});
+
+http.interceptors.response.use(undefined, async (error: unknown) => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 401) throw error;
+  const config: Config | undefined = error.config;
+  const used = config && sent.get(config);
+  if (!config || !used) throw error;
+
+  if (config.replayed) {
+    // The new token was refused too: end the session.
+    await auth.credentials.reject(used);
+    throw error;
+  }
+  const fresh = await auth.credentials.renew(used);
+  // Only a GET is safe to send twice. For anything else the caller decides.
+  if (!fresh || config.method !== "get") throw error;
+  const replay: Config = { ...config, replayed: true };
+  return http.request(replay);
+});
+```
+
+With [ky](https://github.com/sindresorhus/ky), two hooks do the same. The
+request's `context` carries the credentials from one hook to the other:
+
+<!-- file: src/ky.ts -->
+
+```ts
+import type { Credentials } from "@monarcode/session-kit";
+import ky from "ky";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+export const api = ky.create({
+  baseUrl: `${API}/`,
+  hooks: {
+    beforeRequest: [
+      async ({ request, options }) => {
+        const credentials = await auth.credentials.get();
+        if (!credentials) return;
+        options.context.credentials = credentials;
+        request.headers.set(
+          "Authorization",
+          `Bearer ${credentials.accessToken}`,
+        );
+      },
+    ],
+    afterResponse: [
+      async ({ request, options, response }) => {
+        const used = options.context.credentials as Credentials | undefined;
+        if (response.status !== 401 || !used) return;
+
+        if (options.context.replayed) {
+          // The new token was refused too: end the session.
+          await auth.credentials.reject(used);
+          return;
+        }
+        const fresh = await auth.credentials.renew(used);
+        if (!fresh || request.method !== "GET") return;
+        options.context.credentials = fresh;
+        options.context.replayed = true;
+        const headers = new Headers(request.headers);
+        headers.set("Authorization", `Bearer ${fresh.accessToken}`);
+        return ky.retry({ request: new Request(request, { headers }) });
+      },
+    ],
+  },
+});
+```
+
+Three things `createAuthFetch` does for you are yours to keep here:
+
+- **Keep the token on one origin.** Give the client one base URL, and don't
+  pass it absolute URLs to other hosts.
+- **Don't read the token early.** Ask for credentials in the request hook,
+  never once at startup: a token saved in a variable goes stale at the next
+  refresh.
+- **Check the account after slow work.** `auth.isCurrent(credentials)` tells
+  whether the session that sent a request is still the signed-in one, before
+  you show its answer.
 
 ### Users from the access token
 
-If your backend puts the user in a JWT access token, read it from there.
-`signIn` and the refresh callback then take tokens only, the user changes
-whenever the token does, and there is no `updateUser`; call `auth.refresh()` to
-pick up a changed user:
+If your backend puts the user in a JWT access token, read it from there with
+`fromAccessToken`. `signIn` and the refresh callback then take tokens only,
+and the user changes whenever the token does:
+
+<!-- file: src/token-auth.ts -->
 
 ```ts
-const auth = createAuth({
-  name: "my-app",
-  user: fromAccessToken(
-    z.object({ sub: z.string(), email: z.string() }),
-    (claims) => ({ id: claims.sub, email: claims.email }),
-  ),
+import {
+  createAuth,
+  fromAccessToken,
+  webStorage,
+} from "@monarcode/session-kit";
+import { z } from "zod";
+
+const claimsSchema = z.object({ sub: z.string(), email: z.string() });
+
+export const tokenAuth = createAuth({
+  name: "my-token-app",
+  // The claims are validated, then mapped to the user the app sees.
+  user: fromAccessToken(claimsSchema, (claims) => ({
+    id: claims.sub,
+    email: claims.email,
+  })),
   storage: webStorage(),
 });
 
-await auth.signIn({ accessToken, refreshToken });
+export const signInWithTokens = (tokens: {
+  accessToken: string;
+  refreshToken: string;
+}) => tokenAuth.signIn(tokens);
 ```
 
-The token is decoded without verifying its signature, which suits a browser: a
-user object in a JSON response is trusted to the same degree. Pass `{ decode }`
-to verify or decode it yourself. Leave claims that change on every refresh,
-such as `exp` or `jti`, out of the user. OAuth providers may change their
-access token format, so this suits backends you control. The
-[`tanstack-start-spa`](./examples/tanstack-start-spa) and
-[`react-router-data`](./examples/react-router-data) examples use this source.
+- **No `updateUser`.** The token is the only source of the user, so call
+  `auth.refresh()` to pick up a change.
+- **The signature isn't verified.** That suits a browser, which trusts a user
+  object in a JSON response to the same degree. Pass `{ decode }` as the third
+  argument to verify or decode the token yourself.
+- **Leave out claims that change on every refresh**, such as `exp`, `iat`, or
+  `jti`, so the user stays the same object across refreshes.
+- **For backends you control.** OAuth providers may change their access token
+  format without notice.
+
+The [`tanstack-start-spa`](./examples/tanstack-start-spa) and
+[`react-router-data`](./examples/react-router-data) examples read their user
+this way.
 
 ### Locking
 
-For native apps that ask a returning user to unlock, for example with
-biometrics, before the app opens. With `locking`, a saved session restores as
-`locked`: `user` and `sessionId` are set, but the tokens wait for
+Locking is for native apps that ask a returning user to unlock, for example
+with biometrics, before the app opens. With the `locking` option, a saved
+session restores as `locked`: `user` and `sessionId` are set, so a
+"Welcome back" screen can greet the user, but the tokens wait for
 `auth.unlock()`.
 
+<!-- file: src/locked-auth.ts -->
+
 ```ts
-const auth = createAuth({
-  ...options,
+import { createAuth, type AuthStorage } from "@monarcode/session-kit";
+
+import { userSchema } from "./backend.js";
+
+// Your app's own: a native secure store, and encryption with a key it holds
+// in memory only while unlocked.
+declare const storage: AuthStorage;
+declare const key: CryptoKey;
+declare function encrypt(key: CryptoKey, plain: string): Promise<string>;
+declare function decrypt(key: CryptoKey, sealed: string): Promise<string>;
+
+export const lockedAuth = createAuth({
+  name: "my-native-app",
+  user: userSchema,
+  storage,
   locking: {
-    // Your app's own encryption, with a key it holds in memory.
+    // Runs whenever the tokens are saved.
     seal: (payload) => encrypt(key, payload),
+    // Runs only from `unlock()`.
     open: (sealed) => decrypt(key, sealed),
   },
 });
 
-await auth.unlock(); // once the app has its key: `authenticated`
-await auth.lock(); // `locked` again; the saved session stays
+/** Once the app has its key: resolves the session, now `authenticated`. */
+export const unlockApp = () => lockedAuth.unlock();
+
+/** `locked` again. The saved session stays, and the tokens leave memory. */
+export const lockApp = () => lockedAuth.lock();
 ```
 
-- **Sealing.** `seal` encrypts the tokens, a JSON string, whenever they are
-  saved, and `open` decrypts them when unlocking, and only then. The user and
-  session ID are saved beside them, readable while
-  locked. Either function may return a promise. session-kit depends on no
-  crypto or biometrics library. `locking: true` stores the tokens as they are,
-  for a lock screen in front of an otherwise ordinary session.
-- **Unlocking.** `unlock()` resolves the session. Expired access is refreshed
-  at once, and a refresh token the backend rejects signs out and resolves
-  `null`. Any other refresh failure rejects with `REFRESH_FAILED`, but the
-  session is unlocked all the same: `unavailable` until `retry()`, so check
-  `status` rather than treating every rejection as still locked. When `open`
-  throws, `unlock()` rejects with `UNLOCK_FAILED` and the session stays
-  locked. A saved session that can't be used signs out and rejects with
-  `INVALID_SESSION`. Overlapping calls share one unlock.
-- **While locked.** `getSession`, `retry`, `refresh`, `updateUser`,
-  `credentials.get`, and `credentials.renew` reject with `LOCKED`, rather than
-  waiting for an unlock that may never come. Nothing refreshes, and timers are
-  off. `signIn` replaces the session, which is the password path. `signOut`
-  clears it, without calling `revoke`, since the tokens are sealed.
-- **Locking again.** `lock()` takes the tokens out of memory and keeps the
-  saved session. A refresh already running still saves its tokens, so keep
-  the key until the promise settles.
-- **Native apps.** Locking is built for apps with one JavaScript context. In
-  a browser, tabs don't follow each other with `locking`: a sign-in, sign-out
-  or lock in one tab doesn't reach the others, and with rotating refresh
-  tokens, two tabs refreshing the same session can sign one of them out. The
-  router adapters treat a locked session as signed out. Locking needs a user
-  schema: a user read from the access token can't be shown without its token.
-- **Existing sessions.** A session saved before `locking` was added restores
-  as `locked` too, and is sealed when unlocked. If sealing fails then, it stays
-  as it was, and the next save seals it. Turning `locking` off later
-  makes sealed sessions unreadable, which signs those users out.
+- **Sealing is yours.** session-kit depends on no crypto or biometrics
+  library. The user and session ID are saved beside the sealed tokens,
+  readable while locked. `locking: true` stores the tokens as they are, for a
+  lock screen in front of an otherwise ordinary session.
+- **While locked, nothing waits.** `getSession`, `retry`, `refresh`,
+  `updateUser`, `credentials.get`, and `credentials.renew` reject with
+  `LOCKED` instead of waiting for an unlock that may never come. Nothing refreshes, and timers are
+  off. `signIn` replaces the session, which is the password path, and
+  `signOut` clears it without calling `revoke`, since the tokens are sealed.
+- **A failed unlock isn't always still locked.** When `open` throws,
+  `unlock()` rejects with `UNLOCK_FAILED` and the session stays locked. But a
+  refresh that fails after the tokens were opened rejects with
+  `REFRESH_FAILED` and leaves the session unlocked and `unavailable` until
+  `retry()`. Check `status` after a rejection.
+- **Keep the key until `lock()` settles.** A refresh already running still
+  saves its tokens, and saving seals them.
+- **Native apps only.** Locking is built for one JavaScript context. In a
+  browser, tabs don't follow each other with `locking`, and the router
+  adapters treat a locked session as signed out. It also needs a user schema:
+  a user read from the access token can't be shown without its token.
+- **Turning it on and off.** A session saved before `locking` was added
+  restores as `locked` too, and is sealed when unlocked. Turning
+  `locking` off later makes sealed sessions unreadable, which signs those
+  users out.
 
 The [Expo guide](./docs/expo.md#locking) has a worked example: a key behind
 the device's biometrics, AES-GCM sealing, and a welcome-back screen.
 
-## Schemas, refresh, and storage
+## Configuring the client
+
+`createAuth` takes three required options and five optional ones:
+
+| Option    | Required | What it sets                                                                                 |
+| --------- | -------- | -------------------------------------------------------------------------------------------- |
+| `name`    | Yes      | The storage namespace: letters, digits, `_` or `-`. Keeps two apps on one origin apart.      |
+| `user`    | Yes      | A [user schema](#user-schemas), or [`fromAccessToken`](#users-from-the-access-token).        |
+| `storage` | Yes      | [Where the session is saved](#storage).                                                      |
+| `refresh` | No       | [How expired access is replaced](#refresh). Without it, an expired token signs the user out. |
+| `revoke`  | No       | [Revokes the ended tokens](#signing-in-and-out) on your backend after a sign-out.            |
+| `maxAge`  | No       | How long a saved session is restored, in seconds. Default: 30 days, renewed on each save.    |
+| `debug`   | No       | [Reports what the client does](#debugging). Default: off.                                    |
+| `locking` | No       | [Restores a saved session as `locked`](#locking), for native apps. Default: off.             |
 
 ### User schemas
 
-The user schema's output must be a plain JSON object. It is saved beside the
-tokens and validated again when restored, so the schema must accept its own
-output and return it unchanged; sign-in rejects one that does not, such as a
-one-way transform, instead of signing users out on their next reload. Accepted
-users are copied and frozen. A user another tab saved that this tab's schema
-rejects signs every tab out with `USER_VALIDATION_FAILED`, as restoring it
-would.
+The schema checks every user the client accepts: at sign-in, after a refresh
+that returns one, when a saved session is restored, and when another tab saves
+one. Accepted users are copied and frozen.
+
+Two rules follow from restoring. The schema's output must be a plain JSON
+object, because it is saved beside the tokens. And the schema must accept its
+own output and return it unchanged, because that saved user is validated again
+on the next reload. Sign-in rejects a schema that doesn't, such as one with a
+one-way transform, instead of signing users out when they reload.
+
+A saved user the schema rejects, after a deploy that changed the schema for
+example, isn't restored: the user signs in again. The same goes for a user
+another tab saved, which signs every tab out with `USER_VALIDATION_FAILED`.
 
 ### Refresh
+
+The `refresh` callback has three outcomes, and the difference between the last
+two is what keeps an outage from signing anyone out:
 
 | The refresh callback… | Meaning                                                                               |
 | --------------------- | ------------------------------------------------------------------------------------- |
@@ -1421,116 +1744,232 @@ would.
 | Returns `null`        | The backend rejected the refresh token: sign out and clear storage.                   |
 | Throws                | Operational failure: keep the session, report `REFRESH_FAILED`, and wait for a retry. |
 
-While connected, the early refresh runs at the earlier of 60 seconds before
-expiry or halfway through the token's lifetime, once per token. If it fails,
-access stays usable until expiry. Expired or rejected access shows
-`refreshing`, with the user still visible, while a refresh runs. If that
-refresh fails, access becomes `unavailable` and `getSession()` rethrows the
-failure until `auth.retry()`, a sign-in, or a sign-out, so re-running guards
-cannot start a refresh loop. Validation and refresh have a 15-second deadline.
-
 To treat every refresh failure as a sign-out, return `null` instead of
 throwing.
 
+A refresh runs at one of three moments:
+
+- **Early.** While the client is mounted, at the earlier of 60 seconds before
+  expiry or halfway through the token's lifetime, once per token. If it fails,
+  access stays usable until expiry.
+- **At expiry, or after a 401.** `status` is `refreshing` while it runs, with
+  the user still on screen.
+- **On request.** `auth.refresh()` runs one now.
+
+If a refresh that was needed fails, access becomes `unavailable`, and
+`getSession()` rethrows the failure until `auth.retry()`, a sign-in, or a
+sign-out. Guards that run again therefore can't start a refresh loop.
+Validation and refresh each have a 15-second deadline. The callback's
+`signal` aborts when it passes, or when the session changes.
+
 ### Expiry
 
-Expiry comes from `expiresAt`, `expiresIn`, or a JWT's `exp` and `iat`
-claims; the `Tokens` type documents which one wins and how a wrong browser
-clock affects each.
+The client needs to know when the access token expires. It reads that from
+`expiresIn` (seconds, as in OAuth), `expiresAt` (Unix milliseconds), or a
+JWT's `exp` and `iat` claims. Prefer `expiresIn` when your backend sends it:
+it is counted from receipt, so a wrong device clock can't expire the token
+early or late. Pass one or the other, not both; the `Tokens` type documents
+how each is read.
 
 ### Storage
 
-The required `storage` option chooses where the session is saved:
+The `storage` option chooses where the session is saved:
 
-- `webStorage()` uses `localStorage`, shared by every tab.
-- `webStorage({ area: "session" })` uses `sessionStorage`: one session per tab,
-  ending with the tab. Browsers copy `sessionStorage` into a duplicated tab
-  and into windows opened with `window.open`, so both start with the same
-  refresh token but never see each other's saves. If the backend rotates
-  refresh tokens, whichever tab refreshes second sends a spent token and is
-  signed out, or, with reuse detection, both are. Prefer `localStorage` with
-  rotating refresh tokens.
-- `secureStorage()`, from `@monarcode/session-kit/expo`, uses
-  `expo-secure-store` on iOS and Android. It splits sessions over
-  SecureStore's 2048-byte limit across keys and reads synchronously; see the
+| Storage                           | Saved in                                  | Use it for                                           |
+| --------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `webStorage()`                    | `localStorage`                            | Browsers. One session, shared by every tab.          |
+| `webStorage({ area: "session" })` | `sessionStorage`                          | One session per tab, ending with the tab.            |
+| `secureStorage()`                 | The iOS keychain, or the Android Keystore | Expo apps. From `@monarcode/session-kit/expo`.       |
+| `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
+| Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
+
+- **Prefer `localStorage` with rotating refresh tokens.** Browsers copy
+  `sessionStorage` into a duplicated tab and into windows opened with
+  `window.open`, so both start with the same refresh token but never see each
+  other's saves. Whichever refreshes second sends a spent token and is signed
+  out, or, with reuse detection, both are.
+- **`secureStorage()`** splits sessions over SecureStore's 2048-byte limit
+  across keys and reads synchronously; see the
   [Expo guide](./docs/expo.md#secure-storage).
-- `memoryStorage()` never persists the session.
-- Any object implementing `AuthStorage` works, including one whose operations
-  return promises, such as a native secure store. Auth applies operations one
-  at a time, in the order it issued them.
+- **Custom storage** is applied one operation at a time, in the order the
+  client issued them.
 
 Tokens and the user share one `<name>:auth:session` entry, so every save is a
-single write other tabs see whole; a user read from the access token is not
-saved. `maxAge` (seconds, default 30 days, renewed on each save) bounds how
-long a saved session is restored. Sessions saved by earlier alphas are not
-restored, so users sign in once after upgrading.
+single write that other tabs see whole. A user read from the access token is
+not saved. Sessions saved by earlier alphas are not restored, so users sign in
+once after upgrading.
 
 ### Tabs
 
-While connected, tabs follow each other through `storage` events: a sign-out
-signs out every tab, a sign-in or account switch switches them, and profile
-updates and refreshes appear everywhere. Refresh runs under the
-`<name>:auth:refresh` Web Lock, so one tab at a time spends the refresh token
-and the others reuse what it saved; rotating refresh tokens work with several
-tabs open. Without Web Locks, two tabs refreshing at the same instant can both
-spend the token; a short reuse window on the backend covers that. An Expo app
-has one JavaScript context, so it has no tabs to follow and needs no lock.
-With [`locking`](#locking), tabs don't follow each other.
+While the client is mounted, tabs follow each other through `storage` events:
+a sign-out signs out every tab, a sign-in or account switch switches them, and
+profile updates and refreshes appear everywhere.
+
+Refresh runs under the `<name>:auth:refresh` Web Lock, so one tab at a time
+spends the refresh token and the others reuse what it saved. Rotating refresh
+tokens therefore work with several tabs open. Without Web Locks, two tabs
+refreshing at the same instant can both spend the token; a short reuse window
+on the backend covers that.
+
+An Expo app has one JavaScript context, so it has no tabs to follow and needs
+no lock. With [`locking`](#locking), tabs don't follow each other.
 
 ### Errors
 
-Errors from session-kit's own logic are `AuthError`s, whether thrown,
-rejected with, or published in `state.error`. Match on their `code`, an
-`AuthErrorCode`, such as `REFRESH_FAILED`, `SESSION_CHANGED`,
-`USER_VALIDATION_FAILED`, or `INVALID_OPTIONS` for misuse. `cause` holds
-whatever failed underneath, and `issues` a schema's issues. `authFetch` lets
-`fetch`'s and `Request`'s own failures, such as a network error, through
-unchanged.
+Every error from session-kit's own logic is an `AuthError`, whether thrown,
+rejected with, or published in `state.error`. Match on its `code`, not its
+message:
 
-If storage cannot be written, the session ends and the error is published. If
-it cannot be cleared, sign-out still takes effect in this tab, but the promise
-rejects and the error stays visible: retry `signOut()` once storage is
-available, because undeleted credentials could survive a reload.
+| Code                     | Meaning                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                           |
+| `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use.         |
+| `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.      |
+| `USER_VALIDATION_FAILED` | The schema rejected the user; `issues` holds its issues.                              |
+| `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.    |
+| `PERSISTENCE_FAILED`     | Storage could not be read, written, or cleared.                                       |
+| `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves. |
+| `LOCKED`                 | The session is locked: `unlock()` it first.                                           |
+| `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                   |
+| `INVALID_OPTIONS`        | Misuse: an option or argument session-kit can't use.                                  |
+
+`cause` holds whatever failed underneath, such as the error your refresh
+callback threw. A map from codes to your own wording keeps messages out of
+components:
+
+<!-- file: src/error-message.ts -->
+
+```ts
+import { AuthError, type AuthErrorCode } from "@monarcode/session-kit";
+
+const messages: Partial<Record<AuthErrorCode, string>> = {
+  REFRESH_FAILED: "We can't reach the server. Check your connection.",
+  PERSISTENCE_FAILED: "Your browser wouldn't save the session.",
+  USER_VALIDATION_FAILED: "Your account couldn't be loaded.",
+};
+
+export function errorMessage(error: unknown): string {
+  if (error instanceof AuthError) return messages[error.code] ?? error.message;
+  return error instanceof Error ? error.message : "Something went wrong";
+}
+```
+
+Two storage failures need a decision from you:
+
+- **Storage can't be written.** The session ends and the error is published,
+  rather than leaving a session that would vanish on reload.
+- **Storage can't be cleared.** Sign-out still takes effect in this tab, but
+  the promise rejects and the error stays in `state.error`. Call `signOut()`
+  again once storage is available, because undeleted credentials could
+  survive a reload.
+
+`authFetch` lets `fetch`'s and `Request`'s own failures, such as a network
+error, through unchanged.
 
 ### Debugging
 
-The `debug` option reports what auth does: restores, refreshes and why they
-ran, timers, storage operations and how long they took, other tabs' changes,
-state changes, and what ended a session.
+The `debug` option reports what the client does: restores, refreshes and why
+they ran, timers, storage operations and how long they took, other tabs'
+changes, state changes, and what ended a session. `debug: true` logs each
+event as one `console.info` line:
 
-```ts
-const auth = createAuth({ ...options, debug: true });
-// [session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
+```text
+[session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
 ```
 
-- `true` logs each event as one `console.info` line.
-- A function receives each `AuthDebugEvent` instead: `{ name, type, message,
-  data?, error? }`, for example to add Sentry breadcrumbs. `type` is one of a
-  fixed set, such as `"refresh"` or `"storage"`; the wording of `message` and
-  the fields in `data` may change in any release.
-- Events leave out tokens, saved values, and user fields; a session appears as
-  its `sessionId`, and an error as its code and message, without the cause.
-  `{ sensitive: true }` puts them in, so keep it to development builds.
-  `{ log, sensitive }` sets both.
+A function receives each event instead, for example to leave breadcrumbs in
+your error reporting:
+
+<!-- file: src/debug.ts -->
+
+```ts
+import type { AuthDebug } from "@monarcode/session-kit";
+
+declare function addBreadcrumb(crumb: {
+  category: string;
+  message: string;
+  data: object;
+}): void;
+
+/** Pass as `createAuth`'s `debug` option. */
+export const debug: AuthDebug = (event) =>
+  addBreadcrumb({
+    category: `auth.${event.type}`,
+    message: event.message,
+    data: { ...event.data, code: event.error?.code },
+  });
+```
+
+- **No secrets by default.** Events leave out tokens, saved values, and user
+  fields. A session appears as its `sessionId`, and an error as its code and
+  message, without the cause.
+- **`{ sensitive: true }` puts them in.** Anyone who reads such logs can act
+  as the user, so keep it to development builds. `{ log, sensitive }` sets
+  both.
+- **`type` is stable, the rest isn't.** `type` is one of a fixed set, such as
+  `"refresh"` or `"storage"`. The wording of `message` and the fields in
+  `data` may change in any release.
 
 A storage adapter can add its own events through the optional `debug` member
 of `AuthStorage`, as `secureStorage()` does.
 
+## Common questions
+
+**Do I need a refresh token?** No. Without one, or without a `refresh`
+callback, the session simply ends when the access token expires or is
+rejected.
+
+**My backend doesn't say when the token expires.** If the access token is a
+JWT, its `exp` claim is used. Otherwise the token is used until a request
+gets a 401, and `authFetch` refreshes then. See [Expiry](#expiry).
+
+**Is it safe to keep tokens in `localStorage`?** They are readable by any
+script on your origin, as with every credential a browser stores for
+JavaScript. If that isn't acceptable, keep the session on the server:
+[Server rendering](#server-rendering) puts it in an encrypted `httpOnly`
+cookie. [Security notes](#security-notes) has the rest.
+
+**How do I use it with TanStack Query, or another cache?** Put
+`state.sessionId` in the query key, or clear the cache when it changes, so
+one account never reads another's data. With effetch-query,
+[`resetKey`](./docs/effect.md#caching-with-effetch-query) does it.
+
+**Why does TanStack Start in SPA mode flash my pending component?** That is
+the HTML shell the build prerenders, shown before any JavaScript runs. The
+session is restored as soon as the script loads; plain TanStack Router shows
+a blank page for the same moment. Give the shell a neutral pending component.
+
+**Some of my endpoints answer 401 for other reasons.** Pass
+`{ signOutOnRepeated401: false }` to `createAuthFetch`, so they can't sign
+users out. See [Authenticated requests](#authenticated-requests).
+
+**How much does it add to my bundle?** About 11 kB gzipped for a single-page
+app with a router adapter and `createAuthFetch`, and about 5 kB with server
+rendering, where the session work happens on the server. Each adapter is its
+own entry point and the package is tree-shakeable, so the routers you don't
+use add nothing.
+
+**Can I sign users in with Google, or a magic link?** Yes, through your
+backend: whatever it does to sign a user in, session-kit starts from the
+tokens it answers with. See [What it doesn't do](#what-it-doesnt-do).
+
 ## Security notes
 
-- In browsers, tokens and users are readable by same-origin JavaScript, as
-  with any browser-stored credential. In Expo apps, `secureStorage()` keeps
-  them in the iOS keychain or encrypted with an Android Keystore key, out of
-  Android backups with the `expo-secure-store` config plugin, and removes a
-  session an earlier install left in the iOS keychain. Either way, your
-  backend must authenticate every request and authorize private operations;
-  route guards, screen guards, and local user fields do not.
-- With browser storage, tokens never go in cookies, so browsers do not send
-  them automatically. With [server rendering](#server-rendering), they sit in
-  an encrypted `httpOnly` cookie that page scripts can't read; only the access
-  token reaches page scripts, and only with `clientCredentials`.
-- Sessions, route context, and loader results hold no tokens. Never put tokens
-  in loader results or hydrated page data yourself.
+- **Your backend is the authority.** It must authenticate every request and
+  authorize private operations. Route guards, screen guards, and local user
+  fields decide what to show, not what is allowed.
+- **In browsers, tokens are readable by same-origin JavaScript**, as with any
+  browser-stored credential. They never go in cookies, so browsers don't send
+  them automatically.
+- **With [server rendering](#server-rendering)**, tokens sit in an encrypted
+  `httpOnly` cookie that page scripts can't read. Only the access token
+  reaches page scripts, and only with `clientCredentials`.
+- **In Expo apps**, `secureStorage()` keeps tokens in the iOS keychain or
+  encrypted with an Android Keystore key, out of Android backups with the
+  `expo-secure-store` config plugin, and removes a session an earlier install
+  left in the iOS keychain.
+- **Sessions, route context, and loader results hold no tokens.** Never put
+  tokens in loader results or hydrated page data yourself.
 
 ## Entry points
 
@@ -1550,7 +1989,8 @@ of `AuthStorage`, as `secureStorage()` does.
 | `@monarcode/session-kit/effect`                | `Auth`, `AuthFailure`, `Register`, types                                                                               |
 | `@monarcode/session-kit/effetch`               | `sessionBearer`, types                                                                                                 |
 
-Do not import internal `dist` paths.
+Each row is its own entry point, and the package is tree-shakeable, so a
+bundle holds only what you import. Do not import internal `dist` paths.
 
 ## Compatibility
 

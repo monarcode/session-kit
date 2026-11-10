@@ -65,6 +65,12 @@
 - The README is rewritten to read from the start: why the package exists, a
   one-file example, how it works, a step-by-step "Getting started" that needs
   no router, a summary of each guide, and an "Effect and effetch" section.
+  Its reference half lists every client method, option and error code in
+  tables, with a compiled example for each topic, and ends with "Common
+  questions".
+- The README shows how to attach the access token with another HTTP client:
+  "Other HTTP clients" has interceptors for axios and hooks for ky, built on
+  `auth.credentials.get`, `renew` and `reject`.
 - `examples/tanstack-start-spa-effetch`: the TanStack Start SPA app with its
   user described by an Effect Schema, an effetch client with `sessionBearer`,
   one runtime, and effetch-query for its sign-in and its requests.
