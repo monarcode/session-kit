@@ -350,7 +350,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				client as { signIn?: (input: unknown) => Promise<unknown> }
 			).signIn;
 			return signIn
-				? Effect.asVoid(fromPromise(() => signIn(input)))
+				? Effect.asVoid(fromPromise(() => signIn.call(client, input)))
 				: Effect.die(
 						new AuthError(
 							"INVALID_OPTIONS",
@@ -399,7 +399,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 					),
 				);
 			if (!Effect.isEffect(input))
-				return yield* fromPromise(() => update(input));
+				return yield* fromPromise(() => update.call(client, input));
 			const fetchUser = input as Effect.Effect<RegisteredUserInput, E, R>;
 			const run = Effect.runPromiseExitWith(yield* Effect.context<R>());
 			// The input Effect's own failure, rethrown here once `updateUser`
@@ -412,7 +412,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				const stop = () => fetching.abort(signal.reason);
 				signal.addEventListener("abort", stop, { once: true });
 				try {
-					return await update(async () => {
+					return await update.call(client, async () => {
 						const exit = await run(fetchUser, {
 							signal: fetching.signal,
 						});

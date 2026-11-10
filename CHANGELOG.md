@@ -66,6 +66,11 @@
   `signIn` is optional and may resolve a value. `Auth.signIn` dies with
   `INVALID_OPTIONS` for a client without `signIn`.
 
+### Fixed
+
+- `Auth.updateUser` calls the client's `updateUser` as a method, so a
+  class-based `AuthServiceClient`, such as a fake in tests, keeps its `this`.
+
 ## 0.1.0-alpha.6
 
 ### Added

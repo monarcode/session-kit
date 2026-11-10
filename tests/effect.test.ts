@@ -298,6 +298,46 @@ test("a createMirrorAuth client is the Auth service, without updateUser", async 
 	}
 });
 
+test("signIn and updateUser call a class-based client as its methods", async () => {
+	class FakeClient {
+		readonly calls: unknown[] = [];
+		readonly state = {
+			get: () => ({}),
+			subscribe: () => ({ unsubscribe() {} }),
+		};
+		readonly credentials = {
+			get: async () => null,
+			renew: async () => null,
+			reject: async () => {},
+		};
+		async signIn(data: unknown) {
+			this.calls.push(["signIn", data]);
+		}
+		async updateUser(data: unknown) {
+			const next = typeof data === "function" ? await data() : data;
+			this.calls.push(["updateUser", next]);
+		}
+		async signOut() {}
+		async getSession() {
+			return null;
+		}
+		isCurrent() {
+			return true;
+		}
+	}
+	const fake = new FakeClient();
+	await run(
+		fake as never,
+		Effect.andThen(Auth.signIn(input()), Auth.updateUser(user as never)),
+	);
+	await run(fake as never, Auth.updateUser(Effect.succeed(user) as never));
+	assert.deepEqual(fake.calls, [
+		["signIn", input()],
+		["updateUser", user],
+		["updateUser", user],
+	]);
+});
+
 test("changes emits the current state, then each change, and unsubscribes", async (t) => {
 	const auth = client();
 	cleanups.push(auth.mount());
