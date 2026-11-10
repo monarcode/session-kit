@@ -3,7 +3,8 @@
 ![session-kit](https://raw.githubusercontent.com/monarcode/session-kit/main/assets/sk-banner.png)
 
 Schema-driven sessions for React, with TanStack Router, React Router, and Expo
-Router support.
+Router support, and server rendering with TanStack Start, Next.js, and React
+Router.
 
 **Version: 0.1.0-alpha.6. Early development; not ready for production.**
 
@@ -22,6 +23,10 @@ them. Your backend does the authentication; session-kit does the rest:
 - **Expo apps too.** Sessions saved in the iOS keychain or Android Keystore,
   the splash screen held while restoring, and deep links kept across the
   sign-in.
+- **Server rendering.** With TanStack Start, Next.js, or React Router
+  framework mode, the session lives in an encrypted `httpOnly` cookie on the
+  server, so the first response is already signed in and the refresh token
+  never reaches the browser.
 - **Router guards.** Redirect signed-out users with a return URL, keep guarded
   pages in sync with the session, and re-run guards when auth changes.
 - **Tokens stay out of reach.** Reactive state and sessions hold no tokens, so
@@ -34,7 +39,11 @@ them. Your backend does the authentication; session-kit does the rest:
 - [Installation](#installation)
 - [Quick start: TanStack Router](#quick-start-tanstack-router)
 - [Other setups](#other-setups)
+- [Server rendering](#server-rendering)
 - [Expo Router](./docs/expo.md)
+- [TanStack Start with server rendering](./docs/tanstack-start.md)
+- [Next.js](./docs/next.md)
+- [React Router with server rendering](./docs/react-router-ssr.md)
 - [Effect](./docs/effect.md)
 - [Using the client](#using-the-client)
   - [State](#state)
@@ -64,21 +73,20 @@ in against DummyJSON's public test API.
 | ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------- |
 | TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [`tanstack-router`](./examples/tanstack-router)                       |
 | TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 |
+| TanStack Start with server rendering       | `@monarcode/session-kit/tanstack-start`  | [`tanstack-start-ssr`](./examples/tanstack-start-ssr)                 |
 | React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [`react-router-declarative`](./examples/react-router-declarative)     |
 | React Router, data mode                    | `@monarcode/session-kit/react-router`    | [`react-router-data`](./examples/react-router-data)                   |
 | React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
+| React Router, framework mode with SSR      | `@monarcode/session-kit/react-router`    | [`react-router-framework-ssr`](./examples/react-router-framework-ssr) |
+| Next.js 16, App Router                     | `@monarcode/session-kit/next`            | [`next-app`](./examples/next-app)                                     |
 | Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [`expo-router`](./examples/expo-router)                               |
 | React without a router                     | `@monarcode/session-kit/react`           | None                                                                  |
 
 Storage adapters: `webStorage()` for `localStorage` or `sessionStorage`,
 `secureStorage()` for `expo-secure-store`, `memoryStorage()`, or your own
-[`AuthStorage`](#storage), which may be asynchronous.
-
-Planned for releases after 0.1.0, not yet available:
-
-- **Server rendering:** TanStack Start with SSR, and React Router framework
-  mode with SSR, keeping tokens in an encrypted `httpOnly` cookie on the server.
-  A `cookieStorage()` adapter would read and write that cookie.
+[`AuthStorage`](#storage), which may be asynchronous. The server-rendered
+setups keep the session on the server instead: see
+[Server rendering](#server-rendering).
 
 ## Installation
 
@@ -97,7 +105,11 @@ All peer dependencies are optional, so install only what you use:
 | ------------------------ | ----------------------- | ------------------------------------------------------ |
 | `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/react-router`, `/expo` |
 | `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
+| `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                               |
 | `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
+| `next`                   | `^16.0.0`               | `/next/client`                                         |
+| `effect`                 | `^4.1.0`                | `/effect`                                              |
+| `@monarcode/effetch`     | `^0.1.0-rc.1`           | `/effetch`                                             |
 | `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
 | `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
 | `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
@@ -117,7 +129,8 @@ pnpm add react react-dom @tanstack/react-router zod
 
 The package is ESM-only and checked with TypeScript 6.0.3 under NodeNext and
 Bundler resolution. It needs `AbortController`, and uses `crypto.randomUUID` and
-Web Locks when present, falling back without them.
+Web Locks when present, falling back without them. On the server,
+`@monarcode/session-kit/server` needs Web Crypto, as in Node.js 20 and newer.
 
 ## Quick start: TanStack Router
 
@@ -521,6 +534,35 @@ service, `Auth`, whose Effects fail with a tagged `AuthFailure`, and
 `@monarcode/session-kit/effetch` adds `sessionBearer`, an effetch plugin that
 sends the access token. The [Effect guide](./docs/effect.md) covers both.
 
+## Server rendering
+
+With server rendering, the session lives on the server: both tokens and the
+user sit in one encrypted, `httpOnly` cookie that page scripts can't read. The
+first response already shows the signed-in page, with no "Checking session…"
+state, and the refresh token never reaches the browser.
+
+- **On the server**, `createServerAuth` from `@monarcode/session-kit/server`
+  seals the cookie with your secret and refreshes before rendering. Each of
+  its methods takes the request's cookie jar, which each framework's adapter
+  gives you.
+- **In the browser**, `createMirrorAuth` makes a client that starts from the
+  session the server rendered. `AuthProvider`, the hooks, and the router
+  guards work with it, and sign-ins and sign-outs reach every tab.
+- **Your server code** signs in and out with your backend and calls your API
+  with the access token. To call it from the browser too, with
+  `createAuthFetch` or `sessionBearer`, opt in with `clientCredentials`: page
+  scripts then get the access token in memory, never the refresh token.
+
+| Framework                             | On the server                                   | In the browser                                             | Guide                                      |
+| ------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                          | [TanStack Start](./docs/tanstack-start.md) |
+| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/next/client`  | [Next.js](./docs/next.md)                  |
+| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react-router` | [React Router](./docs/react-router-ssr.md) |
+
+Locking isn't available with server rendering. For another server, such as
+the Next.js Pages Router, build a `CookieJar` over its cookies and use
+`createServerAuth` directly.
+
 ## Using the client
 
 ### State
@@ -816,22 +858,31 @@ of `AuthStorage`, as `secureStorage()` does.
   session an earlier install left in the iOS keychain. Either way, your
   backend must authenticate every request and authorize private operations;
   route guards, screen guards, and local user fields do not.
-- Tokens never go in cookies, so browsers do not send them automatically.
-- Server rendering is not supported yet: sessions live in the browser. Never put
-  tokens in loader results or hydrated page data.
+- With browser storage, tokens never go in cookies, so browsers do not send
+  them automatically. With [server rendering](#server-rendering), they sit in
+  an encrypted `httpOnly` cookie that page scripts can't read; only the access
+  token reaches page scripts, and only with `clientCredentials`.
+- Sessions, route context, and loader results hold no tokens. Never put tokens
+  in loader results or hydrated page data yourself.
 
 ## Entry points
 
-| Import                                   | Exports                                                                                                   |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `@monarcode/session-kit`                 | `createAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, types        |
-| `@monarcode/session-kit/react`           | `createAuthHooks`, hook types                                                                             |
-| `@monarcode/session-kit/tanstack-router` | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth` |
-| `@monarcode/session-kit/react-router`    | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                            |
-| `@monarcode/session-kit/expo`            | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                 |
-| `@monarcode/session-kit/http`            | `createAuthFetch`                                                                                         |
-| `@monarcode/session-kit/effect`          | `Auth`, `AuthFailure`, `Register`, types                                                                  |
-| `@monarcode/session-kit/effetch`         | `sessionBearer`, types                                                                                    |
+| Import                                         | Exports                                                                                                                |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `@monarcode/session-kit`                       | `createAuth`, `createMirrorAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, types |
+| `@monarcode/session-kit/react`                 | `createAuthHooks`, hook types                                                                                          |
+| `@monarcode/session-kit/tanstack-router`       | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth`              |
+| `@monarcode/session-kit/react-router`          | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`, `useMirrorAuth`                        |
+| `@monarcode/session-kit/react-router/server`   | `cookieJarMiddleware`, `routerJar`, types                                                                              |
+| `@monarcode/session-kit/expo`                  | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                              |
+| `@monarcode/session-kit/server`                | `createServerAuth`, types                                                                                              |
+| `@monarcode/session-kit/tanstack-start`        | `sessionHydration`, `loadSession`, types                                                                               |
+| `@monarcode/session-kit/tanstack-start/server` | `startJar`                                                                                                             |
+| `@monarcode/session-kit/next`                  | `nextJar`, `proxyJar`, types                                                                                           |
+| `@monarcode/session-kit/next/client`           | `useMirrorAuth`, types                                                                                                 |
+| `@monarcode/session-kit/http`                  | `createAuthFetch`                                                                                                      |
+| `@monarcode/session-kit/effect`                | `Auth`, `AuthFailure`, `Register`, types                                                                               |
+| `@monarcode/session-kit/effetch`               | `sessionBearer`, types                                                                                                 |
 
 Do not import internal `dist` paths.
 
@@ -849,15 +900,16 @@ pnpm run check
 type-checks the tests, the consumer declarations, and every TypeScript example
 marked with a `file:` comment: this README's under NodeNext and Bundler
 resolution, the [Expo guide](./docs/expo.md)'s under Bundler resolution,
-as Metro resolves, without DOM types, and the [Effect guide](./docs/effect.md)'s
-under both. `pnpm test` runs the runtime tests
+as Metro resolves, without DOM types, the server-rendering guides' under
+Bundler resolution, and the [Effect guide](./docs/effect.md)'s under both. `pnpm test` runs the runtime tests
 twice: with synchronous storage, and with storage that settles every operation
 late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
 the package and every example app.
 
 Tests are TypeScript files that Node runs directly. Behavior tests are split by
 area and share the browser mocks in `tests/helpers.ts`; React tests mount real
-React DOM, TanStack Router, and React Router in jsdom. Expo tests replace
+React DOM, TanStack Router, and React Router in jsdom, and server tests run
+real TanStack Start, Next.js, and React Router request handling. Expo tests replace
 `expo-secure-store`, `expo-file-system`, `expo-router`, and `react-native` with
 the mocks in `tests/mocks/`. CI also runs the tests and type tests against the
 oldest supported peers, and builds the examples. Before each commit, Husky runs

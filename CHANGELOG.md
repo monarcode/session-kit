@@ -4,35 +4,34 @@
 
 ### Added
 
-- The Effect guide covers caching with effetch-query: a `QueryProvider` that
-  owns its client and resets it by `sessionId`, so no account sees another's
-  cache.
-- `createAuthFetch` takes `optional`, with the same meaning as
-  `sessionBearer`'s: signed out, a
-  request is sent without `Authorization` instead of rejecting with
-  `UNAUTHENTICATED`. Locked still rejects with `LOCKED`, and a sign-in during
-  the request rejects it with `SESSION_CHANGED`.
-- `@monarcode/session-kit/server`, for server-rendered apps: `createServerAuth`
-  keeps both tokens and the user in an encrypted `httpOnly` cookie
-  (AES-256-GCM through Web Crypto, with rotatable secrets), refreshes on the
-  server, and shares one refresh between parallel requests. Each method takes
-  the request's `CookieJar`. With `clientCredentials: true`, the app can hand
-  the access token, never the refresh token, to its own page scripts. The
-  secret is checked on first use, so a build that loads the module without
-  it, such as `next build`, still works.
-- `createMirrorAuth`, a browser client for that session: it starts from the
-  session the server rendered with, so there is no `initializing` state, and
-  works with `AuthProvider`, the hooks, the router guards, `createAuthFetch`
-  and `sessionBearer`. Its `signIn` forwards to the app's server function,
-  including tokens the browser got from the backend itself.
-- TanStack Start with server rendering, guided by `docs/tanstack-start.md` and
-  shown in `examples/tanstack-start-ssr`. `@monarcode/session-kit/tanstack-start`
-  has `sessionHydration`, router options that carry the session from the
-  server render to the browser, and `loadSession`, which reads it into the
-  client in the root route's `beforeLoad`.
-  `@monarcode/session-kit/tanstack-start/server` has `startJar()`, the
-  request's cookie jar for server functions and middleware.
-  `@tanstack/react-start` 1.169 or newer is a new optional peer dependency.
+- Server rendering, with the session kept on the server: TanStack Start,
+  Next.js 16 and React Router framework mode render the signed-in page on the
+  first response, and the refresh token never reaches the browser. The
+  README's "Server rendering" section gives the overview; each framework has a
+  guide and an example app.
+- `@monarcode/session-kit/server`: `createServerAuth` keeps both tokens and
+  the user in an encrypted `httpOnly` cookie (AES-256-GCM through Web Crypto,
+  with rotatable secrets), refreshes on the server, and shares one refresh
+  between parallel requests. Each method takes the request's `CookieJar`.
+  With `clientCredentials: true`, the app can hand the access token, never the
+  refresh token, to its own page scripts. The secret is checked on first use,
+  so a build that loads the module without it, such as `next build`, still
+  works.
+- `createMirrorAuth`, the browser client for that session: it starts from the
+  session the server rendered, so there is no `initializing` state, and works
+  with `AuthProvider`, the hooks and the router guards, and, given
+  `credentials`, with `createAuthFetch` and `sessionBearer`. Given a `signIn`
+  option, its `signIn` forwards the input to the app's own server function,
+  action or route handler, including tokens the browser got from the backend
+  itself.
+- TanStack Start, guided by `docs/tanstack-start.md` and shown in
+  `examples/tanstack-start-ssr`. `@monarcode/session-kit/tanstack-start` has
+  `sessionHydration`, router options that carry the session from the server
+  render to the browser, and `loadSession`, which reads it into the client in
+  the root route's `beforeLoad`. `@monarcode/session-kit/tanstack-start/server`
+  has `startJar()`, the request's cookie jar for server functions and
+  middleware. `@tanstack/react-start` 1.169 or newer is a new optional peer
+  dependency.
 - Next.js 16 with the App Router, guided by `docs/next.md` and shown in
   `examples/next-app`. `@monarcode/session-kit/next` has `nextJar`, the cookie
   jar of `cookies()`, read-only unless `writable` is passed in a Server
@@ -41,16 +40,23 @@
   has `useMirrorAuth`, which creates the browser client from the session the
   layout read and keeps the two in step. `next` 16 is a new optional peer
   dependency.
-- React Router framework mode with server rendering, guided by
-  `docs/react-router-ssr.md` and shown in
-  `examples/react-router-framework-ssr`.
-  `@monarcode/session-kit/react-router/server` has `cookieJarMiddleware`,
-  root middleware that gives each request a cookie jar and sets its cookies
-  on the response, and `routerJar(context)`, which finds that jar in
-  middleware, loaders and actions. `@monarcode/session-kit/react-router` has
+- React Router framework mode, guided by `docs/react-router-ssr.md` and shown
+  in `examples/react-router-framework-ssr`.
+  `@monarcode/session-kit/react-router/server` has `cookieJarMiddleware`, root
+  middleware that gives each request a cookie jar and sets its cookies on the
+  response, and `routerJar(context)`, which finds that jar in middleware,
+  loaders and actions. `@monarcode/session-kit/react-router` has
   `useMirrorAuth`, which creates the browser client from the session the root
   loader read and keeps the two in step. It needs React Router's middleware:
   React Router 8, or 7.9 and later with `future.v8_middleware`.
+- `createAuthFetch` takes `optional`, with the same meaning as
+  `sessionBearer`'s: signed out, a request is sent without `Authorization`
+  instead of rejecting with `UNAUTHENTICATED`. Locked still rejects with
+  `LOCKED`, and a sign-in during the request rejects it with
+  `SESSION_CHANGED`.
+- The Effect guide covers caching with effetch-query: a `QueryProvider` that
+  owns its client and resets it by `sessionId`, so no account sees another's
+  cache.
 
 ### Changed
 
