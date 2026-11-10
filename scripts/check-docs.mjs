@@ -120,8 +120,8 @@ declare const process: { env: Record<string, string | undefined> };
  * import each other, with `fixtures` standing in for generated files and the
  * app's other dependencies. A guide that builds on another document's app
  * names the files it uses as `shared`; its own file replaces a shared one of
- * the same path. `requires` skips a document, and `optional` some of its
- * files, when an installed package is older than they need.
+ * the same path. `requires` skips a document when an installed package is
+ * older than it needs.
  */
 const documents = [
 	{
@@ -129,12 +129,6 @@ const documents = [
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: {},
-		// effetch-query, which these use, needs a newer effetch than
-		// session-kit does.
-		optional: {
-			files: ["src/query.ts", "src/account.tsx"],
-			requires: { "@monarcode/effetch": "0.1.0-rc.2" },
-		},
 	},
 	{
 		path: "docs/tanstack-router.md",
@@ -530,28 +524,18 @@ function checkDocument({
 	dom,
 	fixtures,
 	shared,
-	optional,
 	requires = {},
 }) {
-	const unmet = (needs) =>
-		Object.entries(needs).find(
-			([name, minimum]) => !installedAtLeast(name, minimum),
-		);
-	const missing = unmet(requires);
+	const missing = Object.entries(requires).find(
+		([name, minimum]) => !installedAtLeast(name, minimum),
+	);
 	if (missing) {
 		console.log(
 			`- ${path} skipped: it needs ${missing[0]} ${missing[1]} or later`,
 		);
 		return false;
 	}
-	const skipped = optional && unmet(optional.requires);
-	if (skipped)
-		console.log(
-			`- ${path}: ${optional.files.join(", ")} skipped: they need ${skipped[0]} ${skipped[1]} or later`,
-		);
-	const files = markedExamples(path, dom).filter(
-		(file) => !skipped || !optional.files.includes(file.path),
-	);
+	const files = markedExamples(path, dom);
 	if (files.length === 0) {
 		problems.push(`${path}: no TypeScript examples found`);
 		return true;

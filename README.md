@@ -2004,7 +2004,7 @@ All peer dependencies are optional, so install only what you use:
 | `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
 | `next`                   | `^16.0.0`               | `/next`                                                |
 | `effect`                 | `^4.1.0`                | `/effect`                                              |
-| `@monarcode/effetch`     | `^0.1.0-rc.1`           | `/effetch`                                             |
+| `@monarcode/effetch`     | `^0.1.0-rc.2`           | `/effetch`                                             |
 | `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
 | `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
 | `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |

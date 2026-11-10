@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-alpha.7
 
 ### Added
 
@@ -77,6 +77,8 @@
 
 ### Changed
 
+- The `@monarcode/effetch` peer range is `^0.1.0-rc.2`, up from `rc.1`:
+  effetch-query, which the README's Effect examples use, needs it.
 - `AuthFetchClient` now includes `state`, which `optional` reads. Any
   `createAuth` client still fits; a hand-written object needs `state` too.
 - `Auth.layer` takes a `createMirrorAuth` client: `AuthServiceClient`'s
