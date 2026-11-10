@@ -33,7 +33,7 @@ client, refresh, and errors work; this guide covers what differs on Expo.
 - Expo SDK 53 or newer: Expo Router 5 or newer, and React Native 0.79 or
   newer.
 - iOS and Android only. Expo web is not supported: on the web, use a
-  [web router setup](../README.md#supported-setups) with `webStorage()`.
+  [web router setup](../README.md#pick-your-setup) with `webStorage()`.
 - Expo Go, which includes `expo-secure-store` and `expo-file-system`, or a
   development build with both installed.
 

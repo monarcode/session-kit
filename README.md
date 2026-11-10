@@ -1,49 +1,46 @@
 ![session-kit](https://raw.githubusercontent.com/monarcode/session-kit/main/assets/sk-banner.png)
 
-Schema-driven sessions for React, with TanStack Router, React Router, and Expo
-Router support, and server rendering with TanStack Start, Next.js, and React
-Router.
+[![npm](https://img.shields.io/npm/v/@monarcode/session-kit)](https://www.npmjs.com/package/@monarcode/session-kit)
+[![CI](https://github.com/monarcode/session-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/monarcode/session-kit/actions/workflows/ci.yml)
+[![bundle size](https://deno.bundlejs.com/badge?q=@monarcode/session-kit)](https://bundlejs.com/?q=@monarcode/session-kit)
+[![license](https://img.shields.io/npm/l/@monarcode/session-kit)](./LICENSE)
 
-**Version: 0.1.0-alpha.6. Early development; not ready for production.**
+**Your backend signs users in. session-kit handles everything after.**
 
-session-kit keeps the tokens your backend issues and manages the session around
-them. Your backend does the authentication; session-kit does the rest:
+session-kit is the session layer for React apps that have their own backend.
+Hand it the tokens your sign-in endpoint returns, and it saves the session,
+restores it on reload, refreshes tokens before they expire, keeps every tab in
+step, and guards your routes.
 
-- **Schema-driven users.** A [Standard Schema](https://standardschema.dev)
-  validates the user at sign-in, on refresh, on restore, and when another tab
-  saves one, and supplies its TypeScript types. Or read the user from a JWT
-  access token with `fromAccessToken`.
-- **Refresh you can trust.** Early refresh before expiry, one refresh at a time
-  across tabs, recovery after a 401, and a clear split between "sign in again"
-  and "try again later".
-- **Tabs that agree.** Sign-in, sign-out, account switches, profile updates,
-  and refreshes reach every open tab.
-- **Expo apps too.** Sessions saved in the iOS keychain or Android Keystore,
-  the splash screen held while restoring, and deep links kept across the
-  sign-in.
-- **Server rendering.** With TanStack Start, Next.js, or React Router
-  framework mode, the session lives in an encrypted `httpOnly` cookie on the
-  server, so the first response is already signed in and the refresh token
-  never reaches the browser.
-- **Router guards.** Redirect signed-out users with a return URL, keep guarded
-  pages in sync with the session, and re-run guards when auth changes.
-- **Tokens stay out of reach.** Reactive state and sessions hold no tokens, so
-  they are safe to render and to put in route context. Tokens go only to code
-  that attaches them to requests, such as `createAuthFetch`.
+It works with TanStack Router, React Router, and Expo Router, renders on the
+server with TanStack Start, Next.js, and React Router, and comes with an
+[Effect](https://effect.website) service and an
+[effetch](https://github.com/monarcode/effetch) plugin.
+
+> **Alpha.** Early development: the API may change between releases, and it
+> isn't ready for production. See the [release notes](./CHANGELOG.md).
 
 ## Contents
 
-- [Supported setups](#supported-setups)
+- [Why session-kit](#why-session-kit)
+  - [What it does](#what-it-does)
+  - [What it doesn't do](#what-it-doesnt-do)
+- [At a glance](#at-a-glance)
+- [Features](#features)
+- [How it works](#how-it-works)
 - [Installation](#installation)
-- [Quick start: TanStack Router](#quick-start-tanstack-router)
+- [Pick your setup](#pick-your-setup)
+- [Getting started](#getting-started)
+  - [1. Talk to your backend](#1-talk-to-your-backend)
+  - [2. Create the client](#2-create-the-client)
+  - [3. Add a sign-in form](#3-add-a-sign-in-form)
+  - [4. Read the session in React](#4-read-the-session-in-react)
+  - [5. Call your API](#5-call-your-api)
+  - [6. Protect your routes](#6-protect-your-routes)
+- [TanStack Router](#tanstack-router)
 - [Other setups](#other-setups)
 - [Server rendering](#server-rendering)
-- [Expo Router](./docs/expo.md)
-- [TanStack Start with server rendering](./docs/tanstack-start.md)
-- [Next.js](./docs/next.md)
-- [React Router with server rendering](./docs/react-router-ssr.md)
-- [Server sessions](./docs/server-sessions.md): what the three share
-- [Effect](./docs/effect.md)
+- [Effect and effetch](#effect-and-effetch)
 - [Using the client](#using-the-client)
   - [State](#state)
   - [Sessions and credentials](#sessions-and-credentials)
@@ -61,83 +58,568 @@ them. Your backend does the authentication; session-kit does the rest:
   - [Debugging](#debugging)
 - [Security notes](#security-notes)
 - [Entry points](#entry-points)
+- [Compatibility](#compatibility)
 - [Development](#development)
+- [License](#license)
 
-## Supported setups
+## Why session-kit
 
-Each router setup has a runnable app in [`examples/`](./examples), all signing
-in against DummyJSON's public test API.
+Signing in is the easy part. Your backend checks a password and answers with
+an access token and a refresh token, and for a moment the app is done.
 
-| Setup                                      | Import                                   | Example app                                                           |
-| ------------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------- |
-| TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [`tanstack-router`](./examples/tanstack-router)                       |
-| TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 |
-| TanStack Start with server rendering       | `@monarcode/session-kit/tanstack-start`  | [`tanstack-start-ssr`](./examples/tanstack-start-ssr)                 |
-| React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [`react-router-declarative`](./examples/react-router-declarative)     |
-| React Router, data mode                    | `@monarcode/session-kit/react-router`    | [`react-router-data`](./examples/react-router-data)                   |
-| React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
-| React Router, framework mode with SSR      | `@monarcode/session-kit/react-router`    | [`react-router-framework-ssr`](./examples/react-router-framework-ssr) |
-| Next.js 16, App Router                     | `@monarcode/session-kit/next`            | [`next-app`](./examples/next-app)                                     |
-| Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [`expo-router`](./examples/expo-router)                               |
-| React without a router                     | `@monarcode/session-kit/react`           | None                                                                  |
+Then the user reloads the page. The access token expires halfway through a
+form. They open a second tab, sign out of one, and switch accounts in the
+other. The backend goes down for a minute, just as a refresh was due.
 
-Storage adapters: `webStorage()` for `localStorage` or `sessionStorage`,
-`secureStorage()` for `expo-secure-store`, `memoryStorage()`, or your own
-[`AuthStorage`](#storage), which may be asynchronous. The server-rendered
-setups keep the session on the server instead: see
-[Server rendering](#server-rendering).
+Every app with its own backend has to get these moments right. It usually
+takes a few hundred lines spread across an auth context, a fetch wrapper, and
+the route guards, and one or two cases stay missing until a user finds them.
+session-kit is that code, written once and tested with the routers and
+frameworks it supports.
+
+### What it does
+
+| When…                                             | session-kit…                                                                                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage`, before the first paint. |
+| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                         |
+| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                              |
+| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token, and the other reuse what it saved.                                               |
+| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                   |
+| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                             |
+| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                              |
+| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                   |
+| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                |
+
+### What it doesn't do
+
+session-kit doesn't sign users in. It has no sign-in form, no OAuth flow, and
+no user database: it starts where your backend's sign-in response ends. If you
+need those too, use an auth service or framework such as Auth.js, Better Auth,
+or Clerk, which manage their own sessions.
+
+## At a glance
+
+The whole idea in one file: a client, a sign-in, authenticated requests, and a
+component that reads the session.
+
+<!-- file: src/at-a-glance.tsx -->
+
+```tsx
+import { createAuth, webStorage } from "@monarcode/session-kit";
+import { createAuthFetch } from "@monarcode/session-kit/http";
+import { createAuthHooks } from "@monarcode/session-kit/react";
+import { z } from "zod";
+
+const API = "https://api.example.com";
+const userSchema = z.object({ id: z.string(), name: z.string() });
+const tokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+});
+
+const post = (path: string, body: unknown, init?: RequestInit) =>
+  fetch(API + path, {
+    ...init,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+// 1. The client: what a user is, where the session is saved, and how its
+//    tokens are refreshed.
+export const auth = createAuth({
+  name: "my-app",
+  user: userSchema,
+  storage: webStorage(),
+  refresh: async ({ refreshToken, signal }) => {
+    const response = await post("/auth/refresh", { refreshToken }, { signal });
+    if (response.status === 401) return null; // Rejected: sign out.
+    if (!response.ok) throw new Error("Refresh failed"); // Outage: stay signed in.
+    return tokensSchema.parse(await response.json());
+  },
+});
+
+// 2. Signing in: your backend checks the password, and session-kit keeps
+//    what it returns.
+export async function signIn(email: string, password: string) {
+  const response = await post("/auth/login", { email, password });
+  if (!response.ok) throw new Error("Wrong email or password");
+  const session = tokensSchema.extend({ user: userSchema });
+  await auth.signIn(session.parse(await response.json()));
+}
+
+// 3. Requests: the access token is attached, and refreshed after a 401.
+export const api = createAuthFetch(auth, `${API}/`);
+
+// 4. React: state that survives a reload and follows the other tabs.
+const { AuthProvider, useAuth } = createAuthHooks<typeof auth>();
+
+function Greeting() {
+  const user = useAuth((state) => state.user);
+  return <h1>{user ? `Welcome back, ${user.name}` : "Please sign in"}</h1>;
+}
+
+export const App = () => (
+  <AuthProvider client={auth}>
+    <Greeting />
+  </AuthProvider>
+);
+```
+
+[Getting started](#getting-started) builds this up one step at a time, against
+a real test backend. Writing your app with Effect? The same session is a
+service, with an effetch plugin for requests: see
+[Effect and effetch](#effect-and-effetch).
+
+## Features
+
+- **Schema-driven users.** Any [Standard Schema](https://standardschema.dev)
+  library, such as Zod, Valibot, or ArkType, validates the user at sign-in, on
+  refresh, on restore, and when another tab saves one, and supplies its
+  TypeScript types. Or read the user from a JWT access token with
+  `fromAccessToken`.
+- **Tokens stay out of reach.** State and sessions hold no tokens, so they are
+  safe to render and to put in route context. Tokens go only to code that
+  attaches them to requests, such as `createAuthFetch`.
+- **One client, every router.** TanStack Router, React Router in all three
+  modes, and Expo Router each get guards that redirect with a return URL and
+  run again when the session changes.
+- **Server rendering.** With TanStack Start, Next.js, or React Router
+  framework mode, the session lives in an encrypted `httpOnly` cookie, and the
+  refresh token never reaches the browser.
+- **Native apps.** In Expo, sessions are saved in the iOS keychain or with an
+  Android Keystore key, the splash screen holds while restoring, deep links
+  survive the sign-in, and a session can lock behind the device's biometrics.
+- **Effect.** The same session is an Effect service, `Auth`, whose Effects
+  fail with a tagged `AuthFailure`, and `sessionBearer` is an
+  [effetch](https://github.com/monarcode/effetch) plugin that sends the access
+  token.
+- **Made to be debugged.** Every failure is an `AuthError` with a code to
+  match on, and `debug: true` logs each restore, refresh, and state change
+  without printing a token.
+- **Light.** ESM-only, with three small dependencies. Every peer dependency is
+  optional, so you install only the router you use.
+
+## How it works
+
+session-kit sits between your backend and your components. Tokens travel on
+the left, and only state reaches the right:
+
+```text
+    Your backend             session-kit             Your components
+ ┌───────────────┐      ┌───────────────────┐      ┌──────────────────┐
+ │ POST /login   │ ───▶ │ signIn()          │ ───▶ │ useAuth()        │
+ │ POST /refresh │ ◀──▶ │ refresh, on time  │      │ route guards     │
+ │ GET  /orders  │ ◀─── │ authFetch()       │ ◀─── │ loaders, queries │
+ └───────────────┘      └───────────────────┘      └──────────────────┘
+   issues tokens          keeps the session        state, never tokens
+```
+
+Five terms come up throughout:
+
+- **Tokens** are what your backend issues. The access token goes with each
+  request and is short-lived. The refresh token, if there is one, is exchanged
+  for a new access token when the old one expires.
+- **The client**, from `createAuth`, holds the tokens and does the work:
+  saving, restoring, refreshing, and telling other tabs. An app has one.
+- **A session** is who is signed in: `{ sessionId, user }`. It never holds
+  tokens, so it is safe to render and to pass around.
+- **State** is what components read: `status`, `user`, `sessionId`, and
+  `error`, updated as the session changes.
+- **Credentials** are the access token and its expiry, given only to code that
+  attaches them to requests, such as `createAuthFetch`.
+
+`status` says where the session stands, and checking it narrows `user`:
+
+| `status`          | Meaning                                                                   | `user` |
+| ----------------- | ------------------------------------------------------------------------- | ------ |
+| `initializing`    | The saved session is being restored.                                      | `null` |
+| `authenticated`   | Access is usable.                                                         | Set    |
+| `refreshing`      | A refresh is replacing expired or rejected access.                        | Set    |
+| `locked`          | With `locking`, a session is saved, but its tokens wait for `unlock()`.   | Set    |
+| `unauthenticated` | No session; sign-in is needed.                                            | `null` |
+| `unavailable`     | Restoring failed, or a failed refresh left no usable access; see `error`. | `null` |
+
+The session is kept in one of two places, depending on where your app renders:
+
+|                   | In the browser or on the device                                            | On the server                                              |
+| ----------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| For               | Single-page apps and Expo apps                                             | TanStack Start, Next.js, React Router with SSR             |
+| Client            | `createAuth`                                                               | `createServerAuth`, with `createMirrorAuth` in the browser |
+| Saved in          | `localStorage`, `sessionStorage`, or the iOS keychain and Android Keystore | An encrypted `httpOnly` cookie                             |
+| The refresh token | Stays in that storage                                                      | Never reaches the browser                                  |
+
+Hooks, guards, and tab sync work the same in both.
 
 ## Installation
-
-Alpha releases are published to the `latest` distribution tag:
 
 ```sh
 pnpm add @monarcode/session-kit
 ```
 
-Pin `@monarcode/session-kit@0.1.0-alpha.6` to use this exact version. Alpha
-releases may change the public API; see the [release notes](./CHANGELOG.md).
+Alpha releases are published to the `latest` distribution tag and may change
+the public API, so pin an exact version and read the
+[release notes](./CHANGELOG.md) before upgrading.
 
-All peer dependencies are optional, so install only what you use:
-
-| Peer                     | Range                   | Needed for                                             |
-| ------------------------ | ----------------------- | ------------------------------------------------------ |
-| `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/react-router`, `/expo` |
-| `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
-| `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                               |
-| `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
-| `next`                   | `^16.0.0`               | `/next`                                                |
-| `effect`                 | `^4.1.0`                | `/effect`                                              |
-| `@monarcode/effetch`     | `^0.1.0-rc.1`           | `/effetch`                                             |
-| `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
-| `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
-| `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
-| `react-native`           | `>=0.79.0`              | `/expo`                                                |
-
-The Expo ranges cover Expo SDK 53 and newer; install them with
-`npx expo install` so they match your SDK, as the
-[Expo guide](./docs/expo.md#installation) shows. CI tests the oldest and newest
-versions in each range, except that `expo-file-system` is tested only at its
-newest: 18.1 publishes no `exports` map, so its types don't resolve under
-NodeNext. session-kit never imports React DOM. Any Standard Schema V1 library
-describes users; the examples use Zod:
+Any [Standard Schema](https://standardschema.dev) library describes users.
+The examples use Zod:
 
 ```sh
-pnpm add react react-dom @tanstack/react-router zod
+pnpm add zod
 ```
 
-The package is ESM-only and checked with TypeScript 6.0.3 under NodeNext and
-Bundler resolution. It needs `AbortController`, and uses `crypto.randomUUID` and
-Web Locks when present, falling back without them. On the server,
-`@monarcode/session-kit/server` needs Web Crypto, as in Node.js 20 and newer.
+Every peer dependency is optional: install React and the router your setup
+uses. [Compatibility](#compatibility) lists the supported versions.
 
-## Quick start: TanStack Router
+## Pick your setup
 
-This example signs in against [DummyJSON's auth API](https://dummyjson.com/docs/auth),
-a public test backend, so it runs as written. It is the
+Each setup has a runnable app in [`examples/`](./examples), all signing in
+against DummyJSON's public test API.
+
+| Setup                                      | Import                                   | Guide                                      | Example app                                                           |
+| ------------------------------------------ | ---------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
+| React without a router                     | `@monarcode/session-kit/react`           | [Getting started](#getting-started)        | None                                                                  |
+| TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [TanStack Router](#tanstack-router)        | [`tanstack-router`](./examples/tanstack-router)                       |
+| TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [Other setups](#other-setups)              | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 |
+| TanStack Start with server rendering       | `@monarcode/session-kit/tanstack-start`  | [TanStack Start](./docs/tanstack-start.md) | [`tanstack-start-ssr`](./examples/tanstack-start-ssr)                 |
+| React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-declarative`](./examples/react-router-declarative)     |
+| React Router, data mode                    | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-data`](./examples/react-router-data)                   |
+| React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
+| React Router, framework mode with SSR      | `@monarcode/session-kit/react-router`    | [React Router](./docs/react-router-ssr.md) | [`react-router-framework-ssr`](./examples/react-router-framework-ssr) |
+| Next.js 16, App Router                     | `@monarcode/session-kit/next`            | [Next.js](./docs/next.md)                  | [`next-app`](./examples/next-app)                                     |
+| Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [Expo](./docs/expo.md)                     | [`expo-router`](./examples/expo-router)                               |
+
+Two guides apply to more than one setup:
+[Server sessions](./docs/server-sessions.md) covers what the three
+server-rendered setups share, and [Effect and effetch](#effect-and-effetch)
+work with any of them.
+
+## Getting started
+
+This builds a small app in six steps: sign in, stay signed in across reloads
+and tabs, call an API, and sign out. The steps are the same for every setup
+that keeps the session in the browser or on the device. Server-rendered apps
+create their client differently, so start from
+[Server rendering](#server-rendering) instead.
+
+The code signs in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth), a public test
+backend, so it runs as written.
+
+### 1. Talk to your backend
+
+session-kit never calls your backend for you, so start with the two requests
+you would write anyway: one that signs in, and one that exchanges a refresh
+token for new tokens. Nothing in this file imports session-kit.
+
+`src/backend.ts`
+
+<!-- file: src/backend.ts -->
+
+```ts
+import { z } from "zod";
+
+export const API = "https://dummyjson.com";
+
+export const userSchema = z.object({
+  id: z.number(),
+  username: z.string(),
+  email: z.string(),
+  firstName: z.string(),
+});
+
+const tokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+});
+
+const post = (path: string, body: unknown, init?: RequestInit) =>
+  fetch(API + path, {
+    ...init,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** Checks the password, and resolves the tokens and the user. */
+export async function login(username: string, password: string) {
+  const response = await post("/auth/login", { username, password });
+  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+  // DummyJSON returns the user's fields beside the tokens.
+  const body: unknown = await response.json();
+  return { ...tokensSchema.parse(body), user: userSchema.parse(body) };
+}
+
+/**
+ * Exchanges a refresh token for new tokens. Resolves `null` when the backend
+ * rejects the token, and throws for any other failure.
+ */
+export async function refresh(refreshToken: string, signal: AbortSignal) {
+  const response = await post("/auth/refresh", { refreshToken }, { signal });
+  // DummyJSON answers 403 for an invalid token and 401 for a missing one.
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+  return tokensSchema.parse(await response.json());
+}
+```
+
+The schemas do two jobs: they check what the backend sent, and they give the
+rest of the app its types. Requests omit `credentials: "include"`, because
+session-kit keeps tokens out of cookies and attaches them itself.
+
+### 2. Create the client
+
+The client is the one object that knows about the session. Tell it what a
+user is, where to save the session, and how to refresh.
+
+`src/auth.ts`
+
+<!-- file: src/auth.ts -->
+
+```ts
+import { createAuth, webStorage } from "@monarcode/session-kit";
+
+import { login, refresh, userSchema } from "./backend.js";
+
+export const auth = createAuth({
+  // Keeps this app's saved session apart from any other on the same origin.
+  name: "my-app",
+  // Every user is checked against this schema, and typed by it.
+  user: userSchema,
+  // Where the session is saved: `localStorage`.
+  storage: webStorage(),
+  // How expired access is replaced.
+  refresh: ({ refreshToken, signal }) => refresh(refreshToken, signal),
+});
+
+/** Signs in with the backend, then hands the result to session-kit. */
+export async function signInWithPassword(username: string, password: string) {
+  await auth.signIn(await login(username, password));
+}
+
+export type AppAuth = typeof auth;
+```
+
+`refresh` tells two failures apart. `null` means the backend rejected the
+refresh token, so the user is signed out. A throw means something else failed,
+so the session is kept and the error reported. That split is why an outage
+doesn't sign anyone out. [Refresh](#refresh) has the details, and
+[Storage](#storage) lists the other places a session can be saved.
+
+Create one client per `name` in each tab. DummyJSON's
+tokens are JWTs, so their expiry comes from the `exp` and `iat` claims; see
+[Expiry](#expiry) for backends that say it another way.
+
+### 3. Add a sign-in form
+
+`signInWithPassword` is all a form needs. It has no session-kit code of its
+own.
+
+`src/sign-in.tsx`
+
+<!-- file: src/sign-in.tsx -->
+
+```tsx
+import { useState, type FormEvent } from "react";
+
+import { signInWithPassword } from "./auth.js";
+
+export function SignIn() {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setPending(true);
+    try {
+      await signInWithPassword(
+        String(form.get("username")),
+        String(form.get("password")),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not sign in");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <h1>Sign in</h1>
+      {/* DummyJSON's documented test user. */}
+      <label>
+        Username
+        <input name="username" defaultValue="emilys" autoComplete="username" />
+      </label>
+      <label>
+        Password
+        <input
+          name="password"
+          type="password"
+          defaultValue="emilyspass"
+          autoComplete="current-password"
+        />
+      </label>
+      {error && <p role="alert">{error}</p>}
+      <button disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
+    </form>
+  );
+}
+```
+
+The form doesn't navigate or call a callback when it succeeds. Signing in
+changes the client's state, and the next step renders from that state.
+
+### 4. Read the session in React
+
+Create the hooks once, typed by your client, and export them for every
+component to share.
+
+`src/hooks.ts`
+
+<!-- file: src/hooks.ts -->
+
+```ts
+import { createAuthHooks } from "@monarcode/session-kit/react";
+
+import type { auth } from "./auth.js";
+
+export const { AuthProvider, useAuth, useAuthClient } =
+  createAuthHooks<typeof auth>();
+```
+
+Then render by `status`. Each case is one of the states in
+[How it works](#how-it-works), and TypeScript knows `user` is set by the time
+the last one is reached.
+
+`src/app.tsx`
+
+<!-- file: src/app.tsx -->
+
+```tsx
+import { auth } from "./auth.js";
+import { AuthProvider, useAuth, useAuthClient } from "./hooks.js";
+import { SignIn } from "./sign-in.js";
+
+export function App() {
+  return (
+    <AuthProvider client={auth}>
+      <AuthError />
+      <Screen />
+    </AuthProvider>
+  );
+}
+
+function Screen() {
+  const { status, user } = useAuth();
+  const client = useAuthClient();
+
+  switch (status) {
+    case "initializing":
+      return <p>Restoring your session…</p>;
+    case "unauthenticated":
+      return <SignIn />;
+    case "unavailable":
+      // A refresh failed, but the session is kept: offer another try.
+      return (
+        <button onClick={() => void client.retry().catch(() => {})}>
+          Try again
+        </button>
+      );
+    default:
+      // "authenticated", or "refreshing" with the user still on screen.
+      return (
+        <main>
+          <h1>Welcome, {user.firstName}</h1>
+          <button onClick={() => void client.signOut().catch(() => {})}>
+            Sign out
+          </button>
+        </main>
+      );
+  }
+}
+
+/** The latest failure, such as a refresh the backend couldn't answer. */
+function AuthError() {
+  const error = useAuth((state) => state.error);
+  return error ? <p role="alert">{error.message}</p> : null;
+}
+```
+
+- `AuthProvider` mounts the client: it restores the saved session, starts the
+  refresh timer, and follows other tabs.
+- `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
+  it, and re-renders only when that part changes, as `AuthError` does.
+- `useAuthClient()` returns the client, for actions.
+- `retry` and `signOut` reject when they fail, and publish the same failure in
+  `state.error`. `AuthError` shows it, so the handlers have nothing left to
+  do.
+
+That is a working app. Sign in and reload: you are still signed in. Open a
+second tab and sign out: both tabs show the form.
+
+### 5. Call your API
+
+`createAuthFetch` makes a `fetch` that sends the access token to one origin,
+and to no other.
+
+`src/api.ts`
+
+<!-- file: src/api.ts -->
+
+```ts
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { auth } from "./auth.js";
+import { API, userSchema } from "./backend.js";
+
+export const authFetch = createAuthFetch(auth, `${API}/`);
+
+/** The signed-in user, fresh from the backend. */
+export async function fetchProfile() {
+  const response = await authFetch("auth/me");
+  if (!response.ok) throw new Error(`Profile failed (${response.status})`);
+  return userSchema.parse(await response.json());
+}
+```
+
+When a request gets a 401, `authFetch` refreshes, then sends a GET or HEAD
+again. Other methods are never sent twice.
+[Profile updates and authenticated requests](#profile-updates-and-authenticated-requests)
+covers its options.
+
+### 6. Protect your routes
+
+The client is the same everywhere. What changes is how each router keeps
+signed-out users away from private pages, so continue with yours:
+
+- [TanStack Router](#tanstack-router), below.
+- [TanStack Start in SPA mode, React Router, and Expo Router](#other-setups).
+- Without a router, you are done: render by `status`, as `Screen` does.
+
+With Effect, the same client becomes a service: see
+[Effect and effetch](#effect-and-effetch).
+
+[Using the client](#using-the-client) then covers what else the client does.
+
+## TanStack Router
+
+With TanStack Router, the client lives in Router context: guards run in
+`beforeLoad`, and the hooks read the client from the Router, so they need no
+`AuthProvider`. This guide continues from the client in
+[Getting started](#2-create-the-client), and is the
 [`tanstack-router` example app](./examples/tanstack-router) trimmed to its
-essentials. It uses file-based routing, so add the Router plugin before the
-React plugin:
+essentials.
+
+```sh
+pnpm add @tanstack/react-router
+pnpm add -D @tanstack/router-plugin
+```
+
+It uses file-based routing, so add the Router plugin before the React plugin:
 
 ```ts
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
@@ -155,74 +637,7 @@ export default defineConfig({
 
 The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
 
-### 1. Create the client
-
-`src/auth.ts`
-
-<!-- file: src/auth.ts -->
-
-```ts
-import { createAuth, webStorage } from "@monarcode/session-kit";
-import { z } from "zod";
-
-const API = "https://dummyjson.com";
-
-export const userSchema = z.object({
-  id: z.number(),
-  username: z.string(),
-  email: z.string(),
-  firstName: z.string(),
-});
-
-const tokensSchema = z.object({
-  accessToken: z.string(),
-  refreshToken: z.string(),
-});
-// DummyJSON returns the user's fields beside the tokens.
-const loginResponseSchema = tokensSchema.extend(userSchema.shape);
-
-export const auth = createAuth({
-  name: "my-app",
-  user: userSchema,
-  storage: webStorage(),
-  refresh: async ({ refreshToken, signal }) => {
-    const response = await fetch(`${API}/auth/refresh`, {
-      method: "POST",
-      signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-    // Rejected refresh tokens mean "sign in again": DummyJSON answers 403
-    // for an invalid one and 401 for a missing one.
-    if (response.status === 401 || response.status === 403) return null;
-    // Anything else is operational: keep the session and report the error.
-    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
-    return tokensSchema.parse(await response.json());
-  },
-});
-
-export async function signInWithPassword(username: string, password: string) {
-  const response = await fetch(`${API}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
-  const { accessToken, refreshToken, ...user } = loginResponseSchema.parse(
-    await response.json(),
-  );
-  await auth.signIn({ accessToken, refreshToken, user });
-}
-
-export type AppAuth = typeof auth;
-```
-
-Create one client per auth `name` in each tab. DummyJSON's tokens are JWTs, so
-expiry comes from their `exp` and `iat` claims; see
-[Expiry](#expiry). Requests omit `credentials: "include"`: session-kit keeps
-tokens out of cookies and attaches them itself.
-
-### 2. Create the hooks
+### 1. Create the Router's hooks
 
 `src/auth-hooks.ts`
 
@@ -237,12 +652,12 @@ export const { useAuth, useAuthClient } = createAuthHooks({
 });
 ```
 
+These replace the hooks from [step 4](#4-read-the-session-in-react) of Getting
+started.
 `useRouterAuth` reads the client from Router context, so the hooks need no
-provider, and Router registration in step 6 gives them your user type.
-`useAuth()` returns the reactive state; `useAuth(selector)` re-renders only when
-the selection changes. `useAuthClient()` returns the client for actions.
+provider, and Router registration in step 5 gives them your user type.
 
-### 3. Type the root route
+### 2. Type the root route
 
 `src/routes/__root.tsx`
 
@@ -271,7 +686,7 @@ function Root() {
 }
 ```
 
-### 4. Add the sign-in route
+### 3. Add the sign-in route
 
 `src/routes/login.tsx`
 
@@ -345,7 +760,7 @@ including the sign-in page itself, so a stale `redirectTo` cannot loop. Pass
 `redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
 same way.
 
-### 5. Guard private routes
+### 4. Guard private routes
 
 `src/routes/_authenticated.tsx` is a pathless layout: its child routes are
 guarded without `authenticated` appearing in their URLs.
@@ -421,7 +836,7 @@ function Home() {
 }
 ```
 
-### 6. Create and connect the Router
+### 5. Create and connect the Router
 
 `src/router.tsx`
 
@@ -455,7 +870,7 @@ With synchronous storage and a synchronous schema, `connectAuth` restores the
 saved session before the first render. Call `disconnectAuth` on app teardown or
 hot-module disposal; it stops background work without signing out.
 
-### 7. Render the app
+### 6. Render the app
 
 `src/main.tsx`
 
@@ -528,11 +943,6 @@ app.
 **Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
 in any React app.
 
-**Effect.** `@monarcode/session-kit/effect` provides the client as an Effect
-service, `Auth`, whose Effects fail with a tagged `AuthFailure`, and
-`@monarcode/session-kit/effetch` adds `sessionBearer`, an effetch plugin that
-sends the access token. The [Effect guide](./docs/effect.md) covers both.
-
 ## Server rendering
 
 With server rendering, the session lives on the server: both tokens and the
@@ -563,6 +973,107 @@ the Next.js Pages Router, build a `CookieJar` over its cookies and use
 `createServerAuth` directly. [Server sessions](./docs/server-sessions.md)
 covers the secret, cookie jars, refreshing across instances, and limits.
 
+## Effect and effetch
+
+If your app is written with [Effect](https://effect.website), the session is a
+service. `@monarcode/session-kit/effect` wraps the client you already have, so
+React, your router, and your Effects share one session, and an auth error is a
+typed failure like any other.
+
+```sh
+pnpm add effect @monarcode/effetch
+```
+
+Register the client's type once, and provide the client as a layer. This is
+the client from [Getting started](#2-create-the-client):
+
+`src/effect/auth.ts`
+
+<!-- file: src/effect/auth.ts -->
+
+```ts
+import { Auth } from "@monarcode/session-kit/effect";
+import * as Effect from "effect/Effect";
+
+import { auth } from "../auth.js";
+
+// Registered once, so every `Auth` Effect is typed with your user.
+declare module "@monarcode/session-kit/effect" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
+
+export const AuthLive = Auth.layer(auth);
+
+/** The signed-in user's first name, or "Guest". */
+export const firstName = Auth.session.pipe(
+  Effect.map((session) => session.user.firstName),
+  Effect.catchTag("AuthFailure", (failure) =>
+    failure.code === "UNAUTHENTICATED"
+      ? Effect.succeed("Guest")
+      : Effect.fail(failure),
+  ),
+);
+```
+
+`Auth.session` refreshes expired access before it answers, and fails with an
+`AuthFailure` whose `code` is the client's `AuthErrorCode`.
+
+For requests, `sessionBearer` is a plugin for
+[effetch](https://github.com/monarcode/effetch), the typed HTTP client for
+Effect. It does what `createAuthFetch` does: it sends the access token to one
+origin, and refreshes after a 401.
+
+`src/effect/api.ts`
+
+<!-- file: src/effect/api.ts -->
+
+```ts
+import * as Fetch from "@monarcode/effetch";
+import { sessionBearer } from "@monarcode/session-kit/effetch";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Schema from "effect/Schema";
+
+import { API } from "../backend.js";
+import { AuthLive } from "./auth.js";
+
+const makeApi = Fetch.make({
+  baseUrl: API,
+  plugins: [sessionBearer({ baseUrl: API })],
+});
+
+export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
+  "app/Api",
+) {
+  static readonly layer = Layer.effect(Api, makeApi).pipe(
+    Layer.provide(Layer.merge(FetchHttpClient.layer, AuthLive)),
+  );
+}
+
+const Profile = Schema.Struct({ id: Schema.Finite, email: Schema.String });
+
+/** Fails with `AuthFailure`, or with one of effetch's own errors. */
+export const profile = Api.use((api) =>
+  api.get("/auth/me", { output: Profile }),
+);
+
+// One runtime for the app, so the API client is built once.
+const runtime = ManagedRuntime.make(Api.layer);
+
+export const loadProfile = () => runtime.runPromise(profile);
+```
+
+The [Effect guide](./docs/effect.md) covers the rest: signing in and out,
+updating the user from an Effect, watching the session as a `Stream`, public
+endpoints, and clearing an
+[effetch-query](https://github.com/monarcode/effetch-query) cache when the
+account changes.
+
 ## Using the client
 
 ### State
@@ -574,19 +1085,9 @@ const { unsubscribe } = auth.state.subscribe((next) => {});
 
 `subscribe` reports later changes, not the current value. A listener that
 throws does not interrupt auth; its error is rethrown asynchronously, where
-error reporting can catch it. Checking `status` narrows `user`:
-
-| `status`          | Meaning                                                                   | `user` |
-| ----------------- | ------------------------------------------------------------------------- | ------ |
-| `initializing`    | The saved session is being restored.                                      | `null` |
-| `authenticated`   | Access is usable.                                                         | Set    |
-| `refreshing`      | A refresh is replacing expired or rejected access.                        | Set    |
-| `locked`          | With `locking`, a session is saved, but its tokens wait for `unlock()`.   | Set    |
-| `unauthenticated` | No session; sign-in is needed.                                            | `null` |
-| `unavailable`     | Restoring failed, or a failed refresh left no usable access; see `error`. | `null` |
-
-A locked session keeps its user, so check `status`, not `user`, to know
-whether access is usable.
+error reporting can catch it. Checking `status` narrows `user`;
+[How it works](#how-it-works) lists each status. A locked session keeps its
+user, so check `status`, not `user`, to know whether access is usable.
 
 `state.sessionId` is new on every sign-in and stable across refreshes and
 profile updates; scope private cached data, such as TanStack Query results, to
@@ -621,24 +1122,16 @@ failure.
 
 `updateUser` replaces the user and keeps the session. Pass a function to fetch
 the new user: if the session changes meanwhile, the result is discarded instead
-of landing on another account. `createAuthFetch` attaches the access token:
+of landing on another account. `fetchProfile` is the request from
+[Getting started](#5-call-your-api), sent with `createAuthFetch`:
 
 <!-- file: src/profile.ts -->
 
 ```ts
-import { createAuthFetch } from "@monarcode/session-kit/http";
+import { fetchProfile } from "./api.js";
+import { auth } from "./auth.js";
 
-import { auth, userSchema } from "./auth.js";
-
-const authFetch = createAuthFetch(auth, "https://dummyjson.com/");
-
-export async function reloadProfile() {
-  await auth.updateUser(async () => {
-    const response = await authFetch("auth/me");
-    if (!response.ok) throw new Error(`Profile failed (${response.status})`);
-    return userSchema.parse(await response.json());
-  });
-}
+export const reloadProfile = () => auth.updateUser(fetchProfile);
 ```
 
 `createAuthFetch` restricts requests to the configured origin and rejects
@@ -885,6 +1378,36 @@ of `AuthStorage`, as `secureStorage()` does.
 
 Do not import internal `dist` paths.
 
+## Compatibility
+
+All peer dependencies are optional, so install only what you use:
+
+| Peer                     | Range                   | Needed for                                             |
+| ------------------------ | ----------------------- | ------------------------------------------------------ |
+| `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/react-router`, `/expo` |
+| `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
+| `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                               |
+| `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
+| `next`                   | `^16.0.0`               | `/next`                                                |
+| `effect`                 | `^4.1.0`                | `/effect`                                              |
+| `@monarcode/effetch`     | `^0.1.0-rc.1`           | `/effetch`                                             |
+| `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
+| `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
+| `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
+| `react-native`           | `>=0.79.0`              | `/expo`                                                |
+
+The Expo ranges cover Expo SDK 53 and newer; install them with
+`npx expo install` so they match your SDK, as the
+[Expo guide](./docs/expo.md#installation) shows. CI tests the oldest and newest
+versions in each range, except that `expo-file-system` is tested only at its
+newest: 18.1 publishes no `exports` map, so its types don't resolve under
+NodeNext. session-kit never imports React DOM.
+
+The package is ESM-only and checked with TypeScript 6.0.3 under NodeNext and
+Bundler resolution. It needs `AbortController`, and uses `crypto.randomUUID` and
+Web Locks when present, falling back without them. On the server,
+`@monarcode/session-kit/server` needs Web Crypto, as in Node.js 20 and newer.
+
 ## Development
 
 Use Node.js 24 or newer and pnpm. The repository is a pnpm workspace: the
@@ -924,3 +1447,7 @@ with the version in `package.json`:
 ```sh
 pnpm add /absolute/path/to/monarcode-session-kit-<version>.tgz
 ```
+
+## License
+
+[MIT](./LICENSE)
