@@ -136,7 +136,7 @@ import { serverAuth } from "./lib/auth/server";
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
   // A failed refresh shows up when a page reads the session.
-  await serverAuth.prepare(proxyJar(request, response)).catch(() => {});
+  await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
   return response;
 }
 

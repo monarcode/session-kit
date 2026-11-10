@@ -2,26 +2,27 @@ import { AuthError } from "../core/errors.js";
 import type { CookieJar, CookieOptions } from "../server/cookies.js";
 
 /**
- * The `context` React Router passes to server middleware, loaders and
- * actions in framework mode: a `RouterContextProvider`, one per request.
- * What {@link routerJar} and {@link cookieJarMiddleware} find the request's
- * jar by.
+ * The shape of the `context` React Router passes to server middleware,
+ * loaders and actions in framework mode: a `RouterContextProvider`, one per
+ * request. What {@link routerJar} and {@link cookieJarMiddleware} find the
+ * request's jar by. Typed by its shape, so this entry point doesn't depend on
+ * React Router's types.
  *
  * @example
  * ```ts
- * import { routerJar, type RequestContext } from "@monarcode/session-kit/react-router/server";
+ * import { routerJar, type RouterContextLike } from "@monarcode/session-kit/react-router/server";
  * import type { ServerAuth } from "@monarcode/session-kit/server";
  *
  * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
  *
- * export async function loader({ context }: { context: RequestContext }) {
+ * export async function loader({ context }: { context: RouterContextLike }) {
  * 	return { session: await serverAuth.getSession(routerJar(context)) };
  * }
  * ```
  *
  * @since 0.1.0
  */
-export type RequestContext = {
+export type RouterContextLike = {
 	get: (key: never) => unknown;
 	set: (key: never, value: never) => unknown;
 };
@@ -123,14 +124,14 @@ function withCookies(response: Response, lines: string[]): Response {
  * The jar can set cookies until the response leaves the middleware. After
  * that, as while a loader's deferred data streams, it is read-only: nothing
  * is refreshed or saved, so refresh before rendering with
- * `serverAuth.prepare` in middleware.
+ * `serverAuth.refreshIfDue` in middleware.
  *
  * @example
  * ```ts
  * import {
  * 	cookieJarMiddleware,
  * 	routerJar,
- * 	type RequestContext,
+ * 	type RouterContextLike,
  * } from "@monarcode/session-kit/react-router/server";
  * import type { ServerAuth } from "@monarcode/session-kit/server";
  *
@@ -139,8 +140,8 @@ function withCookies(response: Response, lines: string[]): Response {
  * // app/root.tsx: refresh access that expires within a minute.
  * export const middleware = [
  * 	cookieJarMiddleware,
- * 	async ({ context }: { context: RequestContext }) => {
- * 		await serverAuth.prepare(routerJar(context)).catch(() => {});
+ * 	async ({ context }: { context: RouterContextLike }) => {
+ * 		await serverAuth.refreshIfDue(routerJar(context)).catch(() => {});
  * 	},
  * ];
  * ```
@@ -148,7 +149,7 @@ function withCookies(response: Response, lines: string[]): Response {
  * @since 0.1.0
  */
 export async function cookieJarMiddleware(
-	{ request, context }: { request: Request; context: RequestContext },
+	{ request, context }: { request: Request; context: RouterContextLike },
 	next: () => Promise<Response>,
 ): Promise<Response> {
 	// Listed twice for one request: the outer one sets the cookies. Never a
@@ -178,13 +179,13 @@ export async function cookieJarMiddleware(
  *
  * @example
  * ```ts
- * import { routerJar, type RequestContext } from "@monarcode/session-kit/react-router/server";
+ * import { routerJar, type RouterContextLike } from "@monarcode/session-kit/react-router/server";
  * import type { ServerAuth } from "@monarcode/session-kit/server";
  *
  * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
  *
  * // A sign-out route's action.
- * export async function action({ context }: { context: RequestContext }) {
+ * export async function action({ context }: { context: RouterContextLike }) {
  * 	await serverAuth.signOut(routerJar(context));
  * 	return null;
  * }
@@ -192,7 +193,7 @@ export async function cookieJarMiddleware(
  *
  * @since 0.1.0
  */
-export function routerJar(context: RequestContext): CookieJar {
+export function routerJar(context: RouterContextLike): CookieJar {
 	const cookies = requests.get(context);
 	if (!cookies)
 		throw new AuthError(

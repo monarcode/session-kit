@@ -117,7 +117,7 @@ export type ServerAuthOptions<Src extends UserSource> = {
 };
 
 /**
- * Options for {@link ServerAuth}'s `prepare`.
+ * Options for {@link ServerAuth}'s `refreshIfDue`.
  *
  * @example
  * ```ts
@@ -127,19 +127,19 @@ export type ServerAuthOptions<Src extends UserSource> = {
  * declare const jar: CookieJar;
  *
  * // Refresh when less than two minutes are left.
- * await serverAuth.prepare(jar, { skew: 120 });
+ * await serverAuth.refreshIfDue(jar, { within: 120 });
  * ```
  *
  * @since 0.1.0
  */
-export type PrepareOptions = {
+export type RefreshIfDueOptions = {
 	/**
 	 * Refreshes when the access token expires within this many seconds, so it
 	 * lasts through the request. Keep it well below the token's lifetime: a
-	 * token that lives less than `skew` is refreshed on every request.
+	 * token that lives less than `within` is refreshed on every request.
 	 * Default: `60`.
 	 */
-	skew?: number | undefined;
+	within?: number | undefined;
 };
 
 type ServerAuthBase<U, I> = {
@@ -151,15 +151,15 @@ type ServerAuthBase<U, I> = {
 	 */
 	getSession: (jar: CookieJar) => Promise<Session<U> | null>;
 	/**
-	 * Refreshes access that expires within `skew` seconds, then resolves the
-	 * session, for middleware or a proxy that runs before rendering. Refreshes
-	 * at most once per jar, and a failed refresh is ignored while the access
-	 * token still works. Rejects with
-	 * `INVALID_OPTIONS` given a read-only jar. See {@link PrepareOptions}.
+	 * Refreshes the access token when less than `within` seconds are left,
+	 * then resolves the session, for middleware or a proxy that runs before
+	 * rendering. Refreshes at most once per jar, and a failed refresh is
+	 * ignored while the access token still works. Rejects with
+	 * `INVALID_OPTIONS` given a read-only jar. See {@link RefreshIfDueOptions}.
 	 */
-	prepare: (
+	refreshIfDue: (
 		jar: CookieJar,
-		options?: PrepareOptions,
+		options?: RefreshIfDueOptions,
 	) => Promise<Session<U> | null>;
 	/**
 	 * Validates `input` as the client's `signIn` does, seals it into the
@@ -183,7 +183,7 @@ type ServerAuthBase<U, I> = {
 		 * The current access token, refreshing expired access first, or `null`.
 		 * With a read-only jar, expired access can't be refreshed and saved:
 		 * rejects with `REFRESH_FAILED`. Refresh in middleware or a proxy first,
-		 * with `prepare`.
+		 * with `refreshIfDue`.
 		 */
 		get: (jar: CookieJar) => Promise<Credentials | null>;
 		/**
@@ -268,8 +268,8 @@ export type ServerAuth<U, I> = ServerAuthBase<U, I> &
 				) => Promise<Session<U>>;
 			});
 
-/** Default `prepare` skew, in seconds. */
-const DEFAULT_SKEW = 60;
+/** Default `refreshIfDue` window, in seconds. */
+const DEFAULT_WITHIN = 60;
 
 /**
  * Creates the server engine ({@link ServerAuth}) that keeps the session in an
@@ -338,7 +338,7 @@ export function createServerAuth<Src extends UserSource>(
 	// wrote, and one client per writable jar, so they share one refresh.
 	const storages = new WeakMap<CookieJar, AuthStorage>();
 	const clients = new WeakMap<CookieJar, AuthClient<U, unknown>>();
-	// Jars whose request has called `refresh`, so `prepare` doesn't again.
+	// Jars whose request has called `refresh`, so `refreshIfDue` doesn't again.
 	const refreshed = new WeakSet<CookieJar>();
 
 	function storageOf(jar: CookieJar): AuthStorage {
@@ -419,7 +419,7 @@ export function createServerAuth<Src extends UserSource>(
 		if (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
 			throw new AuthError(
 				"REFRESH_FAILED",
-				"The access token expired, and this cookie jar can't save a refreshed one; refresh first in middleware or a proxy, with prepare",
+				"The access token expired, and this cookie jar can't save a refreshed one; refresh first in middleware or a proxy, with refreshIfDue",
 			);
 		return Object.freeze({
 			sessionId: stored.id,
@@ -479,13 +479,13 @@ export function createServerAuth<Src extends UserSource>(
 				stored && Object.freeze({ sessionId: stored.id, user: stored.user })
 			);
 		},
-		async prepare(jar, prepareOptions = {}) {
-			writable(jar, "prepare");
-			const skew = prepareOptions.skew ?? DEFAULT_SKEW;
-			if (!Number.isFinite(skew) || skew < 0)
+		async refreshIfDue(jar, refreshOptions = {}) {
+			writable(jar, "refreshIfDue");
+			const within = refreshOptions.within ?? DEFAULT_WITHIN;
+			if (!Number.isFinite(within) || within < 0)
 				throw new AuthError(
 					"INVALID_OPTIONS",
-					"Pass skew as seconds, zero or more",
+					"within must be zero or more seconds",
 				);
 			const client = clientOf(jar);
 			const credentials = await client.credentials.get();
@@ -494,7 +494,7 @@ export function createServerAuth<Src extends UserSource>(
 				options.refresh &&
 				!refreshed.has(jar) &&
 				credentials.expiresAt !== undefined &&
-				credentials.expiresAt - Date.now() < skew * 1000
+				credentials.expiresAt - Date.now() < within * 1000
 			) {
 				try {
 					await client.refresh();

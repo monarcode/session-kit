@@ -13,7 +13,7 @@ export async function proxy(request: NextRequest) {
 	const response = NextResponse.next();
 	// The example's tokens live a minute: refresh in their last 15 seconds.
 	await serverAuth
-		.prepare(proxyJar(request, response), { skew: 15 })
+		.refreshIfDue(proxyJar(request, response), { within: 15 })
 		.catch(() => {});
 	return response;
 }

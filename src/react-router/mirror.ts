@@ -5,25 +5,6 @@ import type { Session } from "../core/types.js";
 import { useServerSession } from "../react/server-session.js";
 
 /**
- * What {@link useMirrorAuth} needs from the client it creates: any
- * `createMirrorAuth` client fits.
- *
- * @example
- * ```ts
- * import type { MirrorAuth } from "@monarcode/session-kit";
- * import type { ServerSessionClient } from "@monarcode/session-kit/react-router";
- *
- * type User = { id: number; firstName: string };
- * declare const auth: MirrorAuth<User>;
- *
- * export const client: ServerSessionClient<User> = auth;
- * ```
- *
- * @since 0.1.0
- */
-export type ServerSessionClient<U> = Pick<MirrorAuth<U>, "state" | "adopt">;
-
-/**
  * For framework mode with server rendering: creates the browser's client
  * once per mount from the session the root loader read on the server, and
  * keeps the two in step. When the loader brings another session, as after an
@@ -70,7 +51,7 @@ export type ServerSessionClient<U> = Pick<MirrorAuth<U>, "state" | "adopt">;
  *
  * @since 0.1.0
  */
-export function useMirrorAuth<U, C extends ServerSessionClient<U>>(
+export function useMirrorAuth<U, C extends MirrorAuth<U>>(
 	create: (session: Session<U> | null) => C,
 	session: Session<U> | null,
 ): C {

@@ -2,7 +2,7 @@ export { createServerAuth } from "./auth.js";
 
 export type { ClientCredentials } from "../core/mirror.js";
 export type {
-	PrepareOptions,
+	RefreshIfDueOptions,
 	ServerAuth,
 	ServerAuthOptions,
 	SessionCookieOptions,

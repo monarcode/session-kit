@@ -3,25 +3,6 @@ import { hydrateMirror, isMirror, type MirrorAuth } from "../core/mirror.js";
 import type { Session } from "../core/types.js";
 
 /**
- * What {@link sessionHydration} and {@link loadSession} need from a client:
- * any `createMirrorAuth` client fits.
- *
- * @example
- * ```ts
- * import type { MirrorAuth } from "@monarcode/session-kit";
- * import type { HydratedClient } from "@monarcode/session-kit/tanstack-start";
- *
- * type User = { id: number; firstName: string };
- * declare const auth: MirrorAuth<User>;
- *
- * export const client: HydratedClient<User> = auth;
- * ```
- *
- * @since 0.1.0
- */
-export type HydratedClient<U> = Pick<MirrorAuth<U>, "state" | "retry">;
-
-/**
  * The session as the server render hands it to the browser, from
  * {@link sessionHydration}'s `dehydrate`. It holds no tokens.
  *
@@ -91,7 +72,7 @@ export type DehydratedSession<U> = {
  *
  * @since 0.1.0
  */
-export function sessionHydration<U>(auth: HydratedClient<U>): {
+export function sessionHydration<U>(auth: MirrorAuth<U>): {
 	dehydrate: () => DehydratedSession<U>;
 	hydrate: (dehydrated: DehydratedSession<U>) => void;
 } {
@@ -145,9 +126,7 @@ const loaded = new WeakSet<object>();
  *
  * @since 0.1.0
  */
-export async function loadSession(
-	auth: HydratedClient<unknown>,
-): Promise<void> {
+export async function loadSession<U>(auth: MirrorAuth<U>): Promise<void> {
 	if (typeof document !== "undefined" && loaded.has(auth.state)) return;
 	await auth.retry();
 	loaded.add(auth.state);

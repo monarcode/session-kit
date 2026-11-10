@@ -144,7 +144,7 @@ import { serverAuth } from "./auth/server";
 const sessionMiddleware = createMiddleware({ type: "request" }).server(
   async ({ next }) => {
     // A failed refresh shows up when a route reads the session.
-    await serverAuth.prepare(startJar()).catch(() => {});
+    await serverAuth.refreshIfDue(startJar()).catch(() => {});
     return next();
   },
 );

@@ -48,7 +48,7 @@ import * as reactRouter from "../dist/react-router/index.js";
 import {
 	cookieJarMiddleware,
 	routerJar,
-	type RequestContext,
+	type RouterContextLike,
 } from "../dist/react-router/server.js";
 import { createAuthHooks } from "../dist/react/index.js";
 import { createServerAuth, type CookieJar } from "../dist/server/index.js";
@@ -521,6 +521,8 @@ const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
 hydration.hydrate(dehydrated);
 void loadSession(mirror);
 void loadSession(plainMirror);
+// @ts-expect-error Only a mirror client holds the server's session.
+void loadSession(auth);
 const startCookies: CookieJar = startJar();
 void startCookies;
 
@@ -547,9 +549,10 @@ const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
 void syncedUser;
 // @ts-expect-error The client must hold the server session's user.
 useMirrorAuth(() => plainMirror, initial);
+void useMirrorAuth(() => mirror, initial).signIn({ username: "emilys" });
 
 // React Router: the request's jar, its middleware, and the mirror hook.
-declare const requestContext: RequestContext;
+declare const requestContext: RouterContextLike;
 const loaderJar: CookieJar = routerJar(requestContext);
 void loaderJar;
 // @ts-expect-error routerJar takes the request's context, not its arguments.
@@ -574,3 +577,6 @@ const routerUser: z.output<typeof userSchema> | null =
 void routerUser;
 // @ts-expect-error The client must hold the server session's user.
 reactRouter.useMirrorAuth(() => plainMirror, initial);
+void reactRouter
+	.useMirrorAuth(() => mirror, initial)
+	.signIn({ username: "emilys" });

@@ -12,7 +12,7 @@ import {
 import {
 	cookieJarMiddleware,
 	routerJar,
-	type RequestContext,
+	type RouterContextLike,
 } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 
@@ -56,7 +56,7 @@ const tokens = (overrides: object = {}) => ({
 });
 
 /** A request's `context`, as React Router makes one per request. */
-const newContext = (): RequestContext => ({ get() {}, set() {} });
+const newContext = (): RouterContextLike => ({ get() {}, set() {} });
 
 /** The `Cookie` header a browser sends after `response`, without deleted cookies. */
 const cookieHeader = (response: Response) =>
@@ -236,11 +236,13 @@ function requestHandler() {
 				default: component,
 				middleware: [
 					cookieJarMiddleware,
-					async ({ context }: { context: RequestContext }) => {
-						await serverAuth.prepare(routerJar(context)).catch(() => {});
+					async ({ context }: { context: RouterContextLike }) => {
+						await serverAuth
+							.refreshIfDue(routerJar(context))
+							.catch(() => {});
 					},
 				],
-				loader: async ({ context }: { context: RequestContext }) => ({
+				loader: async ({ context }: { context: RouterContextLike }) => ({
 					session: await serverAuth.getSession(routerJar(context)),
 				}),
 			},
@@ -251,7 +253,7 @@ function requestHandler() {
 			path: "login",
 			module: {
 				default: component,
-				action: async ({ context }: { context: RequestContext }) => {
+				action: async ({ context }: { context: RouterContextLike }) => {
 					await serverAuth.signIn(routerJar(context), tokens());
 					throw reactRouter.redirect("/");
 				},
@@ -263,7 +265,7 @@ function requestHandler() {
 			module: {
 				default: component,
 				middleware: [
-					async ({ context }: { context: RequestContext }) => {
+					async ({ context }: { context: RouterContextLike }) => {
 						if (!(await serverAuth.getSession(routerJar(context))))
 							throw reactRouter.redirect("/login");
 					},
@@ -276,7 +278,7 @@ function requestHandler() {
 			index: true,
 			module: {
 				default: component,
-				loader: async ({ context }: { context: RequestContext }) =>
+				loader: async ({ context }: { context: RouterContextLike }) =>
 					(await serverAuth.credentials.get(routerJar(context)))
 						?.accessToken,
 			},
@@ -286,7 +288,7 @@ function requestHandler() {
 			parentId: "root",
 			path: "session",
 			module: {
-				loader: async ({ context }: { context: RequestContext }) =>
+				loader: async ({ context }: { context: RouterContextLike }) =>
 					Response.json(await serverAuth.getSession(routerJar(context))),
 			},
 		},
@@ -329,7 +331,7 @@ function requestHandler() {
 	);
 }
 
-/** Cookies for a session whose access expires within `prepare`'s skew. */
+/** Cookies for a session whose access expires within `refreshIfDue`'s window. */
 const expiring = async () =>
 	cookieHeader(
 		await handle("", (jar) =>

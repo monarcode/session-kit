@@ -120,7 +120,7 @@ test("a missing or short secret rejects every call, not the creation", async () 
 			code("INVALID_OPTIONS"),
 		);
 		await assert.rejects(
-			app.prepare(browser().request()),
+			app.refreshIfDue(browser().request()),
 			code("INVALID_OPTIONS"),
 		);
 		assert.deepEqual(tab.writes, []);
@@ -260,7 +260,7 @@ test("a read-only jar never refreshes: credentials reject, identity stays", asyn
 	for (const write of [
 		() => app.signIn(tab.request(false), tokens()),
 		() => app.signOut(tab.request(false)),
-		() => app.prepare(tab.request(false)),
+		() => app.refreshIfDue(tab.request(false)),
 		() => app.updateUser(tab.request(false), user),
 	])
 		await assert.rejects(write, code("INVALID_OPTIONS"));
@@ -328,7 +328,7 @@ test("a refresh token the backend rejects signs out every request that carries i
 	assert.equal(calls, 1);
 });
 
-test("prepare refreshes within the skew, and ignores a failure while access works", async (t) => {
+test("refreshIfDue refreshes within the window, and ignores a failure while access works", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	let fail = false;
 	let calls = 0;
@@ -342,10 +342,10 @@ test("prepare refreshes within the skew, and ignores a failure while access work
 	const tab = browser();
 	const session = await app.signIn(tab.request(), tokens());
 
-	assert.deepEqual(await app.prepare(tab.request()), session);
+	assert.deepEqual(await app.refreshIfDue(tab.request()), session);
 	assert.equal(calls, 0);
 	t.mock.timers.tick(850_000);
-	assert.deepEqual(await app.prepare(tab.request()), session);
+	assert.deepEqual(await app.refreshIfDue(tab.request()), session);
 	assert.equal(calls, 1);
 	assert.equal(
 		(await app.credentials.get(tab.request(false)))?.accessToken,
@@ -354,12 +354,15 @@ test("prepare refreshes within the skew, and ignores a failure while access work
 
 	fail = true;
 	t.mock.timers.tick(850_000);
-	assert.deepEqual(await app.prepare(tab.request()), session);
+	assert.deepEqual(await app.refreshIfDue(tab.request()), session);
 	assert.equal(calls, 2);
 	t.mock.timers.tick(60_000);
-	await assert.rejects(app.prepare(tab.request()), code("REFRESH_FAILED"));
 	await assert.rejects(
-		app.prepare(tab.request(), { skew: -1 }),
+		app.refreshIfDue(tab.request()),
+		code("REFRESH_FAILED"),
+	);
+	await assert.rejects(
+		app.refreshIfDue(tab.request(), { within: -1 }),
 		code("INVALID_OPTIONS"),
 	);
 });
@@ -550,7 +553,7 @@ test("another request's refresh serves an old cookie for ten seconds only", asyn
 	assert.equal(calls, 2);
 });
 
-test("prepare refreshes once per request, even for short-lived tokens", async (t) => {
+test("refreshIfDue refreshes once per request, even for short-lived tokens", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	let calls = 0;
 	const app = server({
@@ -562,6 +565,6 @@ test("prepare refreshes once per request, even for short-lived tokens", async (t
 	const tab = browser();
 	await app.signIn(tab.request(), tokens({ expiresIn: 30 }));
 	t.mock.timers.tick(31_000);
-	await app.prepare(tab.request());
+	await app.refreshIfDue(tab.request());
 	assert.equal(calls, 1);
 });

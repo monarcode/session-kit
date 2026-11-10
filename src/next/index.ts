@@ -162,7 +162,7 @@ const proxyJars = new WeakMap<object, CookieJar>();
 
 /**
  * The {@link CookieJar} of a request in Next's Proxy (`proxy.ts`), for
- * `serverAuth.prepare`: it reads `request`'s cookies and sets them on
+ * `serverAuth.refreshIfDue`: it reads `request`'s cookies and sets them on
  * `response`. Next passes cookies set there to the Server Components that
  * render the same request on the Node.js runtime, the default, so refreshing
  * in Proxy keeps the access token current for {@link nextJar}'s read-only
@@ -181,7 +181,7 @@ const proxyJars = new WeakMap<object, CookieJar>();
  *
  * export async function proxy(request: NextRequest) {
  * 	const response = NextResponse.next();
- * 	await serverAuth.prepare(proxyJar(request, response)).catch(() => {});
+ * 	await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
  * 	return response;
  * }
  * ```

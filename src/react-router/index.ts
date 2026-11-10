@@ -7,6 +7,5 @@ export type {
 	RedirectIfSignedInOptions,
 	RequireSessionOptions,
 } from "./guards.js";
-export type { ServerSessionClient } from "./mirror.js";
 export type { SessionOutletProps } from "./outlet.js";
 export type { UnavailableProps } from "../react/context.js";

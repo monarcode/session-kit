@@ -124,7 +124,7 @@ const refreshSession: MiddlewareFunction<Response> = async (
   next,
 ) => {
   // A failed refresh shows up when a loader reads the session.
-  await serverAuth.prepare(routerJar(context)).catch(() => {});
+  await serverAuth.refreshIfDue(routerJar(context)).catch(() => {});
   const response = await next();
   // A copy: some responses, such as `fetch`'s, can't change their headers.
   const page = new Response(response.body, response);
@@ -450,7 +450,7 @@ this.
 - **Refresh in middleware.** The jar sets cookies until the response leaves
   `cookieJarMiddleware`. A loader's deferred data that resolves while the
   page streams gets a read-only jar: an expired token then rejects with
-  `REFRESH_FAILED`, since the jar can't save a new one. `prepare` in
+  `REFRESH_FAILED`, since the jar can't save a new one. `refreshIfDue` in
   middleware refreshes before that.
 - **One jar per request.** `routerJar` returns the same jar for every call
   with the same `context`, which React Router makes per request. If you

@@ -132,7 +132,7 @@ test("proxyJar refreshes in Proxy, and Next passes the new cookie to the render"
 	const signedIn = NextResponse.next();
 	await serverAuth.signIn(
 		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
-		// Expires within `prepare`'s default skew.
+		// Expires within `refreshIfDue`'s default window.
 		tokens({ expiresIn: 30 }),
 	);
 
@@ -142,7 +142,7 @@ test("proxyJar refreshes in Proxy, and Next passes the new cookie to the render"
 	const jar = proxyJar(request, response);
 	assert.equal(proxyJar(request, response), jar);
 	assert.equal(jar.writable, true);
-	await serverAuth.prepare(jar);
+	await serverAuth.refreshIfDue(jar);
 	assert.equal(refreshes, 1);
 	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
 	// What Next merges into `cookies()` for the Server Components.
@@ -159,7 +159,7 @@ test("proxyJar refreshes in Proxy, and Next passes the new cookie to the render"
 
 test("proxyJar sets no cookie for a signed-out request", async () => {
 	const response = NextResponse.next();
-	await serverAuth.prepare(proxyJar(nextRequest(), response));
+	await serverAuth.refreshIfDue(proxyJar(nextRequest(), response));
 	assert.deepEqual(response.headers.getSetCookie(), []);
 });
 

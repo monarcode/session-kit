@@ -156,7 +156,9 @@ test("sessionHydration carries the session without running guards again", async 
 	});
 	for (const loaded of [true, false])
 		assert.throws(
-			() => sessionHydration(client).hydrate({ loaded, session: null }),
+			() =>
+				// @ts-expect-error The types refuse it too, but JavaScript doesn't.
+				sessionHydration(client).hydrate({ loaded, session: null }),
 			code("INVALID_OPTIONS"),
 		);
 });

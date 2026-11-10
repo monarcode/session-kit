@@ -27,7 +27,7 @@ const jars = new WeakMap<Request, CookieJar>();
  * run on the server. Every call during one request returns the same jar.
  * Start applies its cookies to the response, including a redirect's, but not
  * once it has started streaming a page: a cookie set after that is lost, so
- * refresh before rendering with `serverAuth.prepare` in request middleware.
+ * refresh before rendering with `serverAuth.refreshIfDue` in request middleware.
  * Throws `INVALID_OPTIONS` outside a request, such as in the browser.
  *
  * Import it only from server code, such as a server function's handler:

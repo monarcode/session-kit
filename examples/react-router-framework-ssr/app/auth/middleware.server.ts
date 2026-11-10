@@ -17,7 +17,9 @@ const refreshSession: MiddlewareFunction<Response> = async (
 	next,
 ) => {
 	// The example's tokens live a minute: refresh in their last 15 seconds.
-	await serverAuth.prepare(routerJar(context), { skew: 15 }).catch(() => {});
+	await serverAuth
+		.refreshIfDue(routerJar(context), { within: 15 })
+		.catch(() => {});
 	const response = await next();
 	// Every page and resource route here depends on who is signed in. A
 	// copy: some responses, such as `fetch`'s, can't change their headers.
