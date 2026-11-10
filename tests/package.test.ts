@@ -20,7 +20,12 @@ import {
 	requireSession as requireLoaderSession,
 	SessionOutlet as RouterSessionOutlet,
 	useAuthRevalidation,
+	useMirrorAuth as useRouterMirrorAuth,
 } from "@monarcode/session-kit/react-router";
+import {
+	cookieJarMiddleware,
+	routerJar,
+} from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 import {
 	connectAuth,
@@ -60,6 +65,9 @@ test("all public entry points import without browser globals", () => {
 		requireLoaderSession,
 		RouterSessionOutlet,
 		useAuthRevalidation,
+		useRouterMirrorAuth,
+		cookieJarMiddleware,
+		routerJar,
 		createAuthFetch,
 		Auth,
 		AuthFailure,
@@ -102,6 +110,14 @@ test("only the Next client entry imports next, an optional peer, as a client mod
 	}
 	const client = await readFile(new URL("next/client.js", dist), "utf8");
 	assert.match(client, /^"use client";/, "next/client.js is a client module");
+});
+
+test("the React Router server entry imports no react-router, so any version loads it", async () => {
+	const code = await readFile(
+		new URL("dist/react-router/server.js", packageRoot),
+		"utf8",
+	);
+	assert.doesNotMatch(code, /^\s*import\b[^;]*from\s*"react-router[/"]/m);
 });
 
 test("each entry exports readable JavaScript and declarations", async () => {

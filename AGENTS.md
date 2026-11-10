@@ -2,13 +2,13 @@
 
 `@monarcode/session-kit`: schema-driven auth state and sessions for React,
 with TanStack Router, React Router and Expo Router adapters, and sessions
-kept on the server for TanStack Start and Next.js. It stores the tokens an
+kept on the server for TanStack Start, Next.js and React Router. It stores the tokens an
 app's backend issues and manages the session around them (restoring,
 refreshing, expiring, locking, syncing tabs); it never signs users in.
 Consumers import from the root and from subpaths:
 `import { createAuth, webStorage } from "@monarcode/session-kit"`, plus
-`./react`, `./tanstack-router`, `./react-router`, `./http`, `./expo`,
-`./effect`, `./effetch`, `./server`, `./tanstack-start`,
+`./react`, `./tanstack-router`, `./react-router`, `./react-router/server`,
+`./http`, `./expo`, `./effect`, `./effetch`, `./server`, `./tanstack-start`,
 `./tanstack-start/server`, `./next` and `./next/client`.
 
 ## Start here

@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
 
 import { useRouter } from "next/navigation.js";
 
 import type { MirrorAuth } from "../core/mirror.js";
-import { watchVersion } from "../core/revalidate.js";
 import type { Session } from "../core/types.js";
-import { sameUser } from "../core/user.js";
+import { useServerSession } from "../react/server-session.js";
 
 /**
  * What {@link useMirrorAuth} needs from the client it creates: any
@@ -76,48 +75,7 @@ export function useMirrorAuth<U, C extends ServerSessionClient<U>>(
 	create: (session: Session<U> | null) => C,
 	session: Session<U> | null,
 ): C {
-	const [auth] = useState(() => create(session));
 	const router = useRouter();
-	const latestRouter = useRef(router);
-	// The session the server last rendered, which the client follows.
-	const rendered = useRef(session);
-	useEffect(
-		function trackRouter() {
-			latestRouter.current = router;
-		},
-		[router],
-	);
-	useEffect(
-		function followServer() {
-			const previous = rendered.current;
-			rendered.current = session;
-			// Only a change: a render begun before a change in the browser
-			// mustn't undo it.
-			if (!sameSession(previous, session)) auth.adopt(session);
-		},
-		[auth, session],
-	);
-	useEffect(
-		function refreshOnChange() {
-			const unwatch = watchVersion(auth, () => {
-				const { sessionId, user } = auth.state.get();
-				const current = sessionId === null ? null : { sessionId, user };
-				if (!sameSession(current, rendered.current))
-					latestRouter.current.refresh();
-			});
-			return function stopRefreshing() {
-				unwatch();
-			};
-		},
-		[auth],
-	);
-	return auth;
-}
-
-function sameSession(
-	a: { sessionId: string; user: unknown } | null,
-	b: { sessionId: string; user: unknown } | null,
-): boolean {
-	if (a === null || b === null) return a === b;
-	return a.sessionId === b.sessionId && sameUser(a.user, b.user);
+	const refresh = useCallback(() => router.refresh(), [router]);
+	return useServerSession(create, session, refresh);
 }

@@ -54,6 +54,10 @@
 			"types": "./dist/react-router/index.d.ts",
 			"import": "./dist/react-router/index.js"
 		},
+		"./react-router/server": {
+			"types": "./dist/react-router/server.d.ts",
+			"import": "./dist/react-router/server.js"
+		},
 		"./http": {
 			"types": "./dist/http/index.d.ts",
 			"import": "./dist/http/index.js"

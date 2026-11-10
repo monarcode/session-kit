@@ -41,6 +41,16 @@
   has `useMirrorAuth`, which creates the browser client from the session the
   layout read and keeps the two in step. `next` 16 is a new optional peer
   dependency.
+- React Router framework mode with server rendering, guided by
+  `docs/react-router-ssr.md` and shown in
+  `examples/react-router-framework-ssr`.
+  `@monarcode/session-kit/react-router/server` has `cookieJarMiddleware`,
+  root middleware that gives each request a cookie jar and sets its cookies
+  on the response, and `routerJar(context)`, which finds that jar in
+  middleware, loaders and actions. `@monarcode/session-kit/react-router` has
+  `useMirrorAuth`, which creates the browser client from the session the root
+  loader read and keeps the two in step. It needs React Router's middleware:
+  React Router 8, or 7.9 and later with `future.v8_middleware`.
 
 ### Changed
 

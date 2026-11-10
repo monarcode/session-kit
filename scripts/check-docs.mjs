@@ -150,13 +150,22 @@ const documents = [
 		// Next apps resolve like a bundler: `next` has no `exports`.
 		resolutions: ["Bundler"],
 		// The App Router runs React 19, and the guide uses its APIs.
-		react: 19,
+		requires: { "@types/react": "19.0" },
 		dom: true,
 		fixtures: {
 			"env.d.ts": SERVER_ENV,
 			// What `next build` generates: Next's global types, such as `server-only`.
 			"next-env.d.ts": '/// <reference types="next" />',
 		},
+	},
+	{
+		path: "docs/react-router-ssr.md",
+		// React Router's Vite plugin resolves like a bundler.
+		resolutions: ["Bundler"],
+		// The guide's code is React Router 8's, with the `url` argument.
+		requires: { "react-router": "8.0" },
+		dom: true,
+		fixtures: { "app/env.d.ts": SERVER_ENV },
 	},
 	{
 		path: "docs/effect.md",
@@ -172,6 +181,7 @@ const entries = [
 	"react/index",
 	"tanstack-router/index",
 	"react-router/index",
+	"react-router/server",
 	"http/index",
 	"server/index",
 	"tanstack-start/index",
@@ -355,12 +365,15 @@ function extractJsdocExamples(program) {
 
 /**
  * Compiles a document's marked examples, with its fixtures, as one app.
- * Returns `false` for a document skipped because React's types are too old.
+ * Returns `false` for a document skipped because a package it needs is older
+ * than it requires.
  */
-function checkDocument({ path, resolutions, dom, fixtures, react }) {
-	if (react && reactTypesMajor() < react) {
-		console.log(`- ${path} skipped: it needs React ${react}'s types`);
-		return false;
+function checkDocument({ path, resolutions, dom, fixtures, requires = {} }) {
+	for (const [name, minimum] of Object.entries(requires)) {
+		if (!installedAtLeast(name, minimum)) {
+			console.log(`- ${path} skipped: it needs ${name} ${minimum} or later`);
+			return false;
+		}
 	}
 	const text = readFileSync(join(root, path), "utf8");
 	const files = [];
@@ -458,13 +471,15 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 	}
 }
 
-/** The major version of the installed `@types/react`. */
-function reactTypesMajor() {
+/** Whether the installed `name` is at least `minimum`, as `major.minor`. */
+function installedAtLeast(name, minimum) {
 	const manifest = readFileSync(
-		join(root, "node_modules", "@types", "react", "package.json"),
+		join(root, "node_modules", name, "package.json"),
 		"utf8",
 	);
-	return Number(JSON.parse(manifest).version.split(".")[0]);
+	const [major, minor] = JSON.parse(manifest).version.split(".").map(Number);
+	const [wantMajor, wantMinor] = minimum.split(".").map(Number);
+	return major > wantMajor || (major === wantMajor && minor >= wantMinor);
 }
 
 function compilerOptions(resolution, dom) {

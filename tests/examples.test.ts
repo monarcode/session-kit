@@ -38,6 +38,7 @@ const copies = {
 	"the DummyJSON address": [
 		"tanstack-start-ssr/src/auth/api.ts",
 		"next-app/lib/auth/api.ts",
+		"react-router-framework-ssr/app/auth/api.ts",
 	],
 	"auth with the user from the access token": [
 		"tanstack-start-spa/src/auth.ts",

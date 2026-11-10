@@ -45,6 +45,11 @@ import {
 import { useMirrorAuth } from "../dist/next/client.js";
 import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
+import {
+	cookieJarMiddleware,
+	routerJar,
+	type RequestContext,
+} from "../dist/react-router/server.js";
 import { createAuthHooks } from "../dist/react/index.js";
 import { createServerAuth, type CookieJar } from "../dist/server/index.js";
 import {
@@ -542,3 +547,30 @@ const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
 void syncedUser;
 // @ts-expect-error The client must hold the server session's user.
 useMirrorAuth(() => plainMirror, initial);
+
+// React Router: the request's jar, its middleware, and the mirror hook.
+declare const requestContext: RequestContext;
+const loaderJar: CookieJar = routerJar(requestContext);
+void loaderJar;
+// @ts-expect-error routerJar takes the request's context, not its arguments.
+routerJar({ request: new Request("https://app.test/") });
+const withCookies: Promise<Response> = cookieJarMiddleware(
+	{ request: new Request("https://app.test/"), context: requestContext },
+	async () => new Response(null),
+);
+void withCookies;
+const routerSynced = reactRouter.useMirrorAuth(
+	(session) =>
+		createMirrorAuth({
+			name: "type-test",
+			session,
+			revalidate: async () => session,
+			signOut: async () => {},
+		}),
+	initial,
+);
+const routerUser: z.output<typeof userSchema> | null =
+	routerSynced.state.get().user;
+void routerUser;
+// @ts-expect-error The client must hold the server session's user.
+reactRouter.useMirrorAuth(() => plainMirror, initial);
