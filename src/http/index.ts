@@ -118,38 +118,41 @@ export function createAuthFetch(
 				"Authenticated requests must stay on the configured API origin",
 			);
 		}
-		const captured = await auth.credentials.get();
-
-		if (!captured && !optional)
-			throw new AuthError("UNAUTHENTICATED", "Sign in is required");
 		const request = new Request(url, init);
 		const canReplay = request.method === "GET" || request.method === "HEAD";
 
-		/** Sends `request` with `session`'s token, or without one when signed out. */
-		const send = async (session: Credentials | null) => {
-			// Signed out, a sign-in during the request also counts as a change:
-			// its 401 must not reach a handler that would sign the new account out.
-			const current = () =>
-				session
-					? auth.isCurrent(session)
-					: auth.state.get().sessionId === null;
-			if (!current()) throw sessionChanged();
+		const send = async (session: Credentials) => {
+			if (!auth.isCurrent(session)) throw sessionChanged();
 			const headers = new Headers(request.headers);
-			if (session)
-				headers.set("Authorization", `Bearer ${session.accessToken}`);
+			headers.set("Authorization", `Bearer ${session.accessToken}`);
 			const response = await fetch(
 				new Request(request, { headers, redirect: "error" }),
 			);
-			if (!current()) {
+			if (!auth.isCurrent(session)) {
 				await discard(response);
 				throw sessionChanged();
 			}
 			return response;
 		};
 
+		const captured = await auth.credentials.get();
+		if (!captured) {
+			if (!optional)
+				throw new AuthError("UNAUTHENTICATED", "Sign in is required");
+			const response = await fetch(
+				new Request(request, { redirect: "error" }),
+			);
+			// A 401 for the signed-out request must not reach a 401 handler that
+			// would then sign out the account that just signed in.
+			if (auth.state.get().sessionId !== null) {
+				await discard(response);
+				throw sessionChanged();
+			}
+			return response;
+		}
 		const response = await send(captured);
 
-		if (!captured || response.status !== 401) return response;
+		if (response.status !== 401) return response;
 
 		let fresh: Credentials | null;
 		try {
