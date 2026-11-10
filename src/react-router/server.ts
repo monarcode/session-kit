@@ -1,5 +1,9 @@
 import { AuthError } from "../core/errors.js";
-import type { CookieJar, CookieOptions } from "../server/cookies.js";
+import {
+	refreshesSettled,
+	type CookieJar,
+	type CookieOptions,
+} from "../server/cookies.js";
 
 /**
  * The shape of the `context` React Router passes to server middleware,
@@ -121,9 +125,11 @@ function withCookies(response: Response, lines: string[]): Response {
  * `middleware`, so it wraps the rest. Needs React Router's middleware: React
  * Router 8, or 7.9 and later with `future.v8_middleware`.
  *
- * The jar can set cookies until the response leaves the middleware. After
+ * The jar can set cookies until the response leaves the middleware, which
+ * first waits for a refresh under way, so its new tokens are saved. After
  * that, as while a loader's deferred data streams, it is read-only: nothing
- * is refreshed or saved, so refresh before rendering with
+ * is saved, and a call that needs a refresh rejects with `REFRESH_FAILED`,
+ * leaving the cookie as it was. Refresh before rendering with
  * `serverAuth.refreshIfDue` in middleware.
  *
  * @example
@@ -162,6 +168,7 @@ export async function cookieJarMiddleware(
 	try {
 		response = await next();
 	} finally {
+		await refreshesSettled(cookies.jar);
 		cookies.committed = true;
 	}
 	return cookies.written.size === 0

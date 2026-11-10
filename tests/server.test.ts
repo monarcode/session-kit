@@ -553,6 +553,31 @@ test("another request's refresh serves an old cookie for ten seconds only", asyn
 	assert.equal(calls, 2);
 });
 
+test("a jar that turns read-only during a refresh leaves the session to other requests", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let calls = 0;
+	let sending: { writable: boolean } | undefined;
+	const app = server({
+		refresh: async () => {
+			calls++;
+			// The response leaves while the backend answers.
+			if (sending) sending.writable = false;
+			return { accessToken: `access-${calls + 1}`, expiresIn: 900 };
+		},
+	});
+	const tab = browser();
+	const session = await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+	const jar = { ...tab.request(), writable: true as boolean };
+	sending = jar;
+	await assert.rejects(app.credentials.get(jar));
+	sending = undefined;
+	assert.equal(tab.writes.length, 1);
+
+	assert.deepEqual(await app.getSession(tab.request()), session);
+	assert.equal(calls, 2);
+});
+
 test("refreshIfDue refreshes once per request, even for short-lived tokens", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	let calls = 0;

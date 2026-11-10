@@ -6,6 +6,7 @@ import * as reactRouter from "react-router";
 
 import {
 	createMirrorAuth,
+	type Credentials,
 	type MirrorAuth,
 	type Session,
 } from "@monarcode/session-kit";
@@ -22,7 +23,10 @@ import { code, deferred, user, userSchema } from "./helpers.ts";
 type User = typeof user;
 
 let refreshes = 0;
-/** What the backend answers a refresh with: `null` once it refuses the token. */
+/**
+ * What the backend answers a refresh with: `null` once it refuses the token,
+ * or a promise while it hasn't answered yet.
+ */
 let refreshAnswer: object | null = {
 	accessToken: "access-2",
 	refreshToken: "refresh-2",
@@ -173,6 +177,62 @@ test("the jar is read-only once the response leaves the middleware", async (t) =
 	);
 	assert.equal(refreshes, 0);
 	assert.deepEqual(response.headers.getSetCookie(), []);
+});
+
+test("the response waits for a refresh under way, so its tokens are saved", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const signedIn = await handle("", (jar) => serverAuth.signIn(jar, tokens()));
+	t.mock.timers.tick(901_000);
+	const backend = deferred<object>();
+	refreshAnswer = backend.promise;
+	let streamed!: Promise<Credentials | null>;
+	let sent = false;
+	const responded = handle(cookieHeader(signedIn), async (jar) => {
+		// Deferred data whose refresh is under way when the page is ready.
+		streamed = serverAuth.credentials.get(jar);
+		while (refreshes === 0) await new Promise(setImmediate);
+	}).then((response) => {
+		sent = true;
+		return response;
+	});
+	await new Promise(setImmediate);
+	assert.equal(sent, false);
+	backend.resolve({
+		accessToken: "access-2",
+		refreshToken: "refresh-2",
+		expiresIn: 900,
+	});
+	const response = await responded;
+	assert.equal((await streamed)?.accessToken, "access-2");
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	await handle(cookieHeader(response), async (jar) => {
+		assert.equal(
+			(await serverAuth.credentials.get(jar))?.accessToken,
+			"access-2",
+		);
+	});
+	assert.equal(refreshes, 1);
+});
+
+test("a refresh that would start after the response left is refused, keeping the session", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const signedIn = await handle("", (jar) => serverAuth.signIn(jar, tokens()));
+	t.mock.timers.tick(901_000);
+	let streamed!: Promise<Credentials | null>;
+	const response = await handle(cookieHeader(signedIn), async (jar) => {
+		// Deferred data that reads the cookie only after the page is ready.
+		streamed = serverAuth.credentials.get(jar);
+	});
+	await assert.rejects(streamed, code("REFRESH_FAILED"));
+	assert.equal(refreshes, 0);
+	assert.deepEqual(response.headers.getSetCookie(), []);
+	await handle(cookieHeader(signedIn), async (jar) => {
+		assert.equal(
+			(await serverAuth.credentials.get(jar))?.accessToken,
+			"access-2",
+		);
+	});
+	assert.equal(refreshes, 1);
 });
 
 test("cookieJarMiddleware copies a response whose headers are immutable", async () => {

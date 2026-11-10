@@ -448,8 +448,9 @@ this.
 ## Things to know
 
 - **Refresh in middleware.** The jar sets cookies until the response leaves
-  `cookieJarMiddleware`. A loader's deferred data that resolves while the
-  page streams gets a read-only jar: an expired token then rejects with
+  `cookieJarMiddleware`, which first waits for a refresh under way. A
+  loader's deferred data that reads the session later, while the page
+  streams, gets a read-only jar: an expired token then rejects with
   `REFRESH_FAILED`, since the jar can't save a new one. `refreshIfDue` in
   middleware refreshes before that.
 - **One jar per request.** `routerJar` returns the same jar for every call

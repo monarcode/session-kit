@@ -113,6 +113,16 @@ function identify(
 
 type Reused = { text: string | null; until: number };
 
+// Refreshes under way on each jar, which an adapter waits for before its jar
+// stops setting cookies.
+const refreshing = new WeakMap<CookieJar, Set<Promise<unknown>>>();
+
+/** Resolves once no refresh is under way on `jar`, counting those begun meanwhile. */
+export async function refreshesSettled(jar: CookieJar): Promise<void> {
+	const pending = refreshing.get(jar);
+	while (pending?.size) await Promise.allSettled(pending);
+}
+
 /**
  * What one server auth shares across the requests it handles: a lock per
  * session, so one request at a time spends its refresh token, and each
@@ -312,14 +322,35 @@ export function jarStorage(input: {
 		async remove() {
 			await load();
 			const previous = identify(text);
-			// Nothing to delete, or a read-only jar: the next writable request deletes it.
-			if (jar.writable && (jar.get(cookie) !== undefined || text !== null))
-				write(null, 0);
+			const held = text;
 			remember(null);
+			// A read-only jar keeps the cookie, so other requests mustn't take the
+			// session as ended.
+			if (!jar.writable) return;
+			if (jar.get(cookie) !== undefined || held !== null) write(null, 0);
 			if (previous) shared.saved(previous, null);
 		},
-		lock: (_name, signal, work) =>
-			session ? shared.exclusive(session.id, signal, work) : work(),
+		lock(_name, signal, work) {
+			const run = async () => {
+				// The new tokens couldn't be saved, and the backend may have spent the
+				// refresh token the cookie holds.
+				if (!jar.writable)
+					throw new AuthError(
+						"REFRESH_FAILED",
+						"This cookie jar can't set cookies any more, so the session isn't refreshed here",
+					);
+				return work();
+			};
+			const held = session
+				? shared.exclusive(session.id, signal, run)
+				: run();
+			const pending = refreshing.get(jar) ?? new Set();
+			refreshing.set(jar, pending);
+			pending.add(held);
+			const forget = () => pending.delete(held);
+			held.then(forget, forget);
+			return held;
+		},
 	};
 }
 
