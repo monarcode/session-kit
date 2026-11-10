@@ -175,24 +175,66 @@ const documents = [
 	},
 ];
 
-/** The entry point of each subpath, whose exports are the public API. */
-const entries = [
-	"index",
-	"react/index",
-	"tanstack-router/index",
-	"react-router/index",
-	"react-router/server",
-	"http/index",
-	"server/index",
-	"tanstack-start/index",
-	"tanstack-start/server",
-	"next/index",
-	"expo/index",
-	"effect/index",
-	"effetch/index",
-];
+/**
+ * How each subpath's JSDoc examples compile, where it differs from the
+ * default: under NodeNext and Bundler resolution, with DOM types.
+ */
+const subpathOptions = {
+	// The Expo adapter runs where there's no DOM.
+	"./expo": { dom: false },
+	// Next apps resolve like a bundler: `next` has no `exports`, so
+	// `next/headers` resolves only that way.
+	"./next": { bundlerOnly: true },
+};
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+
+/**
+ * Each subpath in `package.json`'s `exports`: its published declarations,
+ * and its entry point in `src`, whose exports are the public API.
+ */
+const subpaths = Object.entries(
+	JSON.parse(readFileSync(join(root, "package.json"), "utf8")).exports,
+)
+	.filter(([name]) => name !== "./package.json")
+	.map(([name, entry]) => {
+		const types = join(root, entry.types);
+		const source = join(
+			root,
+			"src",
+			relative(join(root, "dist"), types).replace(/\.d\.ts$/, ".ts"),
+		);
+		return {
+			name,
+			types,
+			source,
+			directory: join(source, "..") + sep,
+			dom: true,
+			bundlerOnly: false,
+			...subpathOptions[name],
+		};
+	});
+for (const name of Object.keys(subpathOptions))
+	if (!subpaths.some((subpath) => subpath.name === name))
+		throw new Error(
+			`subpathOptions names ${name}, which package.json doesn't export`,
+		);
+
+/**
+ * The subpath a source file belongs to: the one whose directory holds it
+ * most closely, so `src/core` belongs to the root.
+ */
+function subpathOf(fileName) {
+	let best;
+	for (const subpath of subpaths)
+		if (
+			fileName.startsWith(subpath.directory) &&
+			(!best || subpath.directory.length > best.directory.length)
+		)
+			best = subpath;
+	return best;
+}
+
 // Examples import the package by name, which resolves to `dist` through its
 // `exports` only from inside the package, so they compile under it.
 const scratch = join(root, "tests", ".docs-check");
@@ -201,7 +243,7 @@ const problems = [];
 const parsedFiles = new Map();
 
 const sourceProgram = ts.createProgram(
-	entries.map((entry) => join(root, "src", `${entry}.ts`)),
+	subpaths.map((subpath) => subpath.source),
 	{ ...readCompilerOptions(), noEmit: true },
 );
 const exportCount = checkExportDocs(sourceProgram);
@@ -297,9 +339,9 @@ function checkExportDocs(program) {
 		node.body !== undefined &&
 		checker.getSymbolAtLocation(node.name)?.declarations?.length > 1;
 	const seen = new Set();
-	for (const entry of entries) {
+	for (const subpath of subpaths) {
 		const moduleSymbol = checker.getSymbolAtLocation(
-			program.getSourceFile(join(root, "src", `${entry}.ts`)),
+			program.getSourceFile(subpath.source),
 		);
 		for (const exported of checker.getExportsOfModule(moduleSymbol)) {
 			const symbol =
@@ -331,7 +373,7 @@ function extractJsdocExamples(program) {
 		.filter((file) => file.fileName.startsWith(join(root, "src") + sep));
 	for (const source of sources) {
 		const text = source.text;
-		const subpath = relative(join(root, "src"), source.fileName);
+		const { dom, bundlerOnly } = subpathOf(source.fileName);
 		for (const comment of text.matchAll(/\/\*\*[\s\S]*?\*\//g)) {
 			const firstLine = text.slice(0, comment.index).split("\n").length;
 			let block;
@@ -345,11 +387,8 @@ function extractJsdocExamples(program) {
 							origin: source.fileName,
 							line: firstLine + index + 1,
 							path: `example-${examples.length}.${open[1]}`,
-							// The Expo adapter runs where there's no DOM.
-							dom: !subpath.startsWith(`expo${sep}`),
-							// Next apps resolve like a bundler: `next` has no `exports`,
-							// so `next/headers` resolves only that way.
-							bundlerOnly: subpath.startsWith(`next${sep}`),
+							dom,
+							bundlerOnly,
 							code: [],
 						};
 					} else if (block && line.trim() === "```") {
@@ -541,7 +580,7 @@ function virtualHost(options, virtual) {
  */
 function checkLinks() {
 	const program = ts.createProgram(
-		entries.map((entry) => join(root, "dist", `${entry}.d.ts`)),
+		subpaths.map((subpath) => subpath.types),
 		{ ...readCompilerOptions(), noEmit: true },
 	);
 	const checker = program.getTypeChecker();
