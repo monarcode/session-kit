@@ -3,7 +3,17 @@
 [![npm](https://img.shields.io/npm/v/@monarcode/session-kit)](https://www.npmjs.com/package/@monarcode/session-kit)
 [![CI](https://github.com/monarcode/session-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/monarcode/session-kit/actions/workflows/ci.yml)
 [![bundle size](https://deno.bundlejs.com/badge?q=@monarcode/session-kit)](https://bundlejs.com/?q=@monarcode/session-kit)
+[![tree-shakeable](https://img.shields.io/badge/tree--shakeable-yes-brightgreen)](https://bundlejs.com/?q=@monarcode/session-kit&treeshake=%5B%7BcreateAuth%2CwebStorage%7D%5D)
+[![provenance](https://img.shields.io/badge/provenance-verified-brightgreen?logo=npm)](https://www.npmjs.com/package/@monarcode/session-kit#provenance)
 [![license](https://img.shields.io/npm/l/@monarcode/session-kit)](./LICENSE)
+
+[![React](https://img.shields.io/badge/React-20232a?logo=react&logoColor=61dafb)](#getting-started)
+[![TanStack Router](https://img.shields.io/badge/TanStack%20Router-20232a?logo=tanstack&logoColor=white)](./docs/tanstack-router.md)
+[![TanStack Start](https://img.shields.io/badge/TanStack%20Start-20232a?logo=tanstack&logoColor=white)](./docs/tanstack-start.md)
+[![React Router](https://img.shields.io/badge/React%20Router-20232a?logo=reactrouter&logoColor=ca4245)](./docs/react-router.md)
+[![Next.js](https://img.shields.io/badge/Next.js-20232a?logo=nextdotjs&logoColor=white)](./docs/next.md)
+[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](./docs/expo.md)
+[![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](./docs/effect.md)
 
 **Your backend signs users in. session-kit handles everything after.**
 
@@ -38,7 +48,8 @@ server with TanStack Start, Next.js, and React Router, and comes with an
   - [5. Call your API](#5-call-your-api)
   - [6. Protect your routes](#6-protect-your-routes)
 - [TanStack Router](#tanstack-router)
-- [Other setups](#other-setups)
+- [React Router](#react-router)
+- [Expo Router](#expo-router)
 - [Server rendering](#server-rendering)
 - [Effect and effetch](#effect-and-effetch)
 - [Using the client](#using-the-client)
@@ -274,21 +285,22 @@ uses. [Compatibility](#compatibility) lists the supported versions.
 
 ## Pick your setup
 
-Each setup has a runnable app in [`examples/`](./examples), all signing in
-against DummyJSON's public test API.
+Each setup has a guide, summarized further down this page, and a runnable app
+in [`examples/`](./examples) that signs in against DummyJSON's public test
+API.
 
-| Setup                                      | Import                                   | Guide                                      | Example app                                                           |
-| ------------------------------------------ | ---------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------- |
-| React without a router                     | `@monarcode/session-kit/react`           | [Getting started](#getting-started)        | None                                                                  |
-| TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [TanStack Router](#tanstack-router)        | [`tanstack-router`](./examples/tanstack-router)                       |
-| TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [Other setups](#other-setups)              | [`tanstack-start-spa`](./examples/tanstack-start-spa)                 |
-| TanStack Start with server rendering       | `@monarcode/session-kit/tanstack-start`  | [TanStack Start](./docs/tanstack-start.md) | [`tanstack-start-ssr`](./examples/tanstack-start-ssr)                 |
-| React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-declarative`](./examples/react-router-declarative)     |
-| React Router, data mode                    | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-data`](./examples/react-router-data)                   |
-| React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [Other setups](#other-setups)              | [`react-router-framework-spa`](./examples/react-router-framework-spa) |
-| React Router, framework mode with SSR      | `@monarcode/session-kit/react-router`    | [React Router](./docs/react-router-ssr.md) | [`react-router-framework-ssr`](./examples/react-router-framework-ssr) |
-| Next.js 16, App Router                     | `@monarcode/session-kit/next`            | [Next.js](./docs/next.md)                  | [`next-app`](./examples/next-app)                                     |
-| Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [Expo](./docs/expo.md)                     | [`expo-router`](./examples/expo-router)                               |
+| Setup                                      | Import                                   | Guide                                                                   | Example app                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| React without a router                     | `@monarcode/session-kit/react`           | [Getting started](#getting-started)                                     | None                                                                                                                         |
+| TanStack Router                            | `@monarcode/session-kit/tanstack-router` | [TanStack Router](./docs/tanstack-router.md)                            | [`tanstack-router`](./examples/tanstack-router)                                                                              |
+| TanStack Start, SPA mode                   | `@monarcode/session-kit/tanstack-router` | [TanStack Router](./docs/tanstack-router.md#tanstack-start-in-spa-mode) | [`tanstack-start-spa`](./examples/tanstack-start-spa), [`tanstack-start-spa-effetch`](./examples/tanstack-start-spa-effetch) |
+| TanStack Start with server rendering       | `@monarcode/session-kit/tanstack-start`  | [TanStack Start](./docs/tanstack-start.md)                              | [`tanstack-start-ssr`](./examples/tanstack-start-ssr)                                                                        |
+| React Router, declarative mode             | `@monarcode/session-kit/react-router`    | [React Router](./docs/react-router.md#declarative-mode)                 | [`react-router-declarative`](./examples/react-router-declarative)                                                            |
+| React Router, data mode                    | `@monarcode/session-kit/react-router`    | [React Router](./docs/react-router.md#data-mode)                        | [`react-router-data`](./examples/react-router-data)                                                                          |
+| React Router, framework mode, `ssr: false` | `@monarcode/session-kit/react-router`    | [React Router](./docs/react-router.md#framework-mode-with-ssr-false)    | [`react-router-framework-spa`](./examples/react-router-framework-spa)                                                        |
+| React Router, framework mode with SSR      | `@monarcode/session-kit/react-router`    | [React Router with SSR](./docs/react-router-ssr.md)                     | [`react-router-framework-ssr`](./examples/react-router-framework-ssr)                                                        |
+| Next.js 16, App Router                     | `@monarcode/session-kit/next`            | [Next.js](./docs/next.md)                                               | [`next-app`](./examples/next-app)                                                                                            |
+| Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`            | [Expo Router](./docs/expo.md)                                           | [`expo-router`](./examples/expo-router)                                                                                      |
 
 Two guides apply to more than one setup:
 [Server sessions](./docs/server-sessions.md) covers what the three
@@ -425,7 +437,7 @@ import { useState, type FormEvent } from "react";
 
 import { signInWithPassword } from "./auth.js";
 
-export function SignIn() {
+export function SignIn({ onSignedIn }: { onSignedIn?: () => unknown }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -439,6 +451,7 @@ export function SignIn() {
         String(form.get("username")),
         String(form.get("password")),
       );
+      await onSignedIn?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not sign in");
     } finally {
@@ -470,8 +483,9 @@ export function SignIn() {
 }
 ```
 
-The form doesn't navigate or call a callback when it succeeds. Signing in
-changes the client's state, and the next step renders from that state.
+The form doesn't have to do anything when it succeeds: signing in changes the
+client's state, and the next step renders from that state. `onSignedIn` is for
+routers, which use it to send the user on to the page they asked for.
 
 ### 4. Read the session in React
 
@@ -523,14 +537,14 @@ function Screen() {
     case "unauthenticated":
       return <SignIn />;
     case "unavailable":
-      // A refresh failed, but the session is kept: offer another try.
+      // Access couldn't be restored or refreshed: offer another try.
       return (
         <button onClick={() => void client.retry().catch(() => {})}>
           Try again
         </button>
       );
     default:
-      // "authenticated", or "refreshing" with the user still on screen.
+      // Signed in: "authenticated", or "refreshing" with the user on screen.
       return (
         <main>
           <h1>Welcome, {user.firstName}</h1>
@@ -557,6 +571,9 @@ function AuthError() {
 - `retry` and `signOut` reject when they fail, and publish the same failure in
   `state.error`. `AuthError` shows it, so the handlers have nothing left to
   do.
+
+With [`locking`](#locking), give `locked` a case of its own: it has a user
+too, but no usable access.
 
 That is a working app. Sign in and reload: you are still signed in. Open a
 second tab and sign out: both tabs show the form.
@@ -596,8 +613,9 @@ covers its options.
 The client is the same everywhere. What changes is how each router keeps
 signed-out users away from private pages, so continue with yours:
 
-- [TanStack Router](#tanstack-router), below.
-- [TanStack Start in SPA mode, React Router, and Expo Router](#other-setups).
+- [TanStack Router](#tanstack-router), and TanStack Start in SPA mode.
+- [React Router](#react-router), in any of its three modes.
+- [Expo Router](#expo-router), for iOS and Android.
 - Without a router, you are done: render by `status`, as `Screen` does.
 
 With Effect, the same client becomes a service: see
@@ -607,165 +625,36 @@ With Effect, the same client becomes a service: see
 
 ## TanStack Router
 
-With TanStack Router, the client lives in Router context: guards run in
-`beforeLoad`, and the hooks read the client from the Router, so they need no
-`AuthProvider`. This guide continues from the client in
-[Getting started](#2-create-the-client), and is the
-[`tanstack-router` example app](./examples/tanstack-router) trimmed to its
-essentials.
+With TanStack Router, the client lives in Router context. Guards run in
+`beforeLoad`, before a private route loads or renders, and the hooks read the
+client from the Router, so they need no `AuthProvider`.
 
 ```sh
 pnpm add @tanstack/react-router
 pnpm add -D @tanstack/router-plugin
 ```
 
-It uses file-based routing, so add the Router plugin before the React plugin:
+The examples use file-based routing, which the Router plugin sets up as
+[the guide](./docs/tanstack-router.md#installation) shows.
 
-```ts
-import { tanstackRouter } from "@tanstack/router-plugin/vite";
-import react from "@vitejs/plugin-react";
-// vite.config.ts
-import { defineConfig } from "vite";
+Create the hooks from the Router's client, in place of the ones from Getting
+started:
 
-export default defineConfig({
-  plugins: [
-    tanstackRouter({ target: "react", autoCodeSplitting: true }),
-    react(),
-  ],
-});
-```
-
-The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
-
-### 1. Create the Router's hooks
-
-`src/auth-hooks.ts`
-
-<!-- file: src/auth-hooks.ts -->
+<!-- from: docs/tanstack-router.md -->
 
 ```ts
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import { useRouterAuth } from "@monarcode/session-kit/tanstack-router";
 
+// Reads the client from Router context, so no provider is needed.
 export const { useAuth, useAuthClient } = createAuthHooks({
   useClient: useRouterAuth,
 });
 ```
 
-These replace the hooks from [step 4](#4-read-the-session-in-react) of Getting
-started.
-`useRouterAuth` reads the client from Router context, so the hooks need no
-provider, and Router registration in step 5 gives them your user type.
+Guard a layout route, and every route under it is private:
 
-### 2. Type the root route
-
-`src/routes/__root.tsx`
-
-<!-- file: src/routes/__root.tsx -->
-
-```tsx
-import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
-
-import { useAuth } from "../auth-hooks.js";
-import type { AppAuth } from "../auth.js";
-
-export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
-  component: Root,
-});
-
-function Root() {
-  // Shows failures that outlive the page that caused them, such as a sign-out
-  // that could not clear storage.
-  const error = useAuth((state) => state.error);
-  return (
-    <>
-      {error && <p role="alert">{error.message}</p>}
-      <Outlet />
-    </>
-  );
-}
-```
-
-### 3. Add the sign-in route
-
-`src/routes/login.tsx`
-
-<!-- file: src/routes/login.tsx -->
-
-```tsx
-import { useState, type FormEvent } from "react";
-
-import { safeReturnTo } from "@monarcode/session-kit";
-import { redirectIfSignedIn } from "@monarcode/session-kit/tanstack-router";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-
-import { signInWithPassword } from "../auth.js";
-
-export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    redirectTo: safeReturnTo(search.redirectTo),
-  }),
-  beforeLoad: ({ context, search }) =>
-    redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
-  component: Login,
-});
-
-function Login() {
-  const router = useRouter();
-  const { redirectTo } = Route.useSearch();
-  const [error, setError] = useState("");
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setError("");
-    try {
-      await signInWithPassword(
-        String(form.get("username")),
-        String(form.get("password")),
-      );
-      await router.navigate({ href: redirectTo, replace: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not sign in");
-    }
-  }
-
-  return (
-    <form onSubmit={submit}>
-      <h1>Sign in</h1>
-      {/* DummyJSON's documented test user. */}
-      <input
-        name="username"
-        aria-label="Username"
-        defaultValue="emilys"
-        autoComplete="username"
-      />
-      <input
-        name="password"
-        aria-label="Password"
-        type="password"
-        defaultValue="emilyspass"
-        autoComplete="current-password"
-      />
-      {error && <p role="alert">{error}</p>}
-      <button>Sign in</button>
-    </form>
-  );
-}
-```
-
-`safeReturnTo` accepts only same-origin paths and returns `/` for anything else,
-including the sign-in page itself, so a stale `redirectTo` cannot loop. Pass
-`{ loginPath }` if sign-in lives somewhere other than `/login`.
-`redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
-same way.
-
-### 4. Guard private routes
-
-`src/routes/_authenticated.tsx` is a pathless layout: its child routes are
-guarded without `authenticated` appearing in their URLs.
-
-<!-- file: src/routes/_authenticated.tsx -->
+<!-- from: docs/tanstack-router.md -->
 
 ```tsx
 import {
@@ -777,7 +666,7 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 
-import { useAuthClient } from "../auth-hooks.js";
+import { useAuthClient } from "../hooks.js";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ context, location }) =>
@@ -798,49 +687,15 @@ function SessionError({ error }: ErrorComponentProps) {
 }
 ```
 
-`requireSession` redirects signed-out users to `loginPath` with `redirectTo`
-set to where they were going, and puts `{ session }` in route context: child
-routes get `session.user`, typed and never `null`. A failed refresh reaches the
-error component instead of a redirect, because the user is still signed in.
+`requireSession` redirects signed-out users to `loginPath`, with `redirectTo`
+set to where they were going, and puts `{ session }` in route context, where
+`session.user` is typed and never `null`. `SessionOutlet` renders the child
+routes while that session is still the signed-in one, and remounts them for a
+new account, so nothing from the previous one stays on screen.
 
-`SessionOutlet` renders child routes while the session the guard accepted is
-still the signed-in one. After a sign-out or an account switch it shows
-`pending` until the guard runs again, and remounts child routes for the new
-account, so nothing from the previous one stays on screen. Profile updates and
-token refreshes keep child routes mounted.
+Then connect auth to the Router, once:
 
-`src/routes/_authenticated/index.tsx`
-
-<!-- file: src/routes/_authenticated/index.tsx -->
-
-```tsx
-import { createFileRoute } from "@tanstack/react-router";
-
-import { useAuth, useAuthClient } from "../../auth-hooks.js";
-
-export const Route = createFileRoute("/_authenticated/")({
-  component: Home,
-});
-
-function Home() {
-  const user = useAuth((state) => state.user);
-  const auth = useAuthClient();
-  return (
-    <main>
-      <h1>Welcome, {user?.firstName}</h1>
-      <button onClick={() => void auth.signOut().catch(() => {})}>
-        Sign out
-      </button>
-    </main>
-  );
-}
-```
-
-### 5. Create and connect the Router
-
-`src/router.tsx`
-
-<!-- file: src/router.tsx -->
+<!-- from: docs/tanstack-router.md -->
 
 ```tsx
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
@@ -866,82 +721,168 @@ declare module "@tanstack/react-router" {
 }
 ```
 
-With synchronous storage and a synchronous schema, `connectAuth` restores the
-saved session before the first render. Call `disconnectAuth` on app teardown or
-hot-module disposal; it stops background work without signing out.
+The [TanStack Router guide](./docs/tanstack-router.md) walks through the whole
+app, and covers:
 
-### 6. Render the app
+- The sign-in route, and returning the user to the page they asked for.
+- [Layouts around guarded pages](./docs/tanstack-router.md#layouts-around-guarded-pages),
+  such as a dashboard with a sidebar.
+- [TanStack Start in SPA mode](./docs/tanstack-router.md#tanstack-start-in-spa-mode).
 
-`src/main.tsx`
+Example apps: [`tanstack-router`](./examples/tanstack-router),
+[`tanstack-start-spa`](./examples/tanstack-start-spa), and
+[`tanstack-start-spa-effetch`](./examples/tanstack-start-spa-effetch).
 
-<!-- file: src/main.tsx -->
+## React Router
 
-```tsx
-import { StrictMode } from "react";
+React Router has three modes, and session-kit guards each one the way that
+mode works. In all three, `AuthProvider` goes around the router.
 
-import { RouterProvider } from "@tanstack/react-router";
-import { createRoot } from "react-dom/client";
+| Mode                         | The guard                          | Beside it                              |
+| ---------------------------- | ---------------------------------- | -------------------------------------- |
+| Declarative                  | `SessionOutlet`                    | Nothing                                |
+| Data                         | `requireSession` in loaders        | `SessionOutlet`, `useAuthRevalidation` |
+| Framework, with `ssr: false` | `requireSession` in `clientLoader` | `SessionOutlet`, `useAuthRevalidation` |
 
-import { router } from "./router.js";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-);
+```sh
+pnpm add react-router
 ```
 
-## Other setups
+In declarative mode there are no loaders, so `SessionOutlet` is the guard.
+Render it as a layout route's element, `<Route element={<Private />}>`, and
+the routes inside it are private:
 
-The same client works everywhere; only the router wiring changes. The
-[example apps](./examples) show each setup complete; these are the guards each
-one uses:
+<!-- from: docs/react-router.md -->
 
-| Setup                                      | Guards                                                                     |
-| ------------------------------------------ | -------------------------------------------------------------------------- |
-| TanStack Router                            | `requireSession` in `beforeLoad`, `SessionOutlet`                          |
-| TanStack Start, SPA mode                   | Same as TanStack Router                                                    |
-| React Router, declarative mode             | `SessionOutlet` alone                                                      |
-| React Router, data mode                    | `requireSession` in loaders, `SessionOutlet`, `useAuthRevalidation`        |
-| React Router, framework mode, `ssr: false` | `requireSession` in `clientLoader`, `SessionOutlet`, `useAuthRevalidation` |
-| Expo Router                                | `Stack.Protected`, `SessionGate`, `rememberDeepLink`                       |
+```tsx
+/** The guard: its child routes render only while someone is signed in. */
+function Private() {
+  return (
+    <SessionOutlet
+      loginPath="/login"
+      pending={<p>Checking session…</p>}
+      unavailable={({ error, retry }) => (
+        <div role="alert">
+          <p>{error?.message ?? "Can't reach the server."}</p>
+          <button onClick={retry}>Try again</button>
+        </div>
+      )}
+    />
+  );
+}
+```
 
-**TanStack Start in SPA mode.** Create the client and call `connectAuth` inside
-`getRouter()`. Set `defaultSsr: false` in `src/start.ts`: Start's own server
-still renders requests in SPA mode, and guards need the browser's saved
-session. `connectAuth` does nothing while the Router renders on a server, so
-the build-time shell shows your pending component.
+In data and framework mode, the guard runs in the loader, so a private
+route's data is never fetched for a signed-out user. `useAuthRevalidation`
+runs the loaders again when the session changes:
 
-**React Router.** Import from `@monarcode/session-kit/react-router`, and create
-hooks with a provider: `createAuthHooks<typeof auth>()` returns `AuthProvider`,
-`useAuth`, and `useAuthClient`. Render `<AuthProvider client={auth}>` around
-the router; it mounts the client in a layout effect, so a synchronous restore
-happens before the first paint, and never on a server.
+<!-- from: docs/react-router.md -->
 
-- **Declarative mode**: `<SessionOutlet loginPath="/login" />` is the guard. It
-  shows `pending` while restoring, sends signed-out users to `loginPath` with
-  `redirectTo`, and renders `unavailable({ error, retry })` after a failed
-  refresh, or throws to the nearest error boundary without it.
-- **Data and framework mode**: `requireSession(auth, { request, loginPath })`
-  guards loaders and returns `{ session }`, and
-  `redirectIfSignedIn(auth, { redirectTo })` guards the sign-in loader. Call
-  `useAuthRevalidation()` once in the root layout so loaders re-run when auth
-  changes. Render `SessionOutlet` as the element of the guarded route: when
-  another account signs in, it shows `pending` until the loader accepts the
-  new session, so child routes never see the previous account's loader data.
-  With a router `basename`, pass the same `basename` to `requireSession`.
+```tsx
+/** Runs the loaders again when auth changes, and with them the guards. */
+function Root() {
+  useAuthRevalidation();
+  return <Outlet />;
+}
+```
 
-**Expo Router.** Save the session with `secureStorage()` from
-`@monarcode/session-kit/expo`, guard screens with Expo Router's
-`Stack.Protected`, and wrap the root navigator in `SessionGate`, which holds
-the splash screen while restoring, renders `unavailable({ error, retry })`
-after a failed refresh, and re-checks the session when the app returns to the
-foreground. `rememberDeepLink` in `+native-intent.tsx` keeps a deep link for
-after the sign-in. The [Expo guide](./docs/expo.md) walks through the whole
-app.
+<!-- from: docs/react-router.md -->
 
-**Without a router.** `createAuthHooks<typeof auth>()` and `AuthProvider` work
-in any React app.
+```tsx
+export const router = createBrowserRouter([
+  {
+    element: <Root />,
+    HydrateFallback: () => <p>Checking session…</p>,
+    children: [
+      {
+        path: "/login",
+        loader: async ({ request }) => {
+          const redirectTo = new URL(request.url).searchParams.get(
+            "redirectTo",
+          );
+          await redirectIfSignedIn(auth, { redirectTo });
+          return null;
+        },
+        element: <Login />,
+      },
+      {
+        loader: ({ request }) =>
+          requireSession(auth, { request, loginPath: "/login" }),
+        errorElement: <SessionError />,
+        element: (
+          <SessionOutlet
+            loginPath="/login"
+            pending={<p>Checking session…</p>}
+          />
+        ),
+        children: [{ index: true, element: <Home /> }],
+      },
+    ],
+  },
+]);
+```
+
+`Login`, `SessionError`, and `Home` are ordinary components, which the guide
+shows. `SessionOutlet` is still the guarded route's element: when another account
+signs in, it shows `pending` until the loader has run for the new session, so
+no page sees the previous account's loader data.
+
+The [React Router guide](./docs/react-router.md) has each mode in full,
+framework mode's route modules, and
+[layouts around guarded pages](./docs/react-router.md#layouts-around-guarded-pages).
+
+Example apps: [`react-router-declarative`](./examples/react-router-declarative),
+[`react-router-data`](./examples/react-router-data), and
+[`react-router-framework-spa`](./examples/react-router-framework-spa).
+
+## Expo Router
+
+In an Expo app, the session is saved with `secureStorage()`, in the iOS
+keychain or encrypted with an Android Keystore key. Expo Router's
+`Stack.Protected` guards the screens, and `SessionGate` wraps the root
+navigator: it holds the splash screen while the session is restored, renders
+`unavailable` after a failed refresh, and checks the session again when the
+app returns to the foreground.
+
+```sh
+npx expo install expo-secure-store expo-file-system
+```
+
+<!-- from: docs/expo.md -->
+
+```tsx
+export default function RootLayout() {
+  return (
+    <AuthProvider client={auth}>
+      <SessionGate unavailable={(props) => <Unavailable {...props} />}>
+        <RootStack />
+      </SessionGate>
+    </AuthProvider>
+  );
+}
+
+function RootStack() {
+  // `status`, not `user`: a locked session keeps its user. See Locking.
+  const status = useAuth((state) => state.status);
+  const signedIn = status === "authenticated" || status === "refreshing";
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={signedIn}>
+        <Stack.Screen name="(app)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!signedIn}>
+        <Stack.Screen name="login" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+```
+
+The [Expo guide](./docs/expo.md) builds the whole app: the client, deep links
+kept across the sign-in with `rememberDeepLink`, and
+[locking](./docs/expo.md#locking) a session behind the device's biometrics.
+
+Example app: [`expo-router`](./examples/expo-router).
 
 ## Server rendering
 
@@ -962,6 +903,51 @@ state, and the refresh token never reaches the browser.
   `createAuthFetch` or `sessionBearer`, opt in with `clientCredentials`: page
   scripts then get the access token in memory, never the refresh token.
 
+The engine is the same call in every framework. This one is from the TanStack
+Start guide:
+
+<!-- from: docs/tanstack-start.md -->
+
+```ts
+export const serverAuth = createServerAuth({
+  name: "app",
+  user: userSchema,
+  secret: process.env.SESSION_SECRET!,
+  refresh: async ({ refreshToken, signal }) => {
+    const response = await fetch(`${API}/auth/refresh`, {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (response.status === 401) return null;
+    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+    return tokens.parse(await response.json());
+  },
+});
+```
+
+The browser's client mirrors what the server rendered, and asks the server to
+sign in and out, here through the app's own server functions:
+
+<!-- from: docs/tanstack-start.md -->
+
+```ts
+export function createAppAuth() {
+  return createMirrorAuth({
+    name: "app",
+    session: null, // filled by loadSession, then by hydration
+    revalidate: () => getSessionFn(),
+    signIn: (data: { username: string; password: string }) =>
+      signInFn({ data }),
+    signOut: () => signOutFn(),
+  });
+}
+```
+
+What differs between frameworks is how the cookie jar reaches the engine, and
+how the session reaches the browser:
+
 | Framework                             | On the server                                   | In the browser                                      | Guide                                      |
 | ------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
 | TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                   | [TanStack Start](./docs/tanstack-start.md) |
@@ -978,24 +964,102 @@ covers the secret, cookie jars, refreshing across instances, and limits.
 If your app is written with [Effect](https://effect.website), the session is a
 service. `@monarcode/session-kit/effect` wraps the client you already have, so
 React, your router, and your Effects share one session, and an auth error is a
-typed failure like any other.
+typed failure like any other. With
+[effetch](https://github.com/monarcode/effetch) and
+[effetch-query](https://github.com/monarcode/effetch-query), an app has a
+few small pieces: the transport, the session, the API client, the runtime, and
+the queries.
 
 ```sh
-pnpm add effect @monarcode/effetch
+pnpm add effect @monarcode/effetch @monarcode/effetch-query @effect/atom-react
 ```
 
-Register the client's type once, and provide the client as a layer. This is
-the client from [Getting started](#2-create-the-client):
+**The transport.** Every request goes through Effect's `HttpClient`, so set it
+up once.
 
-`src/effect/auth.ts`
+`src/http/fetch.ts`
 
-<!-- file: src/effect/auth.ts -->
+<!-- file: src/http/fetch.ts -->
 
 ```ts
-import { Auth } from "@monarcode/session-kit/effect";
-import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 
-import { auth } from "../auth.js";
+/**
+ * `fetch`, without the tracing headers Effect adds to every request: from a
+ * browser, they fail the preflight of an API that doesn't allow them.
+ */
+export const FetchLive = Layer.merge(
+  FetchHttpClient.layer,
+  Layer.succeed(HttpClient.TracerPropagationEnabled, false),
+);
+```
+
+**The session.** The client is the one from
+[Getting started](#2-create-the-client), written with Effect: an Effect
+Schema describes the user, and the refresh is an effetch call.
+
+`src/session/auth.ts`
+
+<!-- file: src/session/auth.ts -->
+
+```ts
+import * as Fetch from "@monarcode/effetch";
+import { createAuth, webStorage } from "@monarcode/session-kit";
+import { Auth } from "@monarcode/session-kit/effect";
+import { createAuthHooks } from "@monarcode/session-kit/react";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+import { FetchLive } from "../http/fetch.js";
+
+export const API_BASE_URL = "https://dummyjson.com";
+
+export const SessionUser = Schema.Struct({
+  id: Schema.Finite,
+  username: Schema.String,
+  email: Schema.String,
+  firstName: Schema.String,
+});
+
+export const SessionTokens = Schema.Struct({
+  accessToken: Schema.String,
+  refreshToken: Schema.String,
+});
+
+const refreshEndpoint = Fetch.endpoint("POST /auth/refresh", {
+  input: Schema.Struct({ refreshToken: Schema.String }),
+  output: SessionTokens,
+});
+
+// Not the app's API client: its session plugin waits for this refresh.
+const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
+
+// `null` signs out; a failure keeps the session for a retry.
+const refreshSession = (refreshToken: string) =>
+  Effect.gen(function* () {
+    const client = yield* makeRefreshClient;
+    return yield* client.bind(refreshEndpoint)({ body: { refreshToken } });
+  }).pipe(
+    Effect.catchTag("HttpError", (error) =>
+      error.status === 401 || error.status === 403
+        ? Effect.succeed(null)
+        : Effect.fail(error),
+    ),
+    Effect.provide(FetchLive),
+  );
+
+export const auth = createAuth({
+  name: "my-app",
+  user: Schema.toStandardSchemaV1(SessionUser),
+  storage: webStorage(),
+  refresh: ({ refreshToken, signal }) =>
+    Effect.runPromise(refreshSession(refreshToken), { signal }),
+});
+
+export const { AuthProvider, useAuth, useAuthClient } =
+  createAuthHooks<typeof auth>();
 
 // Registered once, so every `Auth` Effect is typed with your user.
 declare module "@monarcode/session-kit/effect" {
@@ -1005,74 +1069,184 @@ declare module "@monarcode/session-kit/effect" {
 }
 
 export const AuthLive = Auth.layer(auth);
-
-/** The signed-in user's first name, or "Guest". */
-export const firstName = Auth.session.pipe(
-  Effect.map((session) => session.user.firstName),
-  Effect.catchTag("AuthFailure", (failure) =>
-    failure.code === "UNAUTHENTICATED"
-      ? Effect.succeed("Guest")
-      : Effect.fail(failure),
-  ),
-);
 ```
 
-`Auth.session` refreshes expired access before it answers, and fails with an
-`AuthFailure` whose `code` is the client's `AuthErrorCode`.
+**The API client.** `sessionBearer` is an effetch plugin that does what
+`createAuthFetch` does: it sends the access token to one origin, and refreshes
+after a 401.
 
-For requests, `sessionBearer` is a plugin for
-[effetch](https://github.com/monarcode/effetch), the typed HTTP client for
-Effect. It does what `createAuthFetch` does: it sends the access token to one
-origin, and refreshes after a 401.
+`src/http/api-client.ts`
 
-`src/effect/api.ts`
-
-<!-- file: src/effect/api.ts -->
+<!-- file: src/http/api-client.ts -->
 
 ```ts
 import * as Fetch from "@monarcode/effetch";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
 
-import { API } from "../backend.js";
-import { AuthLive } from "./auth.js";
+import { API_BASE_URL } from "../session/auth.js";
 
-const makeApi = Fetch.make({
-  baseUrl: API,
-  plugins: [sessionBearer({ baseUrl: API })],
+const make = Fetch.make({
+  baseUrl: API_BASE_URL,
+  // The body the API answers a failure with.
+  defaultError: Schema.Struct({ message: Schema.String }),
+  // `optional`: a call made while signed out, such as the sign-in itself,
+  // goes without a token.
+  plugins: [sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
 });
 
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "app/Api",
-) {
-  static readonly layer = Layer.effect(Api, makeApi).pipe(
-    Layer.provide(Layer.merge(FetchHttpClient.layer, AuthLive)),
+export class ApiClient extends Context.Service<
+  ApiClient,
+  Effect.Success<typeof make>
+>()("ApiClient") {}
+
+export const ApiClientLive = Layer.effect(ApiClient, make);
+```
+
+**The runtime.** One place composes the app's layers, and everything that
+runs an Effect uses its runtime.
+
+`src/runtime.ts`
+
+<!-- file: src/runtime.ts -->
+
+```ts
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+
+import { ApiClientLive } from "./http/api-client.js";
+import { FetchLive } from "./http/fetch.js";
+import { AuthLive } from "./session/auth.js";
+
+const AppLayer = ApiClientLive.pipe(
+  Layer.provideMerge(AuthLive),
+  Layer.provide(FetchLive),
+);
+
+/** One runtime for the app's lifetime. */
+export const appRuntime = ManagedRuntime.make(AppLayer);
+export type AppRuntime = typeof appRuntime;
+```
+
+**The queries.** effetch-query turns endpoints into cached queries and
+mutations that run with that runtime, so components never run an Effect by
+hand.
+
+`src/query.ts`
+
+<!-- file: src/query.ts -->
+
+```ts
+import { QueryClient } from "@monarcode/effetch-query";
+import { endpoints } from "@monarcode/effetch-query/effetch";
+import type * as ManagedRuntime from "effect/ManagedRuntime";
+
+import { ApiClient } from "./http/api-client.js";
+import { appRuntime, type AppRuntime } from "./runtime.js";
+
+declare module "@monarcode/effetch-query" {
+  interface Register {
+    readonly services: ManagedRuntime.ManagedRuntime.Services<AppRuntime>;
+  }
+}
+
+export const api = endpoints(ApiClient);
+
+export const makeQueryClient = () => QueryClient.make({ runtime: appRuntime });
+```
+
+A feature then declares its endpoints, and its components use them:
+
+`src/account.tsx`
+
+<!-- file: src/account.tsx -->
+
+```tsx
+import type { ReactNode } from "react";
+
+import * as Fetch from "@monarcode/effetch";
+import {
+  QueryProvider,
+  useMutation,
+  useQuery,
+} from "@monarcode/effetch-query/react";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Schema from "effect/Schema";
+
+import { api, makeQueryClient } from "./query.js";
+import {
+  SessionTokens,
+  SessionUser,
+  useAuth,
+  useAuthClient,
+} from "./session/auth.js";
+
+const signInMutation = api.mutation(
+  Fetch.endpoint("POST /auth/login", {
+    input: Schema.Struct({ username: Schema.String, password: Schema.String }),
+    // DummyJSON returns the user's fields beside the tokens.
+    output: Schema.Struct({ ...SessionTokens.fields, ...SessionUser.fields }),
+  }),
+);
+
+const profileQuery = api.query(
+  Fetch.endpoint("GET /auth/me", { output: SessionUser }),
+);
+
+/** A cache for each session, so no account sees another's data. */
+export function QueryProviders({ children }: { children: ReactNode }) {
+  const sessionId = useAuth((state) => state.sessionId);
+  return (
+    <QueryProvider make={makeQueryClient} resetKey={sessionId ?? undefined}>
+      {children}
+    </QueryProvider>
   );
 }
 
-const Profile = Schema.Struct({ id: Schema.Finite, email: Schema.String });
+export function SignInButton() {
+  const auth = useAuthClient();
+  const { result, run } = useMutation(signInMutation);
+  return (
+    <button
+      disabled={result.waiting}
+      onClick={() =>
+        run(
+          // DummyJSON's documented test user.
+          { body: { username: "emilys", password: "emilyspass" } },
+          {
+            onSuccess: ({ accessToken, refreshToken, ...user }) =>
+              auth.signIn({ accessToken, refreshToken, user }),
+          },
+        )
+      }
+    >
+      Sign in
+    </button>
+  );
+}
 
-/** Fails with `AuthFailure`, or with one of effetch's own errors. */
-export const profile = Api.use((api) =>
-  api.get("/auth/me", { output: Profile }),
-);
-
-// One runtime for the app, so the API client is built once.
-const runtime = ManagedRuntime.make(Api.layer);
-
-export const loadProfile = () => runtime.runPromise(profile);
+export function Email() {
+  const result = useQuery(profileQuery());
+  return AsyncResult.match(result, {
+    onInitial: () => <p>Loading…</p>,
+    onFailure: () => <p>Couldn't load your profile.</p>,
+    onSuccess: ({ value }) => <p>{value.email}</p>,
+  });
+}
 ```
 
-The [Effect guide](./docs/effect.md) covers the rest: signing in and out,
-updating the user from an Effect, watching the session as a `Stream`, public
-endpoints, and clearing an
-[effetch-query](https://github.com/monarcode/effetch-query) cache when the
-account changes.
+Render `QueryProviders` inside `AuthProvider`. Effects of your own read the
+session from the `Auth` service, as `Auth.session`, and fail with a tagged
+`AuthFailure` whose `code` is the client's `AuthErrorCode`.
+
+A complete app is in
+[`examples/tanstack-start-spa-effetch`](./examples/tanstack-start-spa-effetch).
+The [Effect guide](./docs/effect.md) covers the `Auth` service: reading the
+session, handling its failures, signing in and out, updating the user, and
+watching the session as a `Stream`.
 
 ## Using the client
 
@@ -1420,10 +1594,13 @@ pnpm run check
 
 `check` runs Oxlint and Oxfmt, builds the package, runs the tests, and
 type-checks the tests, the consumer declarations, and every TypeScript example
-marked with a `file:` comment: this README's under NodeNext and Bundler
-resolution, the [Expo guide](./docs/expo.md)'s under Bundler resolution,
-as Metro resolves, without DOM types, the server-rendering guides' under
-Bundler resolution, and the [Effect guide](./docs/effect.md)'s under both. `pnpm test` runs the runtime tests
+marked with a `file:` comment, each document as one small app. This README
+and the [TanStack Router](./docs/tanstack-router.md),
+[React Router](./docs/react-router.md), and [Effect](./docs/effect.md) guides
+compile under NodeNext and Bundler resolution, the server-rendering guides
+under Bundler resolution, and the [Expo guide](./docs/expo.md) under Bundler
+resolution, as Metro resolves, without DOM types. An example marked with a
+`from:` comment is an excerpt of a guide, and must match it. `pnpm test` runs the runtime tests
 twice: with synchronous storage, and with storage that settles every operation
 late, removals last, to catch ordering bugs. `pnpm run build:examples` builds
 the package and every example app.

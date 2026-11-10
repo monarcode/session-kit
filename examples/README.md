@@ -1,17 +1,18 @@
 # session-kit examples
 
-Nine small apps, one per supported setup, all signing in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth). The eight web apps
-share the same pages: `/login`, prefilled with DummyJSON's test user, and a
-protected `/` that shows the user, calls `auth/me` with the access token, and
-signs out. The Expo app has the same sign-in screen, and splits the protected
-part into a home screen and a `/profile` screen that calls `auth/me`, so a
-deep link has somewhere to go.
+Ten small apps, one per supported setup and one written with Effect, all
+signing in against [DummyJSON's auth API](https://dummyjson.com/docs/auth).
+The nine web apps share the same pages: `/login`, prefilled with DummyJSON's
+test user, and a protected `/` that shows the user, calls `auth/me` with the
+access token, and signs out. The Expo app has the same sign-in screen, and
+splits the protected part into a home screen and a `/profile` screen that
+calls `auth/me`, so a deep link has somewhere to go.
 
 | App                                                          | Setup                                             | User comes from |
 | ------------------------------------------------------------ | ------------------------------------------------- | --------------- |
 | [`tanstack-router`](./tanstack-router)                       | TanStack Router, file-based routes                | Login response  |
 | [`tanstack-start-spa`](./tanstack-start-spa)                 | TanStack Start in SPA mode                        | Access token    |
+| [`tanstack-start-spa-effetch`](./tanstack-start-spa-effetch) | TanStack Start in SPA mode, written with Effect   | Access token    |
 | [`tanstack-start-ssr`](./tanstack-start-ssr)                 | TanStack Start with server rendering              | Login response  |
 | [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`                   | Login response  |
 | [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`               | Access token    |
@@ -58,6 +59,17 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
+- **TanStack Start with Effect** is the SPA app written with Effect,
+  [effetch](https://github.com/monarcode/effetch) and
+  [effetch-query](https://github.com/monarcode/effetch-query). `src/auth.ts`
+  describes the user with an Effect Schema and refreshes through effetch.
+  `src/api-client.ts` is the API client, a service whose `sessionBearer`
+  plugin sends the access token, and `src/runtime.ts` composes the app's
+  layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
+  and the profile query, which `src/ui.tsx` uses with `useMutation` and
+  `useQuery`, and the root route gives each session its own query cache. The
+  hooks and the guards are the SPA app's. See
+  [the guide](../docs/effect.md).
 - **TanStack Start with server rendering** keeps the session in an encrypted
   `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
   with DummyJSON from a server function, and refreshes in request middleware
@@ -96,11 +108,12 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-the client-side web apps have the same `ui.tsx` rather than sharing one; the
-server-rendered apps have their own, since they sign in on the server. The apps
-differ in where the user comes from on purpose, so both user sources appear:
-the login response, validated by a schema, or the access token's claims, read
-with `fromAccessToken`. DummyJSON supports both.
+the client-side web apps have the same `ui.tsx` rather than sharing one. The
+server-rendered apps have their own, since they sign in on the server, and so
+does the Effect app, whose handlers run Effects. The apps differ in where the
+user comes from on purpose, so both user sources appear: the login response,
+validated by a schema, or the access token's claims, read with
+`fromAccessToken`. DummyJSON supports both.
 
 DummyJSON has no logout endpoint, so the apps do not pass `revoke`. Its refresh
 tokens stay valid after rotation, so it cannot show the cross-tab rotation race

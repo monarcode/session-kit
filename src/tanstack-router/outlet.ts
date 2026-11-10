@@ -49,7 +49,9 @@ export type SessionOutletProps = {
  * account signing in. A locked session also shows `pending` until the guard
  * redirects it to sign-in. Child routes are keyed by session, so nothing from
  * one account stays mounted for the next. Profile updates and token refreshes
- * keep them mounted.
+ * keep them mounted. Only what it renders is guarded this way: UI the route
+ * renders around it, such as a sidebar, stays mounted until the guard
+ * redirects, so read the user there from state, where it may be `null`.
  *
  * @example
  * ```tsx

@@ -130,7 +130,10 @@ Consumers import from the root and from subpaths:
   have it.
 - Examples in `README.md` and `docs/*.md` marked `<!-- file: path -->` are
   type-checked as small apps by `scripts/check-docs.mjs`, together with the
-  JSDoc examples, in memory.
+  JSDoc examples, in memory. A guide that builds on the README's Getting
+  started lists the files it uses as `shared` there. A README example marked
+  `<!-- from: docs/guide.md -->` is an excerpt of that guide's examples, and
+  the check fails when the two differ: edit the guide, then copy.
 
 ## Working with the maintainer
 

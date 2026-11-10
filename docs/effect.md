@@ -7,7 +7,8 @@ wraps the client you already have: React, the routers and Effect code share
 one session.
 
 Read the [README](../README.md) first for how the client, refresh, and errors
-work; this guide covers what Effect adds.
+work; this guide covers what Effect adds. A complete app is in
+[`examples/tanstack-start-spa-effetch`](../examples/tanstack-start-spa-effetch).
 
 ## Contents
 
@@ -148,28 +149,45 @@ import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 
 import { AuthLive } from "./layer.js";
 
 const baseUrl = "https://api.example.com";
 
-const makeApi = Fetch.make({
+const make = Fetch.make({
   baseUrl,
   plugins: [retry(), sessionBearer({ baseUrl })],
 });
 
-// Made once, when the layer is built.
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "app/Api",
-) {
-  static readonly layer = Layer.effect(Api, makeApi).pipe(
-    Layer.provide(Layer.merge(FetchHttpClient.layer, AuthLive)),
-  );
-}
+export class ApiClient extends Context.Service<
+  ApiClient,
+  Effect.Success<typeof make>
+>()("ApiClient") {}
 
-export const orders = Api.use((api) => api.get("/orders"));
+// `fetch`, without the tracing headers Effect adds to every request: from a
+// browser, they fail the preflight of an API that doesn't allow them.
+const FetchLive = Layer.merge(
+  FetchHttpClient.layer,
+  Layer.succeed(HttpClient.TracerPropagationEnabled, false),
+);
+
+/** The app's services: the API client, made once, and the session it uses. */
+export const AppLayer = Layer.effect(ApiClient, make).pipe(
+  Layer.provideMerge(AuthLive),
+  Layer.provide(FetchLive),
+);
+
+export const orders = Effect.gen(function* () {
+  const api = yield* ApiClient;
+  return yield* api.get("/orders");
+});
 ```
+
+The README's [Effect and effetch](../README.md#effect-and-effetch) section
+lays a whole app out this way: the session, the API client, one runtime, and
+effetch-query.
 
 Calls can fail with `AuthFailure`, and skip the plugin with
 `plugins: { sessionBearer: false }`, for a public endpoint such as the sign-in
@@ -245,12 +263,12 @@ import { QueryClient } from "@monarcode/effetch-query";
 import { QueryProvider } from "@monarcode/effetch-query/react";
 import { createAuthHooks } from "@monarcode/session-kit/react";
 
-import { Api } from "./api.js";
+import { type ApiClient, AppLayer } from "./api.js";
 import { auth } from "./auth.js";
 
 declare module "@monarcode/effetch-query" {
   interface Register {
-    readonly services: Api;
+    readonly services: ApiClient;
   }
 }
 
@@ -260,7 +278,7 @@ export function Queries({ children }: { children: ReactNode }) {
   const account = useAuth((state) => state.sessionId ?? "signed-out");
   return (
     <QueryProvider
-      make={() => QueryClient.make({ layer: Api.layer })}
+      make={() => QueryClient.make({ layer: AppLayer })}
       resetKey={account}
     >
       {children}

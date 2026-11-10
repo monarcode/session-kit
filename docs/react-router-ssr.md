@@ -11,7 +11,8 @@ hooks from the [README](../README.md) work with it.
 This needs React Router's middleware: React Router 8, or 7.9 and later with
 `future.v8_middleware`. The code below is for React Router 8; on 7, read the
 URL with `new URL(request.url)` where it uses the `url` argument. For
-framework mode with `ssr: false`, follow the README instead. A complete app is in
+framework mode with `ssr: false`, follow the
+[React Router guide](./react-router.md#framework-mode-with-ssr-false) instead. A complete app is in
 [`examples/react-router-framework-ssr`](../examples/react-router-framework-ssr).
 
 ## Contents

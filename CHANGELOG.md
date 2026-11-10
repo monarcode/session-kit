@@ -58,6 +58,16 @@
 - The Effect guide covers caching with effetch-query: a `QueryProvider` that
   owns its client and resets it by `sessionId`, so no account sees another's
   cache.
+- Guides for TanStack Router (`docs/tanstack-router.md`), which also covers
+  layouts around guarded pages and TanStack Start in SPA mode, and for React
+  Router's declarative, data and framework `ssr: false` modes
+  (`docs/react-router.md`).
+- The README is rewritten to read from the start: why the package exists, a
+  one-file example, how it works, a step-by-step "Getting started" that needs
+  no router, a summary of each guide, and an "Effect and effetch" section.
+- `examples/tanstack-start-spa-effetch`: the TanStack Start SPA app with its
+  user described by an Effect Schema, an effetch client with `sessionBearer`,
+  one runtime, and effetch-query for its sign-in and its requests.
 
 ### Changed
 
