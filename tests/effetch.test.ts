@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import * as Fetch from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
-import { AuthError } from "@monarcode/session-kit";
+import { AuthError, createMirrorAuth } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import {
 	sessionBearer,
@@ -114,6 +114,27 @@ test("sends the token, and after a 401 renews once and replays a GET", async () 
 	);
 	assert.equal(sent[0]?.url, `${baseUrl}/me`);
 	assert.equal(sent[0]?.init.redirect, "error");
+});
+
+test("works on a createMirrorAuth client with credentials", async () => {
+	const mirror = createMirrorAuth({
+		name: "effetch-mirror",
+		session: { sessionId: "s1", user },
+		revalidate: async () => ({ sessionId: "s1", user }),
+		signOut: async () => {},
+		credentials: {
+			get: async () => ({ sessionId: "s1", accessToken: "access-1" }),
+			renew: async () => ({ sessionId: "s1", accessToken: "access-2" }),
+		},
+	});
+	Auth.layer(mirror);
+	const api = await makeApi(mirror as never);
+	const sent = serve(401, 200);
+	assert.equal(await status(api.get("/me")), 200);
+	assert.deepEqual(
+		sent.map((request) => request.authorization),
+		["Bearer access-1", "Bearer access-2"],
+	);
 });
 
 test("tokens stay on the configured origin", async () => {

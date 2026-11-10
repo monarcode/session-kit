@@ -1,0 +1,174 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+	nextJar,
+	proxyJar,
+	type NextCookies,
+} from "@monarcode/session-kit/next";
+import { createServerAuth } from "@monarcode/session-kit/server";
+import { NextRequest, NextResponse } from "next/server.js";
+
+import {
+	code,
+	cookieHeader,
+	deleted,
+	SECRET,
+	tokens,
+	userSchema,
+} from "./helpers.ts";
+
+let refreshes = 0;
+const serverAuth = createServerAuth({
+	name: "app",
+	user: userSchema,
+	secret: SECRET,
+	refresh: async () => {
+		refreshes++;
+		return {
+			accessToken: "access-2",
+			refreshToken: "refresh-2",
+			expiresIn: 900,
+		};
+	},
+});
+
+/** A request carrying the cookies `response` set, as a browser sends them. */
+const nextRequest = (response?: NextResponse) =>
+	new NextRequest("https://app.test/", {
+		headers: { cookie: response ? cookieHeader(response) : "" },
+	});
+
+/**
+ * The cookie store `cookies()` gives a Server Function: it reads `request`'s
+ * cookies and sets `response`'s.
+ */
+function actionStore(request: NextRequest, response: NextResponse) {
+	for (const { name, value } of request.cookies.getAll())
+		response.cookies.set(name, value);
+	response.headers.delete("set-cookie");
+	return response.cookies as unknown as NextCookies;
+}
+
+test("nextJar is read-only unless writable, with one jar per store and mode", async () => {
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(), response);
+	const readOnly = nextJar(store);
+	assert.equal(readOnly.writable, false);
+	assert.equal(nextJar(store), readOnly);
+	const writable = nextJar(store, { writable: true });
+	assert.equal(writable.writable, true);
+	assert.notEqual(writable, readOnly);
+	assert.equal(nextJar(store, { writable: true }), writable);
+
+	await assert.rejects(
+		serverAuth.signIn(readOnly, tokens()),
+		code("INVALID_OPTIONS"),
+	);
+	const session = await serverAuth.signIn(writable, tokens());
+	const [line] = response.headers.getSetCookie();
+	assert.match(line!, /^app\.session=1\./);
+	assert.match(line!, /HttpOnly/);
+	assert.match(line!, /Secure/);
+	assert.match(line!, /SameSite=lax/i);
+	assert.match(line!, /Path=\//);
+
+	const page = nextRequest(response).cookies as unknown as NextCookies;
+	assert.deepEqual(await serverAuth.getSession(nextJar(page)), session);
+
+	const signingOut = NextResponse.next();
+	await serverAuth.signOut(
+		nextJar(actionStore(nextRequest(response), signingOut), {
+			writable: true,
+		}),
+	);
+	assert.deepEqual(deleted(signingOut), ["app.session"]);
+});
+
+test("a read-only nextJar sees a sign-in through the writable jar for its store", async () => {
+	const store = actionStore(nextRequest(), NextResponse.next());
+	assert.equal(await serverAuth.getSession(nextJar(store)), null);
+	const session = await serverAuth.signIn(
+		nextJar(store, { writable: true }),
+		tokens(),
+	);
+	assert.deepEqual(await serverAuth.getSession(nextJar(store)), session);
+	assert.equal(
+		(await serverAuth.credentials.get(nextJar(store)))?.accessToken,
+		"access-1",
+	);
+});
+
+test("nextJar deletes every chunk of a large session", async () => {
+	const response = NextResponse.next();
+	await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), response), { writable: true }),
+		tokens({ accessToken: "a".repeat(5000) }),
+	);
+	assert.equal(response.headers.getSetCookie().length, 3);
+
+	const signingOut = NextResponse.next();
+	await serverAuth.signOut(
+		nextJar(actionStore(nextRequest(response), signingOut), {
+			writable: true,
+		}),
+	);
+	assert.deepEqual(deleted(signingOut), [
+		"app.session",
+		"app.session.0",
+		"app.session.1",
+	]);
+});
+
+test("proxyJar refreshes in Proxy, and sets the cookie for the browser and, through Next's header, for the render", async () => {
+	const signedIn = NextResponse.next();
+	await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
+		// Expires within `refreshIfDue`'s default window.
+		tokens({ expiresIn: 30 }),
+	);
+
+	refreshes = 0;
+	const request = nextRequest(signedIn);
+	const response = NextResponse.next();
+	const jar = proxyJar(request, response);
+	assert.equal(proxyJar(request, response), jar);
+	assert.equal(jar.writable, true);
+	await serverAuth.refreshIfDue(jar);
+	assert.equal(refreshes, 1);
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	// The header Next merges into `cookies()` for the Server Components; the
+	// render's request below stands in for that merge.
+	assert.match(
+		response.headers.get("x-middleware-set-cookie") ?? "",
+		/^app\.session=1\./,
+	);
+
+	const page = nextRequest(response).cookies as unknown as NextCookies;
+	const credentials = await serverAuth.credentials.get(nextJar(page));
+	assert.equal(credentials?.accessToken, "access-2");
+	assert.equal(refreshes, 1);
+});
+
+test("proxyJar sets no cookie for a signed-out request", async () => {
+	const response = NextResponse.next();
+	await serverAuth.refreshIfDue(proxyJar(nextRequest(), response));
+	assert.deepEqual(response.headers.getSetCookie(), []);
+});
+
+test("a read-only nextJar never refreshes an expired token", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const signedIn = NextResponse.next();
+	await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
+		tokens(),
+	);
+	t.mock.timers.tick(901_000);
+	refreshes = 0;
+	const page = nextRequest(signedIn).cookies as unknown as NextCookies;
+	await assert.rejects(
+		serverAuth.credentials.get(nextJar(page)),
+		code("REFRESH_FAILED"),
+	);
+	assert.equal(refreshes, 0);
+});

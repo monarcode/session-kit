@@ -33,7 +33,7 @@ client, refresh, and errors work; this guide covers what differs on Expo.
 - Expo SDK 53 or newer: Expo Router 5 or newer, and React Native 0.79 or
   newer.
 - iOS and Android only. Expo web is not supported: on the web, use a
-  [web router setup](../README.md#supported-setups) with `webStorage()`.
+  [web router setup](../README.md#pick-your-setup) with `webStorage()`.
 - Expo Go, which includes `expo-secure-store` and `expo-file-system`, or a
   development build with both installed.
 
@@ -480,6 +480,8 @@ seal the tokens with AES-GCM. This example uses `@noble/ciphers` and
 <!-- file: src/session-key.ts -->
 
 ```ts
+import { Platform } from "react-native";
+
 import type { AuthLocking } from "@monarcode/session-kit";
 import { gcm } from "@noble/ciphers/aes.js";
 import {
@@ -490,7 +492,6 @@ import {
 } from "@noble/ciphers/utils.js";
 import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
-import { Platform } from "react-native";
 
 const KEY_ITEM = "session-key";
 // Whether the key needs biometrics: it must be read the way it was saved.
@@ -647,9 +648,10 @@ unlocks:
 <!-- file: app/welcome-back.tsx -->
 
 ```tsx
-import { Link } from "expo-router";
 import { useState } from "react";
 import { Button, Text, View } from "react-native";
+
+import { Link } from "expo-router";
 
 import { auth, useAuth } from "../src/auth";
 import { loadKey } from "../src/session-key";

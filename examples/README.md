@@ -1,21 +1,25 @@
 # session-kit examples
 
-Six small apps, one per supported setup, all signing in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth). The five web apps
-share the same pages: `/login`, prefilled with DummyJSON's test user, and a
-protected `/` that shows the user, calls `auth/me` with the access token, and
-signs out. The Expo app has the same sign-in screen, and splits the protected
-part into a home screen and a `/profile` screen that calls `auth/me`, so a
-deep link has somewhere to go.
+Ten small apps, one per supported setup and one written with Effect, all
+signing in against [DummyJSON's auth API](https://dummyjson.com/docs/auth).
+The nine web apps share the same pages: `/login`, prefilled with DummyJSON's
+test user, and a protected `/` that shows the user, calls `auth/me` with the
+access token, and signs out. The Expo app has the same sign-in screen, and
+splits the protected part into a home screen and a `/profile` screen that
+calls `auth/me`, so a deep link has somewhere to go.
 
-| App                                                          | Setup                                         | User comes from |
-| ------------------------------------------------------------ | --------------------------------------------- | --------------- |
-| [`tanstack-router`](./tanstack-router)                       | TanStack Router, file-based routes            | Login response  |
-| [`tanstack-start-spa`](./tanstack-start-spa)                 | TanStack Start in SPA mode                    | Access token    |
-| [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`               | Login response  |
-| [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`           | Access token    |
-| [`react-router-framework-spa`](./react-router-framework-spa) | React Router framework mode with `ssr: false` | Login response  |
-| [`expo-router`](./expo-router)                               | Expo Router on iOS and Android (Expo SDK 58)  | Login response  |
+| App                                                          | Setup                                             | User comes from |
+| ------------------------------------------------------------ | ------------------------------------------------- | --------------- |
+| [`tanstack-router`](./tanstack-router)                       | TanStack Router, file-based routes                | Login response  |
+| [`tanstack-start-spa`](./tanstack-start-spa)                 | TanStack Start in SPA mode                        | Access token    |
+| [`tanstack-start-spa-effetch`](./tanstack-start-spa-effetch) | TanStack Start in SPA mode, written with Effect   | Access token    |
+| [`tanstack-start-ssr`](./tanstack-start-ssr)                 | TanStack Start with server rendering              | Login response  |
+| [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`                   | Login response  |
+| [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`               | Access token    |
+| [`react-router-framework-spa`](./react-router-framework-spa) | React Router framework mode with `ssr: false`     | Login response  |
+| [`react-router-framework-ssr`](./react-router-framework-ssr) | React Router framework mode with server rendering | Login response  |
+| [`next-app`](./next-app)                                     | Next.js App Router with Proxy                     | Login response  |
+| [`expo-router`](./expo-router)                               | Expo Router on iOS and Android (Expo SDK 58)      | Login response  |
 
 ## Run one
 
@@ -55,6 +59,47 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
+- **TanStack Start with Effect** is the SPA app written with Effect,
+  [effetch](https://github.com/monarcode/effetch) and
+  [effetch-query](https://github.com/monarcode/effetch-query). `src/auth.ts`
+  describes the user with an Effect Schema and refreshes through effetch.
+  `src/api-client.ts` is the API client, a service whose `sessionBearer`
+  plugin sends the access token, and `src/runtime.ts` composes the app's
+  layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
+  and the profile query, which `src/ui.tsx` uses with `useMutation` and
+  `useQuery`, and the root route gives each session its own query cache. The
+  hooks and the guards are the SPA app's. See
+  [the guide](../docs/effect.md).
+- **TanStack Start with server rendering** keeps the session in an encrypted
+  `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
+  with DummyJSON from a server function, and refreshes in request middleware
+  (`src/start.ts`). `createMirrorAuth` gives the routes and components a
+  client, filled by `loadSession` on the server and `sessionHydration` in the
+  browser. `auth/me` is called both from a server function and, with
+  `clientCredentials`, from the browser. Set `SESSION_SECRET` (32 or more
+  random characters) to run `vite preview`; `vite dev` uses a development
+  secret. The cookie is `Secure` outside `vite dev`, which Safari refuses
+  over `http://localhost`: try `vite preview` in another browser. See
+  [the guide](../docs/tanstack-start.md).
+- **Next.js** keeps the session the same way: Proxy refreshes it
+  (`proxy.ts`), Server Components read it through `lib/auth/session.ts`, and
+  Server Functions in `app/actions.ts` sign in and out. `useMirrorAuth` in
+  `app/providers.tsx` gives Client Components the client and renders the
+  page again when the session changes in the browser, so the pages'
+  redirects run. The browser gets the access token from a Route Handler.
+  `SESSION_SECRET` and Safari work as for TanStack Start, with `next start`
+  and `next dev`. See [the guide](../docs/next.md).
+- **React Router with server rendering** keeps the session the same way.
+  Root middleware (`app/auth/middleware.server.ts`) gives each request a
+  cookie jar and refreshes, the root loader reads the session, and the sign-in
+  route's action signs in with a plain form that works before scripts load.
+  `useMirrorAuth` in `app/root.tsx` gives the components the client and runs
+  the loaders again when the session changes in the browser, so the
+  protected route's middleware redirects. The browser signs out, revalidates
+  and gets the access token through the resource routes in
+  `app/routes/auth.*.ts`. `SESSION_SECRET` and Safari work as for TanStack
+  Start, with `pnpm start` (after `pnpm build`) and `react-router dev`. See
+  [the guide](../docs/react-router-ssr.md).
 - **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
   `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
   after a failed refresh, and re-checks the session when the app returns to
@@ -63,9 +108,11 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-every web app has the same `ui.tsx` rather than sharing one. The apps differ in
-where the user comes from on purpose, so both user sources appear: the login
-response, validated by a schema, or the access token's claims, read with
+the client-side web apps have the same `ui.tsx` rather than sharing one. The
+server-rendered apps have their own, since they sign in on the server, and so
+does the Effect app, whose handlers run Effects. The apps differ in where the
+user comes from on purpose, so both user sources appear: the login response,
+validated by a schema, or the access token's claims, read with
 `fromAccessToken`. DummyJSON supports both.
 
 DummyJSON has no logout endpoint, so the apps do not pass `revoke`. Its refresh

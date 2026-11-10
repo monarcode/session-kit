@@ -20,7 +20,7 @@ import { parseUrl } from "../core/url.js";
  */
 export type AuthFetchClient = Pick<
 	AuthClient<unknown, unknown>,
-	"credentials" | "isCurrent"
+	"credentials" | "isCurrent" | "state"
 >;
 
 /**
@@ -43,6 +43,14 @@ export type AuthFetchClient = Pick<
  */
 export type AuthFetchOptions = {
 	/**
+	 * Whether a request made while signed out is sent without an
+	 * `Authorization` header, rather than rejecting with `UNAUTHENTICATED`.
+	 * Default: `false`. Set `true` when one `authFetch` serves public and
+	 * private endpoints. A locked client still rejects with `LOCKED`, and a
+	 * 401 for a request sent without a token is resolved as it is.
+	 */
+	optional?: boolean | undefined;
+	/**
 	 * Whether a 401 on the replayed request, after a successful refresh, ends the
 	 * session. Default: `true`. Set `false` when some endpoints answer 401 for
 	 * reasons other than a rejected token, so one of them cannot sign users out.
@@ -62,7 +70,8 @@ async function discard(response: Response) {
  * origin or with credentials in it, rejects with `INVALID_OPTIONS`, so the
  * token never leaves your API. A redirect rejects rather than being followed.
  *
- * Rejects with `UNAUTHENTICATED` when signed out and `LOCKED` while locked.
+ * Rejects with `UNAUTHENTICATED` when signed out, unless `optional` sends the
+ * request without a token, and `LOCKED` while locked.
  * A 401 response renews the access token once. `GET` and `HEAD` requests are
  * then sent again with the new token; other requests resolve the 401 for the
  * caller to retry. If the session changes during a request, it rejects with
@@ -96,6 +105,7 @@ export function createAuthFetch(
 	options: AuthFetchOptions = {},
 ) {
 	const base = parseUrl(baseUrl);
+	const optional = options.optional ?? false;
 	const signOutOnRepeated401 = options.signOutOnRepeated401 ?? true;
 	return async function authFetch(
 		path: string,
@@ -108,10 +118,6 @@ export function createAuthFetch(
 				"Authenticated requests must stay on the configured API origin",
 			);
 		}
-		const captured = await auth.credentials.get();
-
-		if (!captured)
-			throw new AuthError("UNAUTHENTICATED", "Sign in is required");
 		const request = new Request(url, init);
 		const canReplay = request.method === "GET" || request.method === "HEAD";
 
@@ -129,6 +135,21 @@ export function createAuthFetch(
 			return response;
 		};
 
+		const captured = await auth.credentials.get();
+		if (!captured) {
+			if (!optional)
+				throw new AuthError("UNAUTHENTICATED", "Sign in is required");
+			const response = await fetch(
+				new Request(request, { redirect: "error" }),
+			);
+			// A 401 for the signed-out request must not reach a 401 handler that
+			// would then sign out the account that just signed in.
+			if (auth.state.get().sessionId !== null) {
+				await discard(response);
+				throw sessionChanged();
+			}
+			return response;
+		}
 		const response = await send(captured);
 
 		if (response.status !== 401) return response;

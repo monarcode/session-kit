@@ -94,7 +94,10 @@ function useGuardedSessionId(): string | undefined {
  * re-run the loader for a new one, so no child sees the previous account's
  * loader data. Child routes are keyed by session, so nothing from one account
  * stays mounted for the next. Profile updates and token refreshes keep them
- * mounted. Needs an `AuthProvider` above it, or a `client`.
+ * mounted. Only what it renders is guarded this way: UI the route renders
+ * around it, such as a sidebar, stays mounted until the redirect, so read the
+ * user there from state, where it may be `null`. Needs an `AuthProvider`
+ * above it, or a `client`.
  *
  * @example
  * ```tsx

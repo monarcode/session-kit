@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
-/** What TanStack Router's generator would write for the README's routes. */
+/** What TanStack Router's generator would write for its guide's routes. */
 const ROUTE_TREE = `
 import { Route as rootRoute } from "./routes/__root.js";
 import { Route as loginRouteImport } from "./routes/login.js";
@@ -84,18 +84,78 @@ declare module "expo-crypto" {
 }
 `;
 
+/** What TanStack Router's generator would write for the Start guide's routes. */
+const START_ROUTE_TREE = `
+import { Route as rootRoute } from "./routes/__root";
+import { Route as authenticatedRouteImport } from "./routes/_authenticated";
+
+const authenticatedRoute = authenticatedRouteImport.update({
+  id: "/_authenticated",
+  getParentRoute: () => rootRoute,
+} as any);
+
+export const routeTree = rootRoute.addChildren([authenticatedRoute]);
+
+declare module "@tanstack/react-router" {
+  interface FileRoutesByPath {
+    "/_authenticated": {
+      id: "/_authenticated";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof authenticatedRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+  }
+}
+`;
+
+/** The part of Node's types the Start guide's server code uses. */
+const SERVER_ENV = `
+declare const process: { env: Record<string, string | undefined> };
+`;
+
 /**
  * Markdown documents whose TypeScript examples, marked with a
  * `<!-- file: path -->` comment, form one small app per document: they can
  * import each other, with `fixtures` standing in for generated files and the
- * app's other dependencies.
+ * app's other dependencies. A guide that builds on another document's app
+ * names the files it uses as `shared`; its own file replaces a shared one of
+ * the same path. `requires` skips a document when an installed package is
+ * older than it needs.
  */
 const documents = [
 	{
 		path: "README.md",
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
+		fixtures: {},
+	},
+	{
+		path: "docs/tanstack-router.md",
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
 		fixtures: { "src/routeTree.gen.ts": ROUTE_TREE },
+		shared: {
+			from: "README.md",
+			files: ["src/backend.ts", "src/auth.ts", "src/sign-in.tsx"],
+		},
+	},
+	{
+		path: "docs/react-router.md",
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {},
+		shared: {
+			from: "README.md",
+			files: [
+				"src/backend.ts",
+				"src/auth.ts",
+				"src/hooks.ts",
+				"src/sign-in.tsx",
+			],
+			// Framework mode keeps its code in `app`.
+			directories: ["src", "app"],
+		},
 	},
 	{
 		path: "docs/expo.md",
@@ -106,6 +166,38 @@ const documents = [
 		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
 	},
 	{
+		path: "docs/tanstack-start.md",
+		// Vite resolves like a bundler, and Start apps import without extensions.
+		resolutions: ["Bundler"],
+		dom: true,
+		fixtures: {
+			"src/routeTree.gen.ts": START_ROUTE_TREE,
+			"src/env.d.ts": SERVER_ENV,
+		},
+	},
+	{
+		path: "docs/next.md",
+		// Next apps resolve like a bundler: `next` has no `exports`.
+		resolutions: ["Bundler"],
+		// The App Router runs React 19, and the guide uses its APIs.
+		requires: { "@types/react": "19.0" },
+		dom: true,
+		fixtures: {
+			"env.d.ts": SERVER_ENV,
+			// What `next build` generates: Next's global types, such as `server-only`.
+			"next-env.d.ts": '/// <reference types="next" />',
+		},
+	},
+	{
+		path: "docs/react-router-ssr.md",
+		// React Router's Vite plugin resolves like a bundler.
+		resolutions: ["Bundler"],
+		// The guide's code is React Router 8's, with the `url` argument.
+		requires: { "react-router": "8.0" },
+		dom: true,
+		fixtures: { "app/env.d.ts": SERVER_ENV },
+	},
+	{
 		path: "docs/effect.md",
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
@@ -113,19 +205,66 @@ const documents = [
 	},
 ];
 
-/** The entry point of each subpath, whose exports are the public API. */
-const entries = [
-	"index",
-	"react/index",
-	"tanstack-router/index",
-	"react-router/index",
-	"http/index",
-	"expo/index",
-	"effect/index",
-	"effetch/index",
-];
+/**
+ * How each subpath's JSDoc examples compile, where it differs from the
+ * default: under NodeNext and Bundler resolution, with DOM types.
+ */
+const subpathOptions = {
+	// The Expo adapter runs where there's no DOM.
+	"./expo": { dom: false },
+	// Next apps resolve like a bundler: `next` has no `exports`, so
+	// `next/headers` resolves only that way.
+	"./next": { bundlerOnly: true },
+};
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+
+/**
+ * Each subpath in `package.json`'s `exports`: its published declarations,
+ * and its entry point in `src`, whose exports are the public API.
+ */
+const subpaths = Object.entries(
+	JSON.parse(readFileSync(join(root, "package.json"), "utf8")).exports,
+)
+	.filter(([name]) => name !== "./package.json")
+	.map(([name, entry]) => {
+		const types = join(root, entry.types);
+		const source = join(
+			root,
+			"src",
+			relative(join(root, "dist"), types).replace(/\.d\.ts$/, ".ts"),
+		);
+		return {
+			name,
+			types,
+			source,
+			directory: join(source, "..") + sep,
+			dom: true,
+			bundlerOnly: false,
+			...subpathOptions[name],
+		};
+	});
+for (const name of Object.keys(subpathOptions))
+	if (!subpaths.some((subpath) => subpath.name === name))
+		throw new Error(
+			`subpathOptions names ${name}, which package.json doesn't export`,
+		);
+
+/**
+ * The subpath a source file belongs to: the one whose directory holds it
+ * most closely, so `src/core` belongs to the root.
+ */
+function subpathOf(fileName) {
+	let best;
+	for (const subpath of subpaths)
+		if (
+			fileName.startsWith(subpath.directory) &&
+			(!best || subpath.directory.length > best.directory.length)
+		)
+			best = subpath;
+	return best;
+}
+
 // Examples import the package by name, which resolves to `dist` through its
 // `exports` only from inside the package, so they compile under it.
 const scratch = join(root, "tests", ".docs-check");
@@ -134,13 +273,17 @@ const problems = [];
 const parsedFiles = new Map();
 
 const sourceProgram = ts.createProgram(
-	entries.map((entry) => join(root, "src", `${entry}.ts`)),
+	subpaths.map((subpath) => subpath.source),
 	{ ...readCompilerOptions(), noEmit: true },
 );
 const exportCount = checkExportDocs(sourceProgram);
 const jsdocExamples = extractJsdocExamples(sourceProgram);
 compileExamples("JSDoc", jsdocExamples, ["NodeNext", "Bundler"]);
-for (const document of documents) checkDocument(document);
+const checkedDocuments = documents.filter(checkDocument).length;
+const excerpts = documents.reduce(
+	(count, document) => count + checkExcerpts(document.path),
+	0,
+);
 checkLinks();
 
 if (problems.length > 0) {
@@ -148,7 +291,7 @@ if (problems.length > 0) {
 	process.exit(1);
 }
 console.log(
-	`✓ ${exportCount} exports documented, ${jsdocExamples.length} JSDoc examples and ${documents.length} documents compile, links resolve`,
+	`✓ ${exportCount} exports documented, ${jsdocExamples.length} JSDoc examples and ${checkedDocuments} documents compile, ${excerpts} excerpts match, links resolve`,
 );
 
 function readCompilerOptions() {
@@ -230,9 +373,9 @@ function checkExportDocs(program) {
 		node.body !== undefined &&
 		checker.getSymbolAtLocation(node.name)?.declarations?.length > 1;
 	const seen = new Set();
-	for (const entry of entries) {
+	for (const subpath of subpaths) {
 		const moduleSymbol = checker.getSymbolAtLocation(
-			program.getSourceFile(join(root, "src", `${entry}.ts`)),
+			program.getSourceFile(subpath.source),
 		);
 		for (const exported of checker.getExportsOfModule(moduleSymbol)) {
 			const symbol =
@@ -264,6 +407,7 @@ function extractJsdocExamples(program) {
 		.filter((file) => file.fileName.startsWith(join(root, "src") + sep));
 	for (const source of sources) {
 		const text = source.text;
+		const { dom, bundlerOnly } = subpathOf(source.fileName);
 		for (const comment of text.matchAll(/\/\*\*[\s\S]*?\*\//g)) {
 			const firstLine = text.slice(0, comment.index).split("\n").length;
 			let block;
@@ -277,8 +421,8 @@ function extractJsdocExamples(program) {
 							origin: source.fileName,
 							line: firstLine + index + 1,
 							path: `example-${examples.length}.${open[1]}`,
-							// The Expo adapter runs where there's no DOM.
-							dom: !source.fileName.includes(`${sep}expo${sep}`),
+							dom,
+							bundlerOnly,
 							code: [],
 						};
 					} else if (block && line.trim() === "```") {
@@ -291,8 +435,8 @@ function extractJsdocExamples(program) {
 	return examples;
 }
 
-/** Compiles a document's marked examples, with its fixtures, as one app. */
-function checkDocument({ path, resolutions, dom, fixtures }) {
+/** A document's examples marked with a `<!-- file: path -->` comment. */
+function markedExamples(path, dom) {
 	const text = readFileSync(join(root, path), "utf8");
 	const files = [];
 	for (const match of text.matchAll(
@@ -307,9 +451,94 @@ function checkDocument({ path, resolutions, dom, fixtures }) {
 			code: match[2],
 		});
 	}
+	return files;
+}
+
+/**
+ * The files a document shares from another's app, where that document has
+ * them or, given `directories`, under each of those in place of their own.
+ */
+function sharedExamples(path, { from, files, directories }, dom) {
+	const theirs = markedExamples(from, dom);
+	return files.flatMap((name) => {
+		const file = theirs.find((candidate) => candidate.path === name);
+		if (!file) {
+			problems.push(`${path}: ${from} has no example named ${name}`);
+			return [];
+		}
+		const slash = name.indexOf("/");
+		if (!directories || slash === -1) return [file];
+		return directories.map((directory) => ({
+			...file,
+			path: directory + name.slice(slash),
+		}));
+	});
+}
+
+/**
+ * An example marked `<!-- from: path -->` is an excerpt of that document's
+ * marked examples, which compile: it must match part of one, whitespace
+ * aside, so the two can't drift apart. Returns how many `path` has.
+ */
+function checkExcerpts(path) {
+	const text = readFileSync(join(root, path), "utf8");
+	const squash = (code) => code.replace(/\s+/g, "");
+	const excerpts = [
+		...text.matchAll(
+			/<!-- from: ([\w/.-]+\.md) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+		),
+	];
+	const marked = text.match(/<!-- from: /g)?.length ?? 0;
+	if (marked !== excerpts.length)
+		problems.push(
+			`${path}: ${marked - excerpts.length} "from:" comment(s) aren't followed by a ts or tsx example`,
+		);
+	const sources = new Map();
+	for (const match of excerpts) {
+		const line = text.slice(0, match.index).split("\n").length;
+		if (!existsSync(join(root, match[1]))) {
+			problems.push(`${path}:${line}: there is no ${match[1]}`);
+			continue;
+		}
+		if (!sources.has(match[1]))
+			sources.set(match[1], markedExamples(match[1], true));
+		const found = sources
+			.get(match[1])
+			.some((file) => squash(file.code).includes(squash(match[2])));
+		if (!found)
+			problems.push(
+				`${path}:${line}: this excerpt isn't in ${match[1]}'s examples`,
+			);
+	}
+	return excerpts.length;
+}
+
+/**
+ * Compiles a document's marked examples, with its fixtures and shared files,
+ * as one app. Returns `false` for a document skipped because a package it
+ * needs is older than it requires.
+ */
+function checkDocument({
+	path,
+	resolutions,
+	dom,
+	fixtures,
+	shared,
+	requires = {},
+}) {
+	const missing = Object.entries(requires).find(
+		([name, minimum]) => !installedAtLeast(name, minimum),
+	);
+	if (missing) {
+		console.log(
+			`- ${path} skipped: it needs ${missing[0]} ${missing[1]} or later`,
+		);
+		return false;
+	}
+	const files = markedExamples(path, dom);
 	if (files.length === 0) {
 		problems.push(`${path}: no TypeScript examples found`);
-		return;
+		return true;
 	}
 	for (const [fixture, code] of Object.entries(fixtures))
 		files.push({
@@ -326,7 +555,14 @@ function checkDocument({ path, resolutions, dom, fixtures }) {
 			problems.push(`${path}: two examples are named ${file.path}`);
 		names.add(file.path);
 	}
+	if (shared)
+		files.push(
+			...sharedExamples(path, shared, dom).filter(
+				(file) => !names.has(file.path),
+			),
+		);
 	compileExamples(path, files, resolutions, { together: true });
+	return true;
 }
 
 /**
@@ -354,7 +590,11 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 		}
 	}
 	for (const resolution of resolutions) {
-		for (const group of groups) {
+		for (const all of groups) {
+			const group = all.filter(
+				(name) =>
+					resolution === "Bundler" || !virtual.get(name).bundlerOnly,
+			);
 			if (group.length === 0) continue;
 			const options = compilerOptions(resolution, virtual.get(group[0]).dom);
 			const program = ts.createProgram(
@@ -382,6 +622,31 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 			}
 		}
 	}
+}
+
+/**
+ * Whether the installed `name` is at least `minimum`: `major.minor`, or a
+ * full version, whose prerelease (`-rc.2`) is ordered by its last number.
+ */
+function installedAtLeast(name, minimum) {
+	const manifest = readFileSync(
+		join(root, "node_modules", name, "package.json"),
+		"utf8",
+	);
+	const parts = (version) => {
+		const [core, prerelease] = version.split("-");
+		const [major = 0, minor = 0, patch = 0] = core.split(".").map(Number);
+		// A release comes after its own prereleases.
+		const order =
+			prerelease === undefined
+				? Infinity
+				: Number(prerelease.split(".").at(-1));
+		return [major, minor, patch, order];
+	};
+	const have = parts(JSON.parse(manifest).version);
+	const want = parts(minimum);
+	const first = have.findIndex((part, index) => part !== want[index]);
+	return first === -1 || have[first] > want[first];
 }
 
 function compilerOptions(resolution, dom) {
@@ -444,7 +709,7 @@ function virtualHost(options, virtual) {
  */
 function checkLinks() {
 	const program = ts.createProgram(
-		entries.map((entry) => join(root, "dist", `${entry}.d.ts`)),
+		subpaths.map((subpath) => subpath.types),
 		{ ...readCompilerOptions(), noEmit: true },
 	);
 	const checker = program.getTypeChecker();

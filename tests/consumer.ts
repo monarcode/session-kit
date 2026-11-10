@@ -8,6 +8,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
+import { NextResponse, type NextRequest } from "next/server.js";
 import { z } from "zod";
 
 import {
@@ -24,6 +25,7 @@ import * as expo from "../dist/expo/index.js";
 import { createAuthFetch } from "../dist/http/index.js";
 import {
 	createAuth,
+	createMirrorAuth,
 	fromAccessToken,
 	memoryStorage,
 	webStorage,
@@ -35,17 +37,33 @@ import {
 	type AuthState,
 	type AuthStatus,
 	type AuthStorage,
+	type MirrorAuth,
 	type RefreshFn,
+	type Session,
 	type UserInput,
 } from "../dist/index.js";
+import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
-import { createAuthHooks } from "../dist/react/index.js";
+import {
+	cookieJarMiddleware,
+	routerJar,
+	type RouterContextLike,
+} from "../dist/react-router/server.js";
+import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
+import { createServerAuth, type CookieJar } from "../dist/server/index.js";
 import {
 	connectAuth,
 	requireSession,
 	SessionOutlet,
 	useRouterAuth,
 } from "../dist/tanstack-router/index.js";
+import {
+	loadSession,
+	sessionHydration,
+	type DehydratedSession,
+	type SessionHydration,
+} from "../dist/tanstack-start/index.js";
+import { startJar } from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -74,6 +92,8 @@ declare module "../dist/effect/index.js" {
 
 connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
+createAuthFetch(auth, "https://api.example.com", { optional: true });
+createAuthFetch(auth, "https://api.example.com", { optional: undefined });
 
 // Provider-free hooks typed by the registered Router.
 const { useAuth, useAuthClient } = createAuthHooks({
@@ -425,3 +445,129 @@ sessionApi.get("/feed", { plugins: { sessionBearer: { optional: true } } });
 // @ts-expect-error Calls can override only optional and signOutOnRepeated401.
 sessionApi.get("/me", { plugins: { sessionBearer: { baseUrl: "x" } } });
 void [madeWithAuth, madeWithoutAuth, sessionCall];
+
+// Server custody: the engine and the mirror client.
+const serverAuth = createServerAuth({
+	name: "type-test",
+	user: userSchema,
+	secret: "a-type-test-secret-that-is-32-chars-long",
+	cookie: { sameSite: "strict", secure: undefined },
+});
+declare const jar: CookieJar;
+async function serverSide() {
+	const session = await serverAuth.signIn(jar, {
+		accessToken: "a",
+		user: { id: "1", email: "a@example.com" },
+	});
+	const email: string = session.user.email;
+	// @ts-expect-error signIn needs the user the schema validates.
+	await serverAuth.signIn(jar, { accessToken: "a" });
+	await serverAuth.updateUser(jar, { id: "1", email });
+	const credentials = await serverAuth.clientCredentials.get(jar);
+	const expiresIn: number | undefined = credentials?.expiresIn;
+	return expiresIn;
+}
+void serverSide;
+const tokenServer = createServerAuth({
+	name: "type-test",
+	user: fromAccessToken(z.object({ sub: z.string() })),
+	secret: ["a-type-test-secret-that-is-32-chars-long"],
+});
+// @ts-expect-error A user read from the token has no updateUser.
+void tokenServer.updateUser;
+
+declare const initial: Session<z.output<typeof userSchema>> | null;
+const mirror = createMirrorAuth({
+	name: "type-test",
+	session: initial,
+	revalidate: () => serverAuth.getSession(jar),
+	signIn: (input: { username: string }) =>
+		serverAuth.signIn(jar, {
+			accessToken: input.username,
+			user: { id: "1", email: "a@example.com" },
+		}),
+	signOut: () => serverAuth.signOut(jar),
+	credentials: {
+		get: () => serverAuth.clientCredentials.get(jar),
+		renew: (rejected) => serverAuth.clientCredentials.renew(jar, rejected),
+	},
+});
+const mirrorEmail: string | undefined = mirror.state.get().user?.email;
+void mirrorEmail;
+void mirror.signIn({ username: "emilys" });
+// @ts-expect-error signIn takes what the signIn option takes.
+void mirror.signIn({ password: "x" });
+createAuthFetch(mirror, "https://api.example.com");
+createAuthHooks<typeof mirror>().AuthProvider({ client: mirror });
+void requireSession(mirror, {
+	location: { href: "/private" },
+	loginPath: "/login",
+});
+const plainMirror: MirrorAuth<{ id: string }> = createMirrorAuth({
+	name: "type-test",
+	session: null as Session<{ id: string }> | null,
+	revalidate: async () => null,
+	signOut: async () => {},
+});
+// @ts-expect-error Without the signIn option, there is no signIn.
+void plainMirror.signIn;
+// @ts-expect-error The mirror can't lock.
+void plainMirror.lock;
+
+// TanStack Start: hydration and the request's jar.
+const hydration: SessionHydration<z.output<typeof userSchema>> =
+	sessionHydration(mirror);
+const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
+	hydration.dehydrate();
+hydration.hydrate(dehydrated);
+void loadSession(mirror);
+void loadSession(plainMirror);
+// @ts-expect-error Only a mirror client holds the server's session.
+void loadSession(auth);
+const startCookies: CookieJar = startJar();
+void startCookies;
+
+// Next: jars over cookies() and Proxy.
+declare const nextCookies: NextCookies;
+const pageJar: CookieJar = nextJar(nextCookies);
+void pageJar;
+void nextJar(nextCookies, { writable: true });
+// @ts-expect-error nextJar takes a cookie store.
+void nextJar({});
+declare const nextRequest: NextRequest;
+void proxyJar(nextRequest, NextResponse.next());
+
+// The mirror hook, for any server-rendering framework.
+declare const renderAgain: () => void;
+const synced = useMirrorAuth(
+	(session) =>
+		createMirrorAuth({
+			name: "type-test",
+			session,
+			revalidate: async () => session,
+			signOut: async () => {},
+		}),
+	initial,
+	renderAgain,
+);
+const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
+void syncedUser;
+// @ts-expect-error The client must hold the server session's user.
+useMirrorAuth(() => plainMirror, initial, renderAgain);
+void useMirrorAuth(() => mirror, initial, renderAgain).signIn({
+	username: "emilys",
+});
+// @ts-expect-error The hook needs to know how to render on the server again.
+useMirrorAuth(() => mirror, initial);
+
+// React Router: the request's jar and its middleware.
+declare const requestContext: RouterContextLike;
+const loaderJar: CookieJar = routerJar(requestContext);
+void loaderJar;
+// @ts-expect-error routerJar takes the request's context, not its arguments.
+routerJar({ request: new Request("https://app.test/") });
+const withCookies: Promise<Response> = cookieJarMiddleware(
+	{ request: new Request("https://app.test/"), context: requestContext },
+	async () => new Response(null),
+);
+void withCookies;

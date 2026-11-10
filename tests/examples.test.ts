@@ -20,6 +20,52 @@ const copies = {
 		"react-router-declarative/src/auth.ts",
 		"react-router-framework-spa/app/auth.ts",
 	],
+	"the TanStack Router hooks": [
+		"tanstack-router/src/hooks.ts",
+		"tanstack-start-spa/src/hooks.ts",
+		"tanstack-start-spa-effetch/src/hooks.ts",
+		"tanstack-start-ssr/src/hooks.ts",
+	],
+	"the TanStack Router guarded layout": [
+		"tanstack-router/src/routes/_authenticated.tsx",
+		"tanstack-start-spa/src/routes/_authenticated.tsx",
+		"tanstack-start-spa-effetch/src/routes/_authenticated.tsx",
+		"tanstack-start-ssr/src/routes/_authenticated.tsx",
+	],
+	"the TanStack Router login route": [
+		"tanstack-router/src/routes/login.tsx",
+		"tanstack-start-spa/src/routes/login.tsx",
+		"tanstack-start-spa-effetch/src/routes/login.tsx",
+		"tanstack-start-ssr/src/routes/login.tsx",
+	],
+	"the TanStack Router home page": [
+		"tanstack-router/src/routes/_authenticated/index.tsx",
+		"tanstack-start-spa/src/routes/_authenticated/index.tsx",
+		"tanstack-start-spa-effetch/src/routes/_authenticated/index.tsx",
+	],
+	"the TanStack Start SPA router": [
+		"tanstack-start-spa/src/router.tsx",
+		"tanstack-start-spa-effetch/src/router.tsx",
+	],
+	"the TanStack Start SPA settings": [
+		"tanstack-start-spa/src/start.ts",
+		"tanstack-start-spa-effetch/src/start.ts",
+	],
+	"the React Router hooks": [
+		"react-router-declarative/src/hooks.ts",
+		"react-router-data/src/hooks.ts",
+		"react-router-framework-spa/app/hooks.ts",
+	],
+	"the DummyJSON address": [
+		"tanstack-start-ssr/src/auth/api.ts",
+		"next-app/lib/auth/api.ts",
+		"react-router-framework-ssr/app/auth/api.ts",
+	],
+	"the server's DummyJSON sign-in and refresh": [
+		"tanstack-start-ssr/src/auth/backend.ts",
+		"next-app/lib/auth/backend.ts",
+		"react-router-framework-ssr/app/auth/backend.ts",
+	],
 	"auth with the user from the access token": [
 		"tanstack-start-spa/src/auth.ts",
 		"react-router-data/src/auth.ts",

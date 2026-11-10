@@ -1,0 +1,24 @@
+{
+	"name": "session-kit-example-next-app",
+	"private": true,
+	"description": "session-kit with the Next.js App Router: the session in an encrypted cookie, against DummyJSON's auth API",
+	"type": "module",
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build && tsc --noEmit",
+		"start": "next start"
+	},
+	"dependencies": {
+		"@monarcode/session-kit": "workspace:*",
+		"next": "16.4.6",
+		"react": "19.3.0",
+		"react-dom": "19.3.0",
+		"zod": "4.6.7"
+	},
+	"devDependencies": {
+		"@types/node": "22.20.4",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"typescript": "6.0.3"
+	}
+}

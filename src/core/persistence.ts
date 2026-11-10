@@ -25,6 +25,28 @@ export type SavedEntry = { id: string; user?: unknown } & (
 const STORAGE_VERSION = 4;
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
+/**
+ * The session ID and access token of saved entry `text`, read without
+ * validating it, or `null` for an entry in another format or with sealed
+ * tokens.
+ */
+export function savedIdentity(
+	text: string | null,
+): { id: string; accessToken: string } | null {
+	if (!text) return null;
+	try {
+		const saved: unknown = JSON.parse(text);
+		return isRecord(saved) &&
+			saved.v === STORAGE_VERSION &&
+			typeof saved.id === "string" &&
+			typeof saved.accessToken === "string"
+			? { id: saved.id, accessToken: saved.accessToken }
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 /** Reports a storage failure, keeping auth's own errors as they are. */
 function storageError(cause: unknown): AuthError {
 	return cause instanceof AuthError
@@ -34,6 +56,25 @@ function storageError(cause: unknown): AuthError {
 			});
 }
 
+/** Whether `name` can name an auth: in storage keys, locks, cookies and channels. */
+export function isAuthName(name: unknown): name is string {
+	return typeof name === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(name);
+}
+
+/** Checks the `name` and `maxAge` options, which every engine shares. */
+export function checkOptions(name: unknown, maxAge: unknown): void {
+	if (
+		!isAuthName(name) ||
+		(maxAge !== undefined &&
+			(!Number.isSafeInteger(maxAge) || (maxAge as number) <= 0))
+	) {
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Use a simple auth name and a positive maxAge in seconds",
+		);
+	}
+}
+
 export function createPersistence(
 	storage: AuthStorage,
 	name: string,
@@ -41,16 +82,7 @@ export function createPersistence(
 	debug: Debugger,
 	sealing?: AuthLocking,
 ) {
-	if (
-		!/^[a-zA-Z0-9_-]{1,64}$/.test(name) ||
-		!Number.isSafeInteger(maxAge) ||
-		maxAge <= 0
-	) {
-		throw new AuthError(
-			"INVALID_OPTIONS",
-			"Use a simple auth name and a positive maxAge in seconds",
-		);
-	}
+	checkOptions(name, maxAge);
 	const key = `${name}:auth:session`;
 	const lockName = `${name}:auth:refresh`;
 	if (debug.on)

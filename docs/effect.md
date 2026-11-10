@@ -7,7 +7,8 @@ wraps the client you already have: React, the routers and Effect code share
 one session.
 
 Read the [README](../README.md) first for how the client, refresh, and errors
-work; this guide covers what Effect adds.
+work; this guide covers what Effect adds. A complete app is in
+[`examples/tanstack-start-spa-effetch`](../examples/tanstack-start-spa-effetch).
 
 ## Contents
 
@@ -19,6 +20,8 @@ work; this guide covers what Effect adds.
 - [Requests with effetch](#requests-with-effetch)
 - [Updating the user](#updating-the-user)
 - [Watching the session](#watching-the-session)
+- [Caching with effetch-query](#caching-with-effetch-query)
+- [With server rendering](#with-server-rendering)
 - [What stays on the client](#what-stays-on-the-client)
 
 ## Installation
@@ -69,6 +72,7 @@ before. Tests can provide another client instead.
 
 ```ts
 import { Auth } from "@monarcode/session-kit/effect";
+
 import { auth } from "./auth.js";
 
 export const AuthLive = Auth.layer(auth);
@@ -83,9 +87,10 @@ fails with `UNAUTHENTICATED` when signed out; `Auth.sessionOption` gives
 <!-- file: src/greeting.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Auth } from "@monarcode/session-kit/effect";
+
 import { AuthLive } from "./layer.js";
 
 export const greeting = Auth.sessionOption.pipe(
@@ -110,8 +115,8 @@ client reports as `INVALID_OPTIONS`, is a defect rather than a failure.
 <!-- file: src/account.ts -->
 
 ```ts
-import * as Effect from "effect/Effect";
 import { Auth } from "@monarcode/session-kit/effect";
+import * as Effect from "effect/Effect";
 
 export const accountName = Auth.session.pipe(
   Effect.map((session) => session.user.firstName),
@@ -138,33 +143,51 @@ that origin. `Fetch.make` then needs the `Auth` service, once:
 <!-- file: src/api.ts -->
 
 ```ts
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as Layer from "effect/Layer";
 import * as Fetch from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+
 import { AuthLive } from "./layer.js";
 
 const baseUrl = "https://api.example.com";
 
-const makeApi = Fetch.make({
+const make = Fetch.make({
   baseUrl,
   plugins: [retry(), sessionBearer({ baseUrl })],
 });
 
-// Made once, when the layer is built.
-export class Api extends Context.Service<Api, Effect.Success<typeof makeApi>>()(
-  "app/Api",
-) {
-  static readonly layer = Layer.effect(Api, makeApi).pipe(
-    Layer.provide(Layer.merge(FetchHttpClient.layer, AuthLive)),
-  );
-}
+export class ApiClient extends Context.Service<
+  ApiClient,
+  Effect.Success<typeof make>
+>()("ApiClient") {}
 
-export const orders = Api.use((api) => api.get("/orders"));
+// `fetch`, without the tracing headers Effect adds to every request: from a
+// browser, they fail the preflight of an API that doesn't allow them.
+const FetchLive = Layer.merge(
+  FetchHttpClient.layer,
+  Layer.succeed(HttpClient.TracerPropagationEnabled, false),
+);
+
+/** The app's services: the API client, made once, and the session it uses. */
+export const AppLayer = Layer.effect(ApiClient, make).pipe(
+  Layer.provideMerge(AuthLive),
+  Layer.provide(FetchLive),
+);
+
+export const orders = Effect.gen(function* () {
+  const api = yield* ApiClient;
+  return yield* api.get("/orders");
+});
 ```
+
+The README's [Effect and effetch](../README.md#effect-and-effetch) section
+lays a whole app out this way: the session, the API client, one runtime, and
+effetch-query.
 
 Calls can fail with `AuthFailure`, and skip the plugin with
 `plugins: { sessionBearer: false }`, for a public endpoint such as the sign-in
@@ -188,9 +211,10 @@ failure comes through unchanged:
 <!-- file: src/profile.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { Auth } from "@monarcode/session-kit/effect";
+
 import { userSchema } from "./auth.js";
 
 class ProfileUnavailable extends Data.TaggedError("ProfileUnavailable") {}
@@ -210,9 +234,9 @@ then every change, until the stream ends:
 <!-- file: src/watch.ts -->
 
 ```ts
+import { Auth } from "@monarcode/session-kit/effect";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { Auth } from "@monarcode/session-kit/effect";
 
 export const logStatus = Auth.changes.pipe(
   Stream.map((state) => state.status),
@@ -220,6 +244,68 @@ export const logStatus = Auth.changes.pipe(
   Stream.runForEach((status) => Effect.log(`Auth is ${status}`)),
 );
 ```
+
+## Caching with effetch-query
+
+With [effetch-query](https://github.com/monarcode/effetch-query) 0.1.0-rc.2
+or newer (and its `@effect/atom-react` peer for React), a cache must not
+outlive the account that filled it. Let `QueryProvider` own its
+client (`make` instead of `client`) and pass the session ID as `resetKey`:
+signing out or switching accounts then disposes the client, with its cache
+and its requests in flight, and renders the tree with a new one.
+
+<!-- file: src/queries.tsx -->
+
+```tsx
+import type { ReactNode } from "react";
+
+import { QueryClient } from "@monarcode/effetch-query";
+import { QueryProvider } from "@monarcode/effetch-query/react";
+import { createAuthHooks } from "@monarcode/session-kit/react";
+
+import { type ApiClient, AppLayer } from "./api.js";
+import { auth } from "./auth.js";
+
+declare module "@monarcode/effetch-query" {
+  interface Register {
+    readonly services: ApiClient;
+  }
+}
+
+const { useAuth } = createAuthHooks<typeof auth>();
+
+export function Queries({ children }: { children: ReactNode }) {
+  const account = useAuth((state) => state.sessionId ?? "signed-out");
+  return (
+    <QueryProvider
+      make={() => QueryClient.make({ layer: AppLayer })}
+      resetKey={account}
+    >
+      {children}
+    </QueryProvider>
+  );
+}
+```
+
+Render it inside `AuthProvider` or `SessionGate`, above every `Suspense`
+boundary. A refresh, a failed refresh or a profile update keeps the
+`sessionId`, and so the cache. So does locking: queries that need a token
+fail with `LOCKED` until `unlock()`, then refetch as usual. Until a saved
+session is restored, the key is `"signed-out"`, and the restore replaces
+that client.
+
+The owned form is for the browser and React Native. With server rendering,
+give `QueryProvider` a `client` per request instead, as effetch-query's
+README describes.
+
+## With server rendering
+
+A `createMirrorAuth` client, from the
+[TanStack Start guide](./tanstack-start.md), works as `Auth` too: register
+its type (such as `AppAuth`) and build the layer where you create the client,
+once per request on the server. `Auth.signIn` needs the mirror's `signIn`
+option, and `sessionBearer` its `credentials` option. `Auth.updateUser`
+isn't available, since the user comes from the server.
 
 ## What stays on the client
 

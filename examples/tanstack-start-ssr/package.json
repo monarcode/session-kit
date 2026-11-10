@@ -1,0 +1,27 @@
+{
+	"name": "session-kit-example-tanstack-start-ssr",
+	"private": true,
+	"description": "session-kit with TanStack Start server rendering: the session in an encrypted cookie, against DummyJSON's auth API",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build && tsc --noEmit",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@monarcode/session-kit": "workspace:*",
+		"@tanstack/react-router": "1.170.46",
+		"@tanstack/react-start": "1.169.5",
+		"react": "19.3.0",
+		"react-dom": "19.3.0",
+		"zod": "4.6.7"
+	},
+	"devDependencies": {
+		"@types/node": "22.20.4",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"@vitejs/plugin-react": "6.3.0",
+		"typescript": "6.0.3",
+		"vite": "8.3.7"
+	}
+}

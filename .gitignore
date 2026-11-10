@@ -10,6 +10,9 @@ build
 .react-router
 .tanstack
 .output
+.next
+next-env.d.ts
+*.tsbuildinfo
 routeTree.gen.ts
 .expo
 # Native projects that `expo run:ios` and `expo run:android` generate.
