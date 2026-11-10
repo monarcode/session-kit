@@ -146,6 +146,19 @@ const documents = [
 		},
 	},
 	{
+		path: "docs/next.md",
+		// Next apps resolve like a bundler: `next` has no `exports`.
+		resolutions: ["Bundler"],
+		// The App Router runs React 19, and the guide uses its APIs.
+		react: 19,
+		dom: true,
+		fixtures: {
+			"env.d.ts": SERVER_ENV,
+			// What `next build` generates: Next's global types, such as `server-only`.
+			"next-env.d.ts": '/// <reference types="next" />',
+		},
+	},
+	{
 		path: "docs/effect.md",
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
@@ -163,6 +176,8 @@ const entries = [
 	"server/index",
 	"tanstack-start/index",
 	"tanstack-start/server",
+	"next/index",
+	"next/client",
 	"expo/index",
 	"effect/index",
 	"effetch/index",
@@ -183,7 +198,7 @@ const sourceProgram = ts.createProgram(
 const exportCount = checkExportDocs(sourceProgram);
 const jsdocExamples = extractJsdocExamples(sourceProgram);
 compileExamples("JSDoc", jsdocExamples, ["NodeNext", "Bundler"]);
-for (const document of documents) checkDocument(document);
+const checkedDocuments = documents.filter(checkDocument).length;
 checkLinks();
 
 if (problems.length > 0) {
@@ -191,7 +206,7 @@ if (problems.length > 0) {
 	process.exit(1);
 }
 console.log(
-	`✓ ${exportCount} exports documented, ${jsdocExamples.length} JSDoc examples and ${documents.length} documents compile, links resolve`,
+	`✓ ${exportCount} exports documented, ${jsdocExamples.length} JSDoc examples and ${checkedDocuments} documents compile, links resolve`,
 );
 
 function readCompilerOptions() {
@@ -307,6 +322,7 @@ function extractJsdocExamples(program) {
 		.filter((file) => file.fileName.startsWith(join(root, "src") + sep));
 	for (const source of sources) {
 		const text = source.text;
+		const subpath = relative(join(root, "src"), source.fileName);
 		for (const comment of text.matchAll(/\/\*\*[\s\S]*?\*\//g)) {
 			const firstLine = text.slice(0, comment.index).split("\n").length;
 			let block;
@@ -321,7 +337,10 @@ function extractJsdocExamples(program) {
 							line: firstLine + index + 1,
 							path: `example-${examples.length}.${open[1]}`,
 							// The Expo adapter runs where there's no DOM.
-							dom: !source.fileName.includes(`${sep}expo${sep}`),
+							dom: !subpath.startsWith(`expo${sep}`),
+							// Next apps resolve like a bundler: `next` has no `exports`,
+							// so `next/headers` resolves only that way.
+							bundlerOnly: subpath.startsWith(`next${sep}`),
 							code: [],
 						};
 					} else if (block && line.trim() === "```") {
@@ -334,8 +353,15 @@ function extractJsdocExamples(program) {
 	return examples;
 }
 
-/** Compiles a document's marked examples, with its fixtures, as one app. */
-function checkDocument({ path, resolutions, dom, fixtures }) {
+/**
+ * Compiles a document's marked examples, with its fixtures, as one app.
+ * Returns `false` for a document skipped because React's types are too old.
+ */
+function checkDocument({ path, resolutions, dom, fixtures, react }) {
+	if (react && reactTypesMajor() < react) {
+		console.log(`- ${path} skipped: it needs React ${react}'s types`);
+		return false;
+	}
 	const text = readFileSync(join(root, path), "utf8");
 	const files = [];
 	for (const match of text.matchAll(
@@ -352,7 +378,7 @@ function checkDocument({ path, resolutions, dom, fixtures }) {
 	}
 	if (files.length === 0) {
 		problems.push(`${path}: no TypeScript examples found`);
-		return;
+		return true;
 	}
 	for (const [fixture, code] of Object.entries(fixtures))
 		files.push({
@@ -370,6 +396,7 @@ function checkDocument({ path, resolutions, dom, fixtures }) {
 		names.add(file.path);
 	}
 	compileExamples(path, files, resolutions, { together: true });
+	return true;
 }
 
 /**
@@ -397,7 +424,11 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 		}
 	}
 	for (const resolution of resolutions) {
-		for (const group of groups) {
+		for (const all of groups) {
+			const group = all.filter(
+				(name) =>
+					resolution === "Bundler" || !virtual.get(name).bundlerOnly,
+			);
 			if (group.length === 0) continue;
 			const options = compilerOptions(resolution, virtual.get(group[0]).dom);
 			const program = ts.createProgram(
@@ -425,6 +456,15 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 			}
 		}
 	}
+}
+
+/** The major version of the installed `@types/react`. */
+function reactTypesMajor() {
+	const manifest = readFileSync(
+		join(root, "node_modules", "@types", "react", "package.json"),
+		"utf8",
+	);
+	return Number(JSON.parse(manifest).version.split(".")[0]);
 }
 
 function compilerOptions(resolution, dom) {

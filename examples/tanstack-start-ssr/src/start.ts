@@ -18,7 +18,8 @@ const sessionMiddleware = createMiddleware({ type: "request" }).server(
 	async ({ next }) => {
 		// Every page and server function here depends on who is signed in.
 		setResponseHeader("Cache-Control", "private, no-store");
-		await serverAuth.prepare(startJar()).catch(() => {});
+		// The example's tokens live a minute: refresh in their last 15 seconds.
+		await serverAuth.prepare(startJar(), { skew: 15 }).catch(() => {});
 		return next();
 	},
 );

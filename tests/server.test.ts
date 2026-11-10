@@ -92,11 +92,6 @@ test("signIn seals the session into an httpOnly cookie that later requests read"
 });
 
 test("options it can't use throw INVALID_OPTIONS", () => {
-	assert.throws(
-		() => server({ secret: "too-short" }),
-		code("INVALID_OPTIONS"),
-	);
-	assert.throws(() => server({ secret: [] }), code("INVALID_OPTIONS"));
 	assert.throws(() => server({ name: "bad name" }), code("INVALID_OPTIONS"));
 	assert.throws(
 		() => server({ cookie: { sameSite: "none", secure: false } }),
@@ -106,6 +101,30 @@ test("options it can't use throw INVALID_OPTIONS", () => {
 		() => server({ user: {} as typeof userSchema }),
 		code("INVALID_OPTIONS"),
 	);
+});
+
+test("a missing or short secret rejects every call, not the creation", async () => {
+	for (const secret of ["too-short", [], undefined]) {
+		const app = server({ secret: secret as string });
+		const tab = browser({ "test.session": "1.sealed" });
+		await assert.rejects(
+			app.getSession(tab.request()),
+			code("INVALID_OPTIONS"),
+		);
+		await assert.rejects(
+			app.getSession(tab.request(false)),
+			code("INVALID_OPTIONS"),
+		);
+		await assert.rejects(
+			app.signIn(tab.request(), tokens()),
+			code("INVALID_OPTIONS"),
+		);
+		await assert.rejects(
+			app.prepare(browser().request()),
+			code("INVALID_OPTIONS"),
+		);
+		assert.deepEqual(tab.writes, []);
+	}
 });
 
 test("secrets rotate: any listed secret opens, and the first seals", async () => {

@@ -8,6 +8,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
+import { NextResponse, type NextRequest } from "next/server.js";
 import { z } from "zod";
 
 import {
@@ -41,6 +42,8 @@ import {
 	type Session,
 	type UserInput,
 } from "../dist/index.js";
+import { useMirrorAuth } from "../dist/next/client.js";
+import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import { createAuthHooks } from "../dist/react/index.js";
 import { createServerAuth, type CookieJar } from "../dist/server/index.js";
@@ -515,3 +518,27 @@ void loadSession(mirror);
 void loadSession(plainMirror);
 const startCookies: CookieJar = startJar();
 void startCookies;
+
+// Next: jars over cookies() and Proxy, and the mirror hook.
+declare const nextCookies: NextCookies;
+const pageJar: CookieJar = nextJar(nextCookies);
+void pageJar;
+void nextJar(nextCookies, { writable: true });
+// @ts-expect-error nextJar takes a cookie store.
+void nextJar({});
+declare const nextRequest: NextRequest;
+void proxyJar(nextRequest, NextResponse.next());
+const synced = useMirrorAuth(
+	(session) =>
+		createMirrorAuth({
+			name: "type-test",
+			session,
+			revalidate: async () => session,
+			signOut: async () => {},
+		}),
+	initial,
+);
+const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
+void syncedUser;
+// @ts-expect-error The client must hold the server session's user.
+useMirrorAuth(() => plainMirror, initial);

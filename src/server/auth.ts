@@ -22,7 +22,7 @@ import {
 	type CookieJar,
 	type CookieOptions,
 } from "./cookies.js";
-import { createSealer, readSecrets } from "./seal.js";
+import { createSealer, readSecrets, type Sealer } from "./seal.js";
 
 /**
  * Attributes of the session cookie, the `cookie` option of
@@ -94,7 +94,7 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 * Seals the cookie: at least 32 random characters, kept out of the code
 	 * and the browser. Pass a list to rotate: the first seals, and any of them
 	 * opens, so sessions survive a new secret. A cookie none opens reads as
-	 * signed out.
+	 * signed out. Checked when a method first runs, not at creation.
 	 */
 	secret: string | readonly string[];
 	/** Exchanges a refresh token for new tokens. See `RefreshFn`. */
@@ -276,7 +276,10 @@ const DEFAULT_SKEW = 60;
  * encrypted `httpOnly` cookie: both tokens and the user, sealed with
  * AES-256-GCM. Create one per app, at module level, and pass each request's
  * {@link CookieJar} to its methods. Throws `INVALID_OPTIONS` for options it
- * can't use, such as a short `secret`. See {@link ServerAuthOptions}.
+ * can't use, such as a bad `name`. A missing or short `secret` is checked
+ * when a method first runs instead, so build tools that load the module
+ * without it, such as `next build`, work: every method then rejects with
+ * `INVALID_OPTIONS`. See {@link ServerAuthOptions}.
  *
  * @example
  * ```ts
@@ -310,7 +313,6 @@ export function createServerAuth<Src extends UserSource>(
 ): ServerAuth<User<Src>, UserInput<Src>> {
 	type U = User<Src>;
 	type I = UserInput<Src>;
-	const secrets = readSecrets(options.secret);
 	const users = resolveUserSource(options.user);
 	const debug = createDebugger(options.name, options.debug);
 	checkOptions(options.name, options.maxAge);
@@ -327,7 +329,9 @@ export function createServerAuth<Src extends UserSource>(
 			"INVALID_OPTIONS",
 			'A cookie with sameSite "none" must be secure',
 		);
-	const sealer = createSealer(secrets, options.name);
+	// The secret is checked on first use, not here: build tools such as
+	// `next build` load this module without the secret the server runs with.
+	let sealer: Sealer | undefined;
 	const shared = createShared();
 
 	// One storage per jar, so calls during a request share what it read and
@@ -344,7 +348,10 @@ export function createServerAuth<Src extends UserSource>(
 				jar,
 				cookie,
 				options: attributes,
-				sealer,
+				sealer: (sealer ??= createSealer(
+					readSecrets(options.secret),
+					options.name,
+				)),
 				shared,
 			});
 			storages.set(jar, storage);

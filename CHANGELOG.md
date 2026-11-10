@@ -17,7 +17,9 @@
   (AES-256-GCM through Web Crypto, with rotatable secrets), refreshes on the
   server, and shares one refresh between parallel requests. Each method takes
   the request's `CookieJar`. With `clientCredentials: true`, the app can hand
-  the access token, never the refresh token, to its own page scripts.
+  the access token, never the refresh token, to its own page scripts. The
+  secret is checked on first use, so a build that loads the module without
+  it, such as `next build`, still works.
 - `createMirrorAuth`, a browser client for that session: it starts from the
   session the server rendered with, so there is no `initializing` state, and
   works with `AuthProvider`, the hooks, the router guards, `createAuthFetch`
@@ -31,6 +33,14 @@
   `@monarcode/session-kit/tanstack-start/server` has `startJar()`, the
   request's cookie jar for server functions and middleware.
   `@tanstack/react-start` 1.169 or newer is a new optional peer dependency.
+- Next.js 16 with the App Router, guided by `docs/next.md` and shown in
+  `examples/next-app`. `@monarcode/session-kit/next` has `nextJar`, the cookie
+  jar of `cookies()`, read-only unless `writable` is passed in a Server
+  Function or Route Handler, and `proxyJar`, which refreshes in Proxy so
+  Server Components read current tokens. `@monarcode/session-kit/next/client`
+  has `useMirrorAuth`, which creates the browser client from the session the
+  layout read and keeps the two in step. `next` 16 is a new optional peer
+  dependency.
 
 ### Changed
 

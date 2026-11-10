@@ -1,7 +1,7 @@
 # session-kit examples
 
-Seven small apps, one per supported setup, all signing in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth). The six web apps
+Eight small apps, one per supported setup, all signing in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth). The seven web apps
 share the same pages: `/login`, prefilled with DummyJSON's test user, and a
 protected `/` that shows the user, calls `auth/me` with the access token, and
 signs out. The Expo app has the same sign-in screen, and splits the protected
@@ -16,6 +16,7 @@ deep link has somewhere to go.
 | [`react-router-declarative`](./react-router-declarative)     | React Router, `<BrowserRouter>`               | Login response  |
 | [`react-router-data`](./react-router-data)                   | React Router, `createBrowserRouter`           | Access token    |
 | [`react-router-framework-spa`](./react-router-framework-spa) | React Router framework mode with `ssr: false` | Login response  |
+| [`next-app`](./next-app)                                     | Next.js App Router with Proxy                 | Login response  |
 | [`expo-router`](./expo-router)                               | Expo Router on iOS and Android (Expo SDK 58)  | Login response  |
 
 ## Run one
@@ -67,6 +68,14 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   secret. The cookie is `Secure` outside `vite dev`, which Safari refuses
   over `http://localhost`: try `vite preview` in another browser. See
   [the guide](../docs/tanstack-start.md).
+- **Next.js** keeps the session the same way: Proxy refreshes it
+  (`proxy.ts`), Server Components read it through `lib/auth/session.ts`, and
+  Server Functions in `app/actions.ts` sign in and out. `useMirrorAuth` in
+  `app/providers.tsx` gives Client Components the client and renders the
+  page again when the session changes in the browser, so the pages'
+  redirects run. The browser gets the access token from a Route Handler.
+  `SESSION_SECRET` and Safari work as for TanStack Start, with `next start`
+  and `next dev`. See [the guide](../docs/next.md).
 - **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
   `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
   after a failed refresh, and re-checks the session when the app returns to
@@ -76,7 +85,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
 
 Each app is self-contained, so it can be copied out on its own. That is why
 the client-side web apps have the same `ui.tsx` rather than sharing one; the
-server-rendered app has its own, since it signs in on the server. The apps
+server-rendered apps have their own, since they sign in on the server. The apps
 differ in where the user comes from on purpose, so both user sources appear:
 the login response, validated by a schema, or the access token's claims, read
 with `fromAccessToken`. DummyJSON supports both.

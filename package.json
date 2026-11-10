@@ -8,6 +8,7 @@
 		"effetch",
 		"expo",
 		"expo-router",
+		"nextjs",
 		"react",
 		"react-native",
 		"react-router",
@@ -69,6 +70,14 @@
 			"types": "./dist/tanstack-start/server.d.ts",
 			"import": "./dist/tanstack-start/server.js"
 		},
+		"./next": {
+			"types": "./dist/next/index.d.ts",
+			"import": "./dist/next/index.js"
+		},
+		"./next/client": {
+			"types": "./dist/next/client.d.ts",
+			"import": "./dist/next/client.js"
+		},
 		"./expo": {
 			"types": "./dist/expo/index.d.ts",
 			"import": "./dist/expo/index.js"
@@ -127,6 +136,7 @@
 		"expo-secure-store": "58.0.2",
 		"husky": "9.1.7",
 		"jsdom": "26.1.0",
+		"next": "16.4.6",
 		"oxfmt": "0.77.0",
 		"oxlint": "1.92.0",
 		"react": "19.3.0",
@@ -144,6 +154,7 @@
 		"expo-file-system": "^18.1.0 || ^19.0.0 || ^55.0.0 || ^56.0.0 || ^57.0.0 || ^58.0.0",
 		"expo-router": "^5.0.2 || ^6.0.0 || ^55.0.0 || ^56.0.0 || ^57.0.0 || ^58.0.0",
 		"expo-secure-store": "^14.2.0 || ^15.0.0 || ^55.0.0 || ^56.0.0 || ^57.0.0 || ^58.0.0",
+		"next": "^16.0.0",
 		"react": "^18.0.0 || ^19.0.0",
 		"react-native": ">=0.79.0",
 		"react-router": "^7.0.0 || ^8.0.0"
@@ -168,6 +179,9 @@
 			"optional": true
 		},
 		"expo-secure-store": {
+			"optional": true
+		},
+		"next": {
 			"optional": true
 		},
 		"react": {

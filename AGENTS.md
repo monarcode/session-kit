@@ -1,12 +1,15 @@
 # Agent instructions
 
 `@monarcode/session-kit`: schema-driven auth state and sessions for React,
-with TanStack Router, React Router and Expo Router adapters. It stores the
-tokens an app's backend issues and manages the session around them
-(restoring, refreshing, expiring, locking, syncing tabs); it never signs
-users in. Consumers import from the root and from subpaths:
+with TanStack Router, React Router and Expo Router adapters, and sessions
+kept on the server for TanStack Start and Next.js. It stores the tokens an
+app's backend issues and manages the session around them (restoring,
+refreshing, expiring, locking, syncing tabs); it never signs users in.
+Consumers import from the root and from subpaths:
 `import { createAuth, webStorage } from "@monarcode/session-kit"`, plus
-`./react`, `./tanstack-router`, `./react-router`, `./http` and `./expo`.
+`./react`, `./tanstack-router`, `./react-router`, `./http`, `./expo`,
+`./effect`, `./effetch`, `./server`, `./tanstack-start`,
+`./tanstack-start/server`, `./next` and `./next/client`.
 
 ## Start here
 
@@ -40,7 +43,8 @@ users in. Consumers import from the root and from subpaths:
    imports in `src`, no `#private` fields, no DOM globals without a guard:
    entry points import without touching browser globals. The core entry
    point never imports `react` or `react-native`; only `./expo` imports
-   Expo or React Native modules.
+   Expo or React Native modules, only `./tanstack-start/server` imports
+   `@tanstack/react-start`, and only `./next/client` imports `next`.
 5. **Behaviour belongs in the core engine** (`src/core/client.ts` and its
    modules). Adapters (`./react`, the routers, `./expo`, `./http`) only
    subscribe, guard and wire up lifecycle. State lives in a client, never at
@@ -81,7 +85,9 @@ users in. Consumers import from the root and from subpaths:
   in the README and `docs/`. They import from `@monarcode/session-kit` and
   its subpaths as an app would, and `declare const` what they don't build.
   They compile under NodeNext and Bundler resolution with
-  `exactOptionalPropertyTypes`, and `./expo` examples without DOM types. An
+  `exactOptionalPropertyTypes`, and `./expo` examples without DOM types.
+  `./next` examples and `docs/next.md` compile under Bundler only, as Next
+  apps do: `next` has no `exports` map. An
   example that augments a module (`declare module`) compiles on its own; the
   rest share one program. `tsx` blocks compile as TSX.
 - Give each piece of guidance one home. API behaviour lives in the JSDoc;
