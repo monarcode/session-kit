@@ -238,27 +238,25 @@ function usable(
 	);
 }
 
-// Adapters that carry the session from a server render to the browser find
-// each mirror's `hydrate` here, by its `state`.
-const hydrators = new WeakMap<object, (session: unknown) => void>();
+/** What adapters that carry a server render's session reach in a mirror. */
+export type MirrorHandle = {
+	/**
+	 * Starts the mirror from `session` as the server rendered it: no version
+	 * change, since guards already ran with it, and no message to other tabs.
+	 */
+	hydrate: (session: unknown) => void;
+	/** Whether the server has answered: a revalidation succeeded, or `hydrate` ran. */
+	readonly answered: boolean;
+};
 
-/**
- * Starts `client`, a mirror, from `session` as the server rendered it: no
- * version change, since guards already ran with it, and no message to other
- * tabs. Returns `false` for a client `createMirrorAuth` didn't make.
- */
-export function hydrateMirror(
-	client: { readonly state: object },
-	session: unknown,
-): boolean {
-	const hydrate = hydrators.get(client.state);
-	hydrate?.(session);
-	return Boolean(hydrate);
-}
+// By `state`, which copies of a client such as `{ ...auth }` keep.
+const handles = new WeakMap<object, MirrorHandle>();
 
-/** Whether `createMirrorAuth` made `client`. */
-export function isMirror(client: { readonly state: object }): boolean {
-	return hydrators.has(client.state);
+/** The handle of `client`, or `undefined` for a client `createMirrorAuth` didn't make. */
+export function mirrorOf(client: {
+	readonly state: object;
+}): MirrorHandle | undefined {
+	return handles.get(client.state);
 }
 
 /** The mirror's `AuthState` while `session` is current. */
@@ -353,8 +351,9 @@ export function createMirrorAuth<U, In = never>(
 		| { promise: Promise<Session<U> | null>; generation: number }
 		| undefined;
 	// When the server last answered, so returning to the tab soon after
-	// doesn't ask again.
+	// doesn't ask again, and whether it has answered since the client began.
 	let checkedAt = Date.now();
+	let answered = false;
 	let channel: BroadcastChannel | undefined;
 	// The access token for `session`, and the request getting one.
 	let cached: Credentials | undefined;
@@ -436,6 +435,7 @@ export function createMirrorAuth<U, In = never>(
 			try {
 				const next = toSession<U>(await options.revalidate());
 				checkedAt = Date.now();
+				answered = true;
 				if (generation === started) follow(next);
 				return session;
 			} catch (cause) {
@@ -654,15 +654,20 @@ export function createMirrorAuth<U, In = never>(
 			debug.log("sign-in", "signed in", { sessionId: next.sessionId });
 			return session!;
 		};
-	hydrators.set(client.state, (value) => {
-		replace(toSession<U>(value));
-		generation++;
-		checkedAt = Date.now();
-		debug.log("sync", "hydrated from the server render", {
-			sessionId: session?.sessionId ?? null,
-		});
-		// No version change: guards already ran with this session on the server.
-		store.set(stateOf(session, null, store.get().version));
+	handles.set(client.state, {
+		hydrate(value) {
+			replace(toSession<U>(value));
+			generation++;
+			checkedAt = Date.now();
+			answered = true;
+			debug.log("sync", "hydrated from the server render", {
+				sessionId: session?.sessionId ?? null,
+			});
+			store.set(stateOf(session, null, store.get().version));
+		},
+		get answered() {
+			return answered;
+		},
 	});
 	registerDebugger(client, debug);
 	return client as MirrorAuth<U, In>;

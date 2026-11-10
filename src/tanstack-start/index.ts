@@ -1,5 +1,5 @@
 import { AuthError } from "../core/errors.js";
-import { hydrateMirror, isMirror, type MirrorAuth } from "../core/mirror.js";
+import { mirrorOf, type MirrorAuth } from "../core/mirror.js";
 import type { Session } from "../core/types.js";
 
 /**
@@ -80,27 +80,24 @@ export function sessionHydration<U>(auth: MirrorAuth<U>): {
 		dehydrate() {
 			const { sessionId, user } = auth.state.get();
 			return {
-				loaded: loaded.has(auth.state),
+				loaded: mirrorOf(auth)?.answered ?? false,
 				session:
 					sessionId !== null && user !== null ? { sessionId, user } : null,
 			};
 		},
 		hydrate(dehydrated) {
-			const hydrated = dehydrated?.loaded
-				? hydrateMirror(auth, dehydrated.session)
-				: isMirror(auth);
-			if (!hydrated)
+			const mirror = mirrorOf(auth);
+			if (!mirror)
 				throw new AuthError(
 					"INVALID_OPTIONS",
 					"sessionHydration needs a client from createMirrorAuth",
 				);
-			if (dehydrated?.loaded) loaded.add(auth.state);
+			// The router passes `undefined` when the server sent no data, as from
+			// a router made without these options.
+			if (dehydrated?.loaded) mirror.hydrate(dehydrated.session);
 		},
 	};
 }
-
-// Clients that hold the session of the page they render, by `state`.
-const loaded = new WeakSet<object>();
 
 /**
  * Reads this request's session into the client, for the root route's
@@ -127,7 +124,6 @@ const loaded = new WeakSet<object>();
  * @since 0.1.0
  */
 export async function loadSession<U>(auth: MirrorAuth<U>): Promise<void> {
-	if (typeof document !== "undefined" && loaded.has(auth.state)) return;
+	if (typeof document !== "undefined" && mirrorOf(auth)?.answered) return;
 	await auth.retry();
-	loaded.add(auth.state);
 }
