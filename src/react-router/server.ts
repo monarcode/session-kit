@@ -1,9 +1,6 @@
 import { AuthError } from "../core/errors.js";
-import {
-	refreshesSettled,
-	type CookieJar,
-	type CookieOptions,
-} from "../server/cookies.js";
+import type { CookieJar } from "../server/cookies.js";
+import { requestJar, type RequestJar } from "../server/request-jar.js";
 
 /**
  * The shape of the `context` React Router passes to server middleware,
@@ -31,92 +28,12 @@ export type RouterContextLike = {
 	set: (key: never, value: never) => unknown;
 };
 
-/** The cookies a request sent and those its response will set. */
-type RequestCookies = {
-	request: Request;
-	jar: CookieJar;
-	/** `Set-Cookie` lines by cookie name: the last write to each wins. */
-	written: Map<string, string>;
-	committed: boolean;
-};
-
 // One per request, by its context: every middleware, loader and action of
 // the request shares it.
-const requests = new WeakMap<object, RequestCookies>();
-
-const SAME_SITE = { lax: "Lax", strict: "Strict", none: "None" } as const;
-
-function setCookieLine(
-	name: string,
-	value: string,
-	options: CookieOptions,
-): string {
-	return [
-		`${name}=${value}`,
-		`Path=${options.path}`,
-		...(options.domain === undefined ? [] : [`Domain=${options.domain}`]),
-		...(options.maxAge === undefined
-			? ["Max-Age=0", "Expires=Thu, 01 Jan 1970 00:00:00 GMT"]
-			: [`Max-Age=${options.maxAge}`]),
-		`SameSite=${SAME_SITE[options.sameSite]}`,
-		...(options.secure ? ["Secure"] : []),
-		"HttpOnly",
-	].join("; ");
-}
-
-/** The `Cookie` header's values by name, the first of each as servers read them. */
-function parseCookies(header: string | null): Map<string, string> {
-	const cookies = new Map<string, string>();
-	for (const pair of header?.split(";") ?? []) {
-		const equals = pair.indexOf("=");
-		if (equals === -1) continue;
-		const name = pair.slice(0, equals).trim();
-		if (name && !cookies.has(name))
-			cookies.set(name, pair.slice(equals + 1).trim());
-	}
-	return cookies;
-}
-
-function requestCookies(request: Request): RequestCookies {
-	let sent: Map<string, string> | undefined;
-	const cookies: RequestCookies = {
-		request,
-		written: new Map(),
-		committed: false,
-		jar: {
-			get writable() {
-				return !cookies.committed;
-			},
-			get: (name) =>
-				(sent ??= parseCookies(request.headers.get("cookie"))).get(name),
-			set(name, value, options) {
-				if (!cookies.committed)
-					cookies.written.set(name, setCookieLine(name, value, options));
-			},
-			delete(name, options) {
-				if (!cookies.committed)
-					cookies.written.set(
-						name,
-						setCookieLine(name, "", { ...options, maxAge: undefined }),
-					);
-			},
-		},
-	};
-	return cookies;
-}
-
-/** `response` with `lines` as `Set-Cookie` headers. */
-function withCookies(response: Response, lines: string[]): Response {
-	try {
-		for (const line of lines) response.headers.append("Set-Cookie", line);
-		return response;
-	} catch {
-		// Immutable headers, as on `Response.redirect()` or a `fetch` response.
-		const copy = new Response(response.body, response);
-		for (const line of lines) copy.headers.append("Set-Cookie", line);
-		return copy;
-	}
-}
+const requests = new WeakMap<
+	object,
+	{ request: Request; cookies: RequestJar }
+>();
 
 /**
  * Server middleware that gives each request a {@link CookieJar}, found with
@@ -161,19 +78,11 @@ export async function cookieJarMiddleware(
 	// Listed twice for one request: the outer one sets the cookies. Never a
 	// jar another request made, even with a `context` the app reused.
 	const current = requests.get(context);
-	if (current?.request === request && !current.committed) return next();
-	const cookies = requestCookies(request);
-	requests.set(context, cookies);
-	let response: Response;
-	try {
-		response = await next();
-	} finally {
-		await refreshesSettled(cookies.jar);
-		cookies.committed = true;
-	}
-	return cookies.written.size === 0
-		? response
-		: withCookies(response, [...cookies.written.values()]);
+	if (current?.request === request && current.cookies.jar.writable)
+		return next();
+	const cookies = requestJar(request);
+	requests.set(context, { request, cookies });
+	return cookies.respond(next);
 }
 
 /**
@@ -201,11 +110,11 @@ export async function cookieJarMiddleware(
  * @since 0.1.0
  */
 export function routerJar(context: RouterContextLike): CookieJar {
-	const cookies = requests.get(context);
-	if (!cookies)
+	const current = requests.get(context);
+	if (!current)
 		throw new AuthError(
 			"INVALID_OPTIONS",
 			"Add cookieJarMiddleware to the root route's middleware, and call routerJar(context) on the server, in middleware, loaders and actions",
 		);
-	return cookies.jar;
+	return current.cookies.jar;
 }
