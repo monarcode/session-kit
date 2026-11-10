@@ -83,8 +83,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-Pass a list as `secret` to rotate it: the first seals, and any of them opens,
-so sessions survive a new secret.
+[Server sessions](./server-sessions.md) covers the cookie, rotating the
+secret, and the limits every setup shares.
 
 ## 2. Server functions
 
@@ -331,19 +331,7 @@ does this.
 ## Things to know
 
 - **One jar per request.** `startJar()` returns the same jar for every call
-  while Start handles a request. If you build a `CookieJar` yourself, make a
-  new one per request: a jar kept at module level would show one request's
-  session to the next.
-- **Several server instances.** Parallel requests on one instance share one
-  refresh. Across instances, nothing is shared: with rotating refresh tokens,
-  give your backend a short reuse window, so two instances refreshing the
-  same session don't sign it out.
-- **Size.** The cookie can take about 11 KB across three cookies, since
-  servers refuse larger request headers. A larger user rejects at sign-in
-  with `PERSISTENCE_FAILED`; keep it small.
-- **Plain http.** The cookie is `Secure` by default. Browsers accept that on
-  `http://localhost` except Safari: pass `cookie: { secure: false }` for
-  local development there, never in production.
+  while Start handles a request.
 - **Caching.** Pages and server functions that read the session differ per
   user, and Start sends no `Cache-Control` for them. Behind a CDN or proxy
   that caches responses, mark them private, for example with
@@ -355,3 +343,5 @@ does this.
   the session.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again. So does returning to a tab after a while.
+- **More.** Several server instances, the cookie's size, and plain http
+  during development: see [Server sessions](./server-sessions.md).

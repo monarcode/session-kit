@@ -94,8 +94,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-Pass a list as `secret` to rotate it: the first seals, and any of them opens,
-so sessions survive a new secret.
+[Server sessions](./server-sessions.md) covers the cookie, rotating the
+secret, and the limits every setup shares.
 
 ## 2. Middleware
 
@@ -440,11 +440,11 @@ export async function action({ request, context }: ActionFunctionArgs) {
 }
 ```
 
-Browsers send `Sec-Fetch-Site` since 2023 (Safari 16.4); older ones are
-refused. Then pass the client a `credentials` option: `get` posts to the
-route with no body, and `renew` posts the rejected token. The browser keeps
-the access token in memory, never the refresh token. The example app does
-this.
+Then pass the client a `credentials` option: `get` posts to the route with
+no body, and `renew` posts the rejected token. The browser keeps the access
+token in memory, never the refresh token; see
+[Server sessions](./server-sessions.md#the-access-token-in-the-browser). The
+example app does this.
 
 ## Things to know
 
@@ -455,18 +455,9 @@ this.
   `REFRESH_FAILED`, since the jar can't save a new one. `refreshIfDue` in
   middleware refreshes before that.
 - **One jar per request.** `routerJar` returns the same jar for every call
-  with the same `context`, which React Router makes per request. If you
-  build a `CookieJar` yourself, make a new one per request.
-- **Several server instances.** Parallel requests on one instance share one
-  refresh. Across instances, nothing is shared: with rotating refresh tokens,
-  give your backend a short reuse window, so two instances refreshing the
-  same session don't sign it out.
-- **Size.** The cookie can take about 11 KB across three cookies, since
-  servers refuse larger request headers. A larger user rejects at sign-in
-  with `PERSISTENCE_FAILED`; keep it small.
-- **Plain http.** The cookie is `Secure` by default. Browsers accept that on
-  `http://localhost` except Safari: pass `cookie: { secure: false }` for
-  local development there, never in production.
+  with the same `context`, which React Router makes per request.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again and run their loaders again. So does returning to a tab after
   a while.
+- **More.** Several server instances, the cookie's size, and plain http
+  during development: see [Server sessions](./server-sessions.md).

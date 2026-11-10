@@ -44,6 +44,7 @@ them. Your backend does the authentication; session-kit does the rest:
 - [TanStack Start with server rendering](./docs/tanstack-start.md)
 - [Next.js](./docs/next.md)
 - [React Router with server rendering](./docs/react-router-ssr.md)
+- [Server sessions](./docs/server-sessions.md): what the three share
 - [Effect](./docs/effect.md)
 - [Using the client](#using-the-client)
   - [State](#state)
@@ -561,7 +562,8 @@ state, and the refresh token never reaches the browser.
 
 Locking isn't available with server rendering. For another server, such as
 the Next.js Pages Router, build a `CookieJar` over its cookies and use
-`createServerAuth` directly.
+`createServerAuth` directly. [Server sessions](./docs/server-sessions.md)
+covers the secret, cookie jars, refreshing across instances, and limits.
 
 ## Using the client
 

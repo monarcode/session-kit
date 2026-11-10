@@ -82,8 +82,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-Pass a list as `secret` to rotate it: the first seals, and any of them opens,
-so sessions survive a new secret.
+[Server sessions](./server-sessions.md) covers the cookie, rotating the
+secret, and the limits every setup shares.
 
 ## 2. Read the session in Server Components
 
@@ -437,9 +437,9 @@ export async function POST(request: Request) {
 }
 ```
 
-Browsers send `Sec-Fetch-Site` since 2023 (Safari 16.4); older ones are
-refused. The browser keeps the access token in memory, never the refresh
-token. The example app does this.
+The browser keeps the access token in memory, never the refresh token; see
+[Server sessions](./server-sessions.md#the-access-token-in-the-browser). The
+example app does this.
 
 ## Things to know
 
@@ -448,26 +448,18 @@ token. The example app does this.
   writable jar would refresh and then fail to save the new tokens, which
   spends a rotating refresh token.
 - **One jar per request.** `nextJar` and `proxyJar` return the same jar for
-  every call with the same store or response. If you build a `CookieJar`
-  yourself, make a new one per request.
-- **Several server instances.** Parallel requests on one instance share one
-  refresh. Next builds Proxy, Route Handlers, and pages with their Server
-  Functions separately, so each has its own `serverAuth`, even on one
-  server, and a serverless host runs them as separate functions. Across instances, nothing is shared: with
-  rotating refresh tokens, give your backend a short reuse window, so two
-  instances refreshing the same session don't sign it out. A matcher that
-  covers every route that reads the session lets Proxy refresh first, so
-  Route Handlers and Server Functions rarely need to.
+  every call with the same store or response.
+- **Separate instances.** Next builds Proxy, Route Handlers, and pages with
+  their Server Functions separately, so each has its own `serverAuth`, even
+  on one server: they share no refresh. A matcher that covers every route
+  that reads the session lets Proxy refresh first, so Route Handlers and
+  Server Functions rarely need to.
 - **Rendering.** Reading cookies makes a page dynamic. Next sends such pages
   with `Cache-Control: no-store`, and plain `use cache` can't read cookies.
   Keep pages that read the session on the Node.js runtime, the default:
   Next may not pass Proxy's refreshed cookie on to Edge runtime pages.
-- **Size.** The cookie can take about 11 KB across three cookies, since
-  servers refuse larger request headers. A larger user rejects at sign-in
-  with `PERSISTENCE_FAILED`; keep it small.
-- **Plain http.** The cookie is `Secure` by default. Browsers accept that on
-  `http://localhost` except Safari: pass `cookie: { secure: false }` for
-  local development there, never in production.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again and render their pages again. So does returning to a tab
   after a while.
+- **More.** Several server instances, the cookie's size, and plain http
+  during development: see [Server sessions](./server-sessions.md).
