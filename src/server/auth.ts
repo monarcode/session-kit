@@ -1,9 +1,9 @@
-import { createAuth } from "../core/client.js";
-import { createDebugger, type AuthDebug } from "../core/debug.js";
+import { createAuth, restoreSaved } from "../core/client.js";
+import type { AuthDebug } from "../core/debug.js";
 import { AuthError, sessionChanged } from "../core/errors.js";
 import { isRecord } from "../core/json.js";
 import type { ClientCredentials } from "../core/mirror.js";
-import { checkOptions, createPersistence } from "../core/persistence.js";
+import { checkOptions } from "../core/persistence.js";
 import { resolveUserSource, type UserSource } from "../core/sources.js";
 import type { AuthStorage } from "../core/storage.js";
 import type {
@@ -317,7 +317,6 @@ export function createServerAuth<Src extends UserSource>(
 	type U = User<Src>;
 	type I = UserInput<Src>;
 	const users = resolveUserSource(options.user);
-	const debug = createDebugger(options.name, options.debug);
 	checkOptions(options.name, options.maxAge);
 	const cookie = `${options.name}.session`;
 	const attributes: Omit<CookieOptions, "maxAge"> = Object.freeze({
@@ -337,8 +336,8 @@ export function createServerAuth<Src extends UserSource>(
 	let sealer: Sealer | undefined;
 	const shared = createShared();
 
-	// One storage per jar, so calls during a request share what it read and
-	// wrote, and one client per writable jar, so they share one refresh.
+	// One storage and one client per jar, so calls during a request share what
+	// it read and wrote, and one refresh.
 	const storages = new WeakMap<CookieJar, AuthStorage>();
 	const clients = new WeakMap<CookieJar, AuthClient<U, unknown>>();
 	// Jars whose request has called `refresh`, so `refreshIfDue` doesn't again.
@@ -392,32 +391,10 @@ export function createServerAuth<Src extends UserSource>(
 		return client;
 	}
 
-	/** The session as the cookie holds it, without refreshing, for read-only jars. */
-	async function peek(jar: CookieJar) {
-		const persistence = createPersistence(
-			storageOf(jar),
-			options.name,
-			options.maxAge,
-			debug,
-		);
-		try {
-			const stored = await persistence.read();
-			if (!stored) return null;
-			return { ...stored, user: (await users.restore(stored)) as U };
-		} catch (cause) {
-			if (
-				cause instanceof AuthError &&
-				(cause.code === "INVALID_SESSION" ||
-					cause.code === "USER_VALIDATION_FAILED")
-			)
-				return null;
-			throw cause;
-		}
-	}
-
 	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
-		if (jar.writable) return clientOf(jar).credentials.get();
-		const stored = await peek(jar);
+		const client = clientOf(jar);
+		if (jar.writable) return client.credentials.get();
+		const stored = await restoreSaved(client);
 		if (!stored) return null;
 		if (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
 			throw new AuthError(
@@ -442,7 +419,7 @@ export function createServerAuth<Src extends UserSource>(
 			);
 		const client = clientOf(jar);
 		// Restores the cookie's session first: renewing compares against it.
-		await client.getSession();
+		await restoreSaved(client);
 		return client.credentials.renew(credentials);
 	}
 
@@ -476,8 +453,9 @@ export function createServerAuth<Src extends UserSource>(
 
 	const serverAuth: ServerAuthBase<U, I> = {
 		async getSession(jar) {
-			if (jar.writable) return clientOf(jar).getSession();
-			const stored = await peek(jar);
+			const client = clientOf(jar);
+			if (jar.writable) return client.getSession();
+			const stored = await restoreSaved(client);
 			return (
 				stored && Object.freeze({ sessionId: stored.id, user: stored.user })
 			);
@@ -520,8 +498,9 @@ export function createServerAuth<Src extends UserSource>(
 		async signOut(jar) {
 			writable(jar, "signOut");
 			const client = clientOf(jar);
-			// Restores the cookie's session, so revoke receives its tokens.
-			await client.getSession().catch(() => {});
+			// Restores the cookie's session, so revoke receives its tokens. A
+			// cookie that can't be read is cleared all the same.
+			await restoreSaved(client).catch(() => {});
 			await client.signOut();
 		},
 		credentials: {
@@ -530,9 +509,8 @@ export function createServerAuth<Src extends UserSource>(
 			async reject(jar, credentials) {
 				writable(jar, "credentials.reject");
 				const client = clientOf(jar);
-				// Restores the cookie's session to compare against, even if its
-				// refresh fails.
-				await client.getSession().catch(() => {});
+				// Restores the cookie's session to compare against.
+				await restoreSaved(client);
 				await client.credentials.reject(credentials);
 			},
 		},

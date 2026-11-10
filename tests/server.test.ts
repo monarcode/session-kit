@@ -412,6 +412,42 @@ test("credentials.reject signs out only the current token, without revoking", as
 	assert.equal(revoked, 0);
 });
 
+test("signOut and credentials.reject end expired access without refreshing it", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let refreshes = 0;
+	const revoked: unknown[] = [];
+	const app = server({
+		refresh: async () => {
+			refreshes++;
+			return { accessToken: "access-2", expiresIn: 900 };
+		},
+		revoke: async ({ accessToken, refreshToken }) => {
+			revoked.push({ accessToken, refreshToken });
+		},
+	});
+	const tab = browser();
+	await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+	await app.signOut(tab.request());
+	assert.equal(refreshes, 0);
+	assert.deepEqual(revoked, [
+		{ accessToken: "access-1", refreshToken: "refresh-1" },
+	]);
+	assert.deepEqual(
+		tab.writes.map(({ value }) => value === null),
+		[false, true],
+	);
+
+	const session = await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+	await app.credentials.reject(tab.request(), {
+		sessionId: session.sessionId,
+		accessToken: "access-1",
+	});
+	assert.equal(refreshes, 0);
+	assert.equal(await app.getSession(tab.request(false)), null);
+});
+
 test("clientCredentials is opt-in and never includes the refresh token", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	const tab = browser();

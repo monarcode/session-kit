@@ -88,6 +88,23 @@ const GUARD_STATUS = {
 	unavailable: "unavailable",
 } satisfies Record<AuthStatus, AuthStatus>;
 
+/** A saved session as the client restored it, tokens included. */
+export type SavedSession<U> = SessionTokens & { id: string; user: U };
+
+// The server engine reads a cookie's session without refreshing it: for a
+// jar that can't save new tokens, and before ending the session.
+const restorers = new WeakMap<
+	object,
+	() => Promise<SavedSession<unknown> | null>
+>();
+
+/** Restores `client`'s saved session, as `getSession` does, without refreshing it. */
+export function restoreSaved<U>(
+	client: AuthClient<U, unknown>,
+): Promise<SavedSession<U> | null> {
+	return restorers.get(client)!() as Promise<SavedSession<U> | null>;
+}
+
 /** Whether `error` means the saved session itself is unusable, not storage. */
 function rejectsSaved(error: AuthError) {
 	return (
@@ -1401,5 +1418,11 @@ export function createAuth<Src extends UserSource>(
 		users.saved ? { ...client, updateUser } : client
 	) as AuthClient<U, I>;
 	registerDebugger(result, debug);
+	restorers.set(result, async () => {
+		await initialize();
+		return (
+			session && { ...tokensOf(session), id: session.id, user: session.user }
+		);
+	});
 	return result;
 }
