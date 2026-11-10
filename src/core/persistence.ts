@@ -25,6 +25,28 @@ export type SavedEntry = { id: string; user?: unknown } & (
 const STORAGE_VERSION = 4;
 const DEFAULT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
+/**
+ * The session ID and access token of saved entry `text`, read without
+ * validating it, or `null` for an entry in another format or with sealed
+ * tokens.
+ */
+export function savedIdentity(
+	text: string | null,
+): { id: string; accessToken: string } | null {
+	if (!text) return null;
+	try {
+		const saved: unknown = JSON.parse(text);
+		return isRecord(saved) &&
+			saved.v === STORAGE_VERSION &&
+			typeof saved.id === "string" &&
+			typeof saved.accessToken === "string"
+			? { id: saved.id, accessToken: saved.accessToken }
+			: null;
+	} catch {
+		return null;
+	}
+}
+
 /** Reports a storage failure, keeping auth's own errors as they are. */
 function storageError(cause: unknown): AuthError {
 	return cause instanceof AuthError

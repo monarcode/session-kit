@@ -1,5 +1,5 @@
 import { AuthError } from "../core/errors.js";
-import { isRecord } from "../core/json.js";
+import { savedIdentity } from "../core/persistence.js";
 import type { AuthStorage } from "../core/storage.js";
 import type { Sealer } from "./seal.js";
 
@@ -93,25 +93,12 @@ const MAX_CHUNKS = 3;
 /** How long a refresh's result serves requests that still carry the old cookie. */
 const REUSE_MS = 10_000;
 const MAX_REUSED = 10_000;
+/** The most saves followed from one cookie: a refresh, a profile update, another refresh. */
+const MAX_FOLLOWED = 10;
 
-/** What a saved entry says about itself, read without validating it. */
-function identify(
-	text: string | null,
-): { id: string; accessToken: string } | null {
-	if (!text) return null;
-	try {
-		const value: unknown = JSON.parse(text);
-		return isRecord(value) &&
-			typeof value.id === "string" &&
-			typeof value.accessToken === "string"
-			? { id: value.id, accessToken: value.accessToken }
-			: null;
-	} catch {
-		return null;
-	}
-}
-
-type Reused = { text: string | null; until: number };
+/** A session's saved entry and when it expires; `text` is `null` once it ended. */
+type Save = { text: string | null; expiresAt: number };
+type Reused = Save & { until: number };
 
 // Refreshes under way on each jar, which an adapter waits for before its jar
 // stops setting cookies.
@@ -143,31 +130,29 @@ export function createShared() {
 	}
 
 	return {
-		/** Records that the session saved as `previous` is now `text`, or ended when `null`. */
-		saved(
-			previous: { id: string; accessToken: string },
-			text: string | null,
-		) {
+		/** Records that the session saved as `previous` is now `save`. */
+		saved(previous: { id: string; accessToken: string }, save: Save) {
 			const now = Date.now();
 			const key = keyOf(previous.id, previous.accessToken);
 			saves.delete(key);
-			saves.set(key, { text, until: now + REUSE_MS });
+			saves.set(key, { ...save, until: now + REUSE_MS });
 			prune(now);
 		},
-		/** The newest save that follows `text`, or `text` itself. */
-		latest(text: string | null): string | null {
-			let current = identify(text);
+		/** The newest save that follows `text`, or `undefined` when none does. */
+		latest(text: string | null): Save | undefined {
+			let current = savedIdentity(text);
+			let newest: Save | undefined;
 			const now = Date.now();
-			// A chain of saves: a refresh, then a profile update, then another refresh.
-			for (let step = 0; current && step < 10; step++) {
+			for (let step = 0; current && step < MAX_FOLLOWED; step++) {
 				const entry = saves.get(keyOf(current.id, current.accessToken));
 				if (!entry || entry.until <= now || entry.text === text) break;
+				newest = { text: entry.text, expiresAt: entry.expiresAt };
 				text = entry.text;
-				const next = identify(text);
+				const next = savedIdentity(text);
 				if (next?.accessToken === current.accessToken) break;
 				current = next;
 			}
-			return text;
+			return newest;
 		},
 		/** Runs `work` after earlier work for session `id` settles. */
 		async exclusive<T>(
@@ -240,23 +225,31 @@ export function jarStorage(input: {
 		}
 		const opened = sealed && (await sealer.open(sealed, cookie));
 		// Sealed with a retired secret, cut short, or tampered with: signed out.
-		if (!opened && jar.writable) write(null, 0);
+		if (!opened && jar.writable) clear();
 		return opened || null;
 	}
 
 	function remember(next: string | null) {
 		text = next;
-		session = identify(next) ?? session;
+		session = savedIdentity(next) ?? session;
 	}
 
-	function write(sealed: string | null, maxAge: number) {
+	/** Deletes the chunks from `count` on, which a shorter value leaves behind. */
+	function trim(count: number) {
+		for (let index = count; index < chunks; index++)
+			jar.delete(chunkName(index), options);
+		chunks = count;
+	}
+
+	/** Sets the cookie to `sealed`, in chunks if needed, until `expiresAt`. */
+	function write(sealed: string, expiresAt: number) {
 		if (!jar.writable)
 			throw new AuthError(
 				"INVALID_OPTIONS",
 				"This cookie jar can't set cookies, so the session can't be saved here",
 			);
 		const parts: string[] = [];
-		if (sealed !== null && sealed.length > CHUNK_SIZE) {
+		if (sealed.length > CHUNK_SIZE) {
 			for (let start = 0; start < sealed.length; start += CHUNK_SIZE)
 				parts.push(sealed.slice(start, start + CHUNK_SIZE));
 			if (parts.length > MAX_CHUNKS)
@@ -265,18 +258,21 @@ export function jarStorage(input: {
 					"The session is too large for cookies",
 				);
 		}
+		const maxAge = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
 		parts.forEach((part, index) =>
 			jar.set(chunkName(index), part, { ...options, maxAge }),
 		);
-		for (let index = parts.length; index < chunks; index++)
-			jar.delete(chunkName(index), options);
-		chunks = parts.length;
-		if (sealed === null) jar.delete(cookie, options);
-		else
-			jar.set(cookie, parts.length ? `c${parts.length}` : sealed, {
-				...options,
-				maxAge,
-			});
+		trim(parts.length);
+		jar.set(cookie, parts.length ? `c${parts.length}` : sealed, {
+			...options,
+			maxAge,
+		});
+	}
+
+	/** Deletes the cookie and its chunks. */
+	function clear() {
+		trim(0);
+		jar.delete(cookie, options);
 	}
 
 	async function load(): Promise<string | null> {
@@ -293,12 +289,12 @@ export function jarStorage(input: {
 		);
 		await loaded;
 		// Another request may have saved this session since.
-		const latest = shared.latest(text);
-		if (latest !== text) {
-			remember(latest);
+		const newer = shared.latest(text);
+		if (newer) {
+			remember(newer.text);
 			if (jar.writable) {
-				if (latest === null) write(null, 0);
-				else write(await sealer.seal(latest, cookie), maxAgeOf(latest));
+				if (newer.text === null) clear();
+				else write(await sealer.seal(newer.text, cookie), newer.expiresAt);
 			}
 		}
 		return text;
@@ -308,27 +304,22 @@ export function jarStorage(input: {
 		get: load,
 		async set(_key, value, meta) {
 			await load();
-			const previous = identify(text);
-			const sealed = await sealer.seal(value, cookie);
-			write(
-				sealed,
-				Math.max(0, Math.ceil((meta.expiresAt - Date.now()) / 1000)),
-			);
+			const previous = savedIdentity(text);
+			write(await sealer.seal(value, cookie), meta.expiresAt);
 			remember(value);
-			const next = identify(value);
-			if (previous && next?.id === previous.id)
-				shared.saved(previous, value);
+			if (previous && savedIdentity(value)?.id === previous.id)
+				shared.saved(previous, { text: value, expiresAt: meta.expiresAt });
 		},
 		async remove() {
 			await load();
-			const previous = identify(text);
+			const previous = savedIdentity(text);
 			const held = text;
 			remember(null);
 			// A read-only jar keeps the cookie, so other requests mustn't take the
 			// session as ended.
 			if (!jar.writable) return;
-			if (jar.get(cookie) !== undefined || held !== null) write(null, 0);
-			if (previous) shared.saved(previous, null);
+			if (jar.get(cookie) !== undefined || held !== null) clear();
+			if (previous) shared.saved(previous, { text: null, expiresAt: 0 });
 		},
 		lock(_name, signal, work) {
 			const run = async () => {
@@ -352,13 +343,4 @@ export function jarStorage(input: {
 			return held;
 		},
 	};
-}
-
-/** The cookie lifetime for `text`, a saved entry, from its `persistUntil`. */
-function maxAgeOf(text: string): number {
-	const saved: unknown = JSON.parse(text);
-	const until = isRecord(saved) ? saved.persistUntil : undefined;
-	return typeof until === "number"
-		? Math.max(0, Math.ceil((until - Date.now()) / 1000))
-		: 0;
 }

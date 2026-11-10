@@ -579,6 +579,14 @@ test("another request's refresh serves an old cookie for ten seconds only", asyn
 		"access-2",
 	);
 	assert.equal(render.cookies.get("test.session"), old);
+	// A writable one saves it, for the whole lifetime the refresh gave it.
+	const other = browser({ "test.session": old });
+	assert.equal(
+		(await app.credentials.get(other.request()))?.accessToken,
+		"access-2",
+	);
+	assert.equal(calls, 1);
+	assert.equal(other.writes[0]?.options.maxAge, 30 * 24 * 60 * 60);
 
 	t.mock.timers.tick(10_000);
 	assert.equal(
