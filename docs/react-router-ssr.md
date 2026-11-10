@@ -152,8 +152,9 @@ export const requireSession: MiddlewareFunction<Response> = async ({
 ## 3. Sign in and out
 
 The sign-in route's action signs in with your backend and seals the result
-into the cookie. React Router checks that route actions come from your site,
-and the form works before the page's scripts load:
+into the cookie. React Router 7.12 and later refuse route actions posted from
+other sites; on 7.9 to 7.11, start the action with the `Sec-Fetch-Site` check
+the sign-out route below uses. The form works before the page's scripts load:
 
 <!-- file: app/routes/login.tsx -->
 
