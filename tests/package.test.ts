@@ -74,36 +74,51 @@ test("all public entry points import without browser globals", () => {
 	}
 });
 
-test("only the Effect entries import effect and effetch, optional peers", async () => {
+/**
+ * Whether `code` imports or re-exports `pkg` or one of its subpaths in a
+ * statement, not in a JSDoc example.
+ */
+function imports(code: string, pkg: string): boolean {
+	const name = pkg.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+	return new RegExp(
+		`^\\s*(?:import|export)\\b[^;]*?["']${name}(?:/[^"']*)?["']`,
+		"m",
+	).test(code);
+}
+
+/**
+ * Asserts that only `allowed` files in `dist` import `pkg`, an optional peer.
+ * An entry ending in `/` allows a whole directory.
+ */
+async function assertOnlyImports(pkg: string, allowed: string[]) {
 	const dist = new URL("dist/", packageRoot);
-	for (const file of await readdir(dist, { recursive: true })) {
-		if (!file.endsWith(".js")) continue;
-		const code = await readFile(new URL(file, dist), "utf8");
-		if (!file.startsWith(`effect${sep}`) && !file.startsWith(`effetch${sep}`))
-			assert.doesNotMatch(code, /from "effect[/"]/, file);
-		if (!file.startsWith(`effetch${sep}`))
-			assert.doesNotMatch(code, /from "@monarcode\/effetch/, file);
+	for (const entry of await readdir(dist, { recursive: true })) {
+		if (!entry.endsWith(".js")) continue;
+		const file = entry.split(sep).join("/");
+		if (
+			allowed.some((path) =>
+				path.endsWith("/") ? file.startsWith(path) : file === path,
+			)
+		)
+			continue;
+		const code = await readFile(new URL(entry, dist), "utf8");
+		assert.ok(!imports(code, pkg), `${file} imports ${pkg}`);
 	}
+}
+
+test("only the Effect entries import effect and effetch, optional peers", async () => {
+	await assertOnlyImports("effect", ["effect/", "effetch/"]);
+	await assertOnlyImports("@monarcode/effetch", ["effetch/"]);
 });
 
 test("only the Start server entry imports @tanstack/react-start, an optional peer", async () => {
-	const dist = new URL("dist/", packageRoot);
-	for (const file of await readdir(dist, { recursive: true })) {
-		if (!file.endsWith(".js")) continue;
-		const code = await readFile(new URL(file, dist), "utf8");
-		if (file !== `tanstack-start${sep}server.js`)
-			assert.doesNotMatch(code, /from "@tanstack\/react-start/, file);
-	}
+	await assertOnlyImports("@tanstack/react-start", [
+		"tanstack-start/server.js",
+	]);
 });
 
 test("no entry imports next, so any version loads them", async () => {
-	const dist = new URL("dist/", packageRoot);
-	for (const file of await readdir(dist, { recursive: true })) {
-		if (!file.endsWith(".js")) continue;
-		const code = await readFile(new URL(file, dist), "utf8");
-		// Import statements, not the examples in JSDoc.
-		assert.doesNotMatch(code, /^\s*import\b[^;]*from\s*"next[/"]/m, file);
-	}
+	await assertOnlyImports("next", []);
 });
 
 test("the React Router server entry imports no react-router, so any version loads it", async () => {
@@ -111,7 +126,7 @@ test("the React Router server entry imports no react-router, so any version load
 		new URL("dist/react-router/server.js", packageRoot),
 		"utf8",
 	);
-	assert.doesNotMatch(code, /^\s*import\b[^;]*from\s*"react-router[/"]/m);
+	assert.ok(!imports(code, "react-router"));
 });
 
 test("each entry exports readable JavaScript and declarations", async () => {
