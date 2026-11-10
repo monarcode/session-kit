@@ -1,4 +1,5 @@
 export { createAuthHooks } from "./hooks.js";
+export { useMirrorAuth } from "./mirror.js";
 
 export type { AuthSource, StateOf } from "./context.js";
 export type {

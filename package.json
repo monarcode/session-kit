@@ -78,10 +78,6 @@
 			"types": "./dist/next/index.d.ts",
 			"import": "./dist/next/index.js"
 		},
-		"./next/client": {
-			"types": "./dist/next/client.d.ts",
-			"import": "./dist/next/client.js"
-		},
 		"./expo": {
 			"types": "./dist/expo/index.d.ts",
 			"import": "./dist/expo/index.js"

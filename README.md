@@ -108,7 +108,7 @@ All peer dependencies are optional, so install only what you use:
 | `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
 | `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                               |
 | `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`                                        |
-| `next`                   | `^16.0.0`               | `/next/client`                                         |
+| `next`                   | `^16.0.0`               | `/next`                                                |
 | `effect`                 | `^4.1.0`                | `/effect`                                              |
 | `@monarcode/effetch`     | `^0.1.0-rc.1`           | `/effetch`                                             |
 | `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
@@ -554,11 +554,11 @@ state, and the refresh token never reaches the browser.
   `createAuthFetch` or `sessionBearer`, opt in with `clientCredentials`: page
   scripts then get the access token in memory, never the refresh token.
 
-| Framework                             | On the server                                   | In the browser                                             | Guide                                      |
-| ------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------ |
-| TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                          | [TanStack Start](./docs/tanstack-start.md) |
-| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/next/client`  | [Next.js](./docs/next.md)                  |
-| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react-router` | [React Router](./docs/react-router-ssr.md) |
+| Framework                             | On the server                                   | In the browser                                      | Guide                                      |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------ |
+| TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                   | [TanStack Start](./docs/tanstack-start.md) |
+| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](./docs/next.md)                  |
+| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router](./docs/react-router-ssr.md) |
 
 Locking isn't available with server rendering. For another server, such as
 the Next.js Pages Router, build a `CookieJar` over its cookies and use
@@ -872,16 +872,15 @@ of `AuthStorage`, as `secureStorage()` does.
 | Import                                         | Exports                                                                                                                |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `@monarcode/session-kit`                       | `createAuth`, `createMirrorAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, types |
-| `@monarcode/session-kit/react`                 | `createAuthHooks`, hook types                                                                                          |
+| `@monarcode/session-kit/react`                 | `createAuthHooks`, `useMirrorAuth`, hook types                                                                         |
 | `@monarcode/session-kit/tanstack-router`       | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, `RegisteredAuth`              |
-| `@monarcode/session-kit/react-router`          | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`, `useMirrorAuth`                        |
+| `@monarcode/session-kit/react-router`          | `SessionOutlet`, `requireSession`, `redirectIfSignedIn`, `useAuthRevalidation`                                         |
 | `@monarcode/session-kit/react-router/server`   | `cookieJarMiddleware`, `routerJar`, types                                                                              |
 | `@monarcode/session-kit/expo`                  | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                              |
 | `@monarcode/session-kit/server`                | `createServerAuth`, types                                                                                              |
 | `@monarcode/session-kit/tanstack-start`        | `sessionHydration`, `loadSession`, types                                                                               |
 | `@monarcode/session-kit/tanstack-start/server` | `startJar`                                                                                                             |
 | `@monarcode/session-kit/next`                  | `nextJar`, `proxyJar`, types                                                                                           |
-| `@monarcode/session-kit/next/client`           | `useMirrorAuth`, types                                                                                                 |
 | `@monarcode/session-kit/http`                  | `createAuthFetch`                                                                                                      |
 | `@monarcode/session-kit/effect`                | `Auth`, `AuthFailure`, `Register`, types                                                                               |
 | `@monarcode/session-kit/effetch`               | `sessionBearer`, types                                                                                                 |

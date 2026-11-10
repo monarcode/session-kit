@@ -26,7 +26,7 @@
   itself.
 - TanStack Start, guided by `docs/tanstack-start.md` and shown in
   `examples/tanstack-start-ssr`. `@monarcode/session-kit/tanstack-start` has
-  `sessionHydration`, router options that carry the session from the server
+  `sessionHydration`, router options (`SessionHydration`) that carry the session from the server
   render to the browser, and `loadSession`, which reads it into the client in
   the root route's `beforeLoad`. `@monarcode/session-kit/tanstack-start/server`
   has `startJar()`, the request's cookie jar for server functions and
@@ -36,19 +36,20 @@
   `examples/next-app`. `@monarcode/session-kit/next` has `nextJar`, the cookie
   jar of `cookies()`, read-only unless `writable` is passed in a Server
   Function or Route Handler, and `proxyJar`, which refreshes in Proxy so
-  Server Components read current tokens. `@monarcode/session-kit/next/client`
-  has `useMirrorAuth`, which creates the browser client from the session the
-  layout read and keeps the two in step. `next` 16 is a new optional peer
+  Server Components read current tokens. `next` 16 is a new optional peer
   dependency.
 - React Router framework mode, guided by `docs/react-router-ssr.md` and shown
   in `examples/react-router-framework-ssr`.
   `@monarcode/session-kit/react-router/server` has `cookieJarMiddleware`, root
   middleware that gives each request a cookie jar and sets its cookies on the
   response, and `routerJar(context)`, which finds that jar in middleware,
-  loaders and actions. `@monarcode/session-kit/react-router` has
-  `useMirrorAuth`, which creates the browser client from the session the root
-  loader read and keeps the two in step. It needs React Router's middleware:
-  React Router 8, or 7.9 and later with `future.v8_middleware`.
+  loaders and actions. It needs React Router's middleware: React Router 8, or
+  7.9 and later with `future.v8_middleware`.
+- `useMirrorAuth` in `@monarcode/session-kit/react`, for Next.js, React
+  Router and other server-rendering frameworks: it creates the browser client
+  from the session the server rendered and keeps the two in step, calling the
+  framework's own way to render again, such as Next's `router.refresh()` or
+  React Router's `revalidate`, when the session changes in the browser.
 - `createAuthFetch` takes `optional`, with the same meaning as
   `sessionBearer`'s: signed out, a request is sent without `Authorization`
   instead of rejecting with `UNAUTHENTICATED`. Locked still rejects with

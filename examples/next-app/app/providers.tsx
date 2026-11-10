@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 
-import { useMirrorAuth } from "@monarcode/session-kit/next/client";
+import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { useRouter } from "next/navigation";
 
 import { createAppAuth, type AppSession } from "../lib/auth/client";
 import { AuthProvider } from "./hooks";
@@ -10,7 +11,7 @@ import { AuthProvider } from "./hooks";
 /**
  * Gives Client Components the session the layout read. `useMirrorAuth`
  * follows the server's session when the page renders again, and renders it
- * again when the session changes in the browser, as after a sign-out here
+ * again with `router.refresh()` when the session changes in the browser, as after a sign-out here
  * or in another tab, so the pages' redirects run.
  */
 export function Providers({
@@ -20,6 +21,7 @@ export function Providers({
 	session: AppSession | null;
 	children: ReactNode;
 }) {
-	const auth = useMirrorAuth(createAppAuth, session);
+	const router = useRouter();
+	const auth = useMirrorAuth(createAppAuth, session, () => router.refresh());
 	return <AuthProvider client={auth}>{children}</AuthProvider>;
 }

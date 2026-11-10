@@ -16,16 +16,11 @@ type User = typeof user;
 
 useDom();
 
-let next: typeof import("@monarcode/session-kit/next/client");
-let AppRouterContext: typeof import("next/dist/shared/lib/app-router-context.shared-runtime.js").AppRouterContext;
-let binding: typeof import("@monarcode/session-kit/react-router");
+let react: typeof import("@monarcode/session-kit/react");
 let router: typeof import("react-router");
 
 beforeEach(async () => {
-	next = await import("@monarcode/session-kit/next/client");
-	({ AppRouterContext } =
-		await import("next/dist/shared/lib/app-router-context.shared-runtime.js"));
-	binding = await import("@monarcode/session-kit/react-router");
+	react = await import("@monarcode/session-kit/react");
 	router = await import("react-router");
 });
 
@@ -35,7 +30,7 @@ const bob: Session<User> = {
 	user: { ...user, id: "bob", email: "bob@example.com" },
 };
 
-/** An app whose layout calls a framework's `useMirrorAuth`. */
+/** An app whose layout calls `useMirrorAuth`, rendering again as a framework does. */
 type App = {
 	client: () => MirrorAuth<User>;
 	/** How many clients the hook created. */
@@ -70,7 +65,7 @@ const createClient =
 		});
 	};
 
-/** Next: a layout under a router whose `refresh` it counts. */
+/** Next: a layout given the session as a prop, and a counted `router.refresh`. */
 const mountNext: Mount = async (name, initial, revalidate) => {
 	const counts = { created: 0, refreshes: 0 };
 	let client!: MirrorAuth<User>;
@@ -78,16 +73,15 @@ const mountNext: Mount = async (name, initial, revalidate) => {
 	function Providers() {
 		const [session, setSession] = useState(initial);
 		rendered = setSession;
-		client = next.useMirrorAuth(
+		client = react.useMirrorAuth(
 			createClient(name, () => counts.created++, revalidate),
 			session,
+			// A new function each render, as apps write it.
+			() => counts.refreshes++,
 		);
 		return null;
 	}
-	const appRouter = { refresh: () => counts.refreshes++ };
-	await render(
-		h(AppRouterContext.Provider, { value: appRouter as never }, h(Providers)),
-	);
+	await render(h(Providers));
 	return {
 		client: () => client,
 		created: () => counts.created,
@@ -109,9 +103,11 @@ const mountReactRouter: Mount = async (name, initial, revalidate) => {
 		const { session } = router.useLoaderData() as {
 			session: Session<User> | null;
 		};
-		client = binding.useMirrorAuth(
+		const { revalidate: load } = router.useRevalidator();
+		client = react.useMirrorAuth(
 			createClient(name, () => counts.created++, revalidate),
 			session,
+			load,
 		);
 		return null;
 	}

@@ -1,5 +1,4 @@
 export { redirectIfSignedIn, requireSession } from "./guards.js";
-export { useMirrorAuth } from "./mirror.js";
 export { SessionOutlet } from "./outlet.js";
 export { useAuthRevalidation } from "./revalidation.js";
 

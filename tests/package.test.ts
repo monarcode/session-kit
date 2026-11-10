@@ -14,13 +14,11 @@ import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { nextJar, proxyJar } from "@monarcode/session-kit/next";
-import { useMirrorAuth } from "@monarcode/session-kit/next/client";
-import { createAuthHooks } from "@monarcode/session-kit/react";
+import { createAuthHooks, useMirrorAuth } from "@monarcode/session-kit/react";
 import {
 	requireSession as requireLoaderSession,
 	SessionOutlet as RouterSessionOutlet,
 	useAuthRevalidation,
-	useMirrorAuth as useRouterMirrorAuth,
 } from "@monarcode/session-kit/react-router";
 import {
 	cookieJarMiddleware,
@@ -65,7 +63,6 @@ test("all public entry points import without browser globals", () => {
 		requireLoaderSession,
 		RouterSessionOutlet,
 		useAuthRevalidation,
-		useRouterMirrorAuth,
 		cookieJarMiddleware,
 		routerJar,
 		createAuthFetch,
@@ -99,17 +96,14 @@ test("only the Start server entry imports @tanstack/react-start, an optional pee
 	}
 });
 
-test("only the Next client entry imports next, an optional peer, as a client module", async () => {
+test("no entry imports next, so any version loads them", async () => {
 	const dist = new URL("dist/", packageRoot);
 	for (const file of await readdir(dist, { recursive: true })) {
 		if (!file.endsWith(".js")) continue;
 		const code = await readFile(new URL(file, dist), "utf8");
 		// Import statements, not the examples in JSDoc.
-		if (file !== `next${sep}client.js`)
-			assert.doesNotMatch(code, /^\s*import\b[^;]*from\s*"next[/"]/m, file);
+		assert.doesNotMatch(code, /^\s*import\b[^;]*from\s*"next[/"]/m, file);
 	}
-	const client = await readFile(new URL("next/client.js", dist), "utf8");
-	assert.match(client, /^"use client";/, "next/client.js is a client module");
 });
 
 test("the React Router server entry imports no react-router, so any version loads it", async () => {

@@ -245,9 +245,11 @@ export const { AuthProvider, useAuth, useAuthClient } =
   createAuthHooks<AppAuth>();
 ```
 
-`useMirrorAuth` from `@monarcode/session-kit/next/client` creates the client
-in a Client Component, once per request on the server, never at module
-level. It keeps the client and the server in step both ways:
+`useMirrorAuth` from `@monarcode/session-kit/react` creates the client in a
+Client Component, once per request on the server, never at module level. It
+keeps the client and the server in step both ways, rendering Server
+Components again with `router.refresh()` when the session changes in the
+browser:
 
 <!-- file: app/providers.tsx -->
 
@@ -256,7 +258,8 @@ level. It keeps the client and the server in step both ways:
 
 import type { ReactNode } from "react";
 
-import { useMirrorAuth } from "@monarcode/session-kit/next/client";
+import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { useRouter } from "next/navigation";
 
 import { createAppAuth, type AppSession } from "../lib/auth/client";
 import { AuthProvider } from "./hooks";
@@ -265,7 +268,10 @@ export function Providers(props: {
   session: AppSession | null;
   children: ReactNode;
 }) {
-  const auth = useMirrorAuth(createAppAuth, props.session);
+  const router = useRouter();
+  const auth = useMirrorAuth(createAppAuth, props.session, () =>
+    router.refresh(),
+  );
   return <AuthProvider client={auth}>{props.children}</AuthProvider>;
 }
 ```

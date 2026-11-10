@@ -11,7 +11,7 @@ import {
 	type LoaderFunctionArgs,
 } from "react-router";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react-router";
+import { useMirrorAuth } from "@monarcode/session-kit/react";
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 
 import { createAppAuth } from "./auth/client";
@@ -56,7 +56,8 @@ export function Layout({ children }: { children: ReactNode }) {
  */
 export default function App() {
 	const { session } = useLoaderData<typeof loader>();
-	const auth = useMirrorAuth(createAppAuth, session);
+	const { revalidate } = useRevalidator();
+	const auth = useMirrorAuth(createAppAuth, session, revalidate);
 	return (
 		<AuthProvider client={auth}>
 			<Outlet />

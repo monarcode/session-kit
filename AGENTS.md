@@ -9,7 +9,7 @@ Consumers import from the root and from subpaths:
 `import { createAuth, webStorage } from "@monarcode/session-kit"`, plus
 `./react`, `./tanstack-router`, `./react-router`, `./react-router/server`,
 `./http`, `./expo`, `./effect`, `./effetch`, `./server`, `./tanstack-start`,
-`./tanstack-start/server`, `./next` and `./next/client`.
+`./tanstack-start/server` and `./next`.
 
 ## Start here
 
@@ -44,7 +44,7 @@ Consumers import from the root and from subpaths:
    entry points import without touching browser globals. The core entry
    point never imports `react` or `react-native`; only `./expo` imports
    Expo or React Native modules, only `./tanstack-start/server` imports
-   `@tanstack/react-start`, and only `./next/client` imports `next`.
+   `@tanstack/react-start`, and no entry point imports `next`.
 5. **Behaviour belongs in the core engine** (`src/core/client.ts` and its
    modules). Adapters (`./react`, the routers, `./expo`, `./http`) only
    subscribe, guard and wire up lifecycle. State lives in a client, never at

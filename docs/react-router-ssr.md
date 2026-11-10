@@ -275,9 +275,10 @@ export const { AuthProvider, useAuth, useAuthClient } =
 ```
 
 The root route runs the middleware and reads the session, and its component
-creates the client with `useMirrorAuth` from
-`@monarcode/session-kit/react-router`: once per request on the server, never
-at module level. It keeps the client and the server in step both ways:
+creates the client with `useMirrorAuth` from `@monarcode/session-kit/react`:
+once per request on the server, never at module level. It keeps the client
+and the server in step both ways, running loaders again with `revalidate`
+from `useRevalidator()` when the session changes in the browser:
 
 <!-- file: app/root.tsx -->
 
@@ -289,10 +290,11 @@ import {
   Outlet,
   Scripts,
   useLoaderData,
+  useRevalidator,
   type LoaderFunctionArgs,
 } from "react-router";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react-router";
+import { useMirrorAuth } from "@monarcode/session-kit/react";
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 
 import { createAppAuth } from "./auth/client";
@@ -323,7 +325,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
 export default function App() {
   const { session } = useLoaderData<typeof loader>();
-  const auth = useMirrorAuth(createAppAuth, session);
+  const { revalidate } = useRevalidator();
+  const auth = useMirrorAuth(createAppAuth, session, revalidate);
   return (
     <AuthProvider client={auth}>
       <Outlet />

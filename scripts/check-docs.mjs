@@ -187,7 +187,6 @@ const entries = [
 	"tanstack-start/index",
 	"tanstack-start/server",
 	"next/index",
-	"next/client",
 	"expo/index",
 	"effect/index",
 	"effetch/index",

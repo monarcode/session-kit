@@ -32,6 +32,32 @@ export type DehydratedSession<U> = {
 };
 
 /**
+ * The router options {@link sessionHydration} returns, for `createRouter`.
+ *
+ * @example
+ * ```ts
+ * import type { MirrorAuth } from "@monarcode/session-kit";
+ * import {
+ * 	sessionHydration,
+ * 	type SessionHydration,
+ * } from "@monarcode/session-kit/tanstack-start";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const auth: MirrorAuth<User>;
+ *
+ * export const options: SessionHydration<User> = sessionHydration(auth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type SessionHydration<U> = {
+	/** On the server: the session to send with the page. */
+	dehydrate: () => DehydratedSession<U>;
+	/** In the browser: starts the client from what `dehydrate` sent. */
+	hydrate: (dehydrated: DehydratedSession<U>) => void;
+};
+
+/**
  * Router options that carry the session from the server render to the
  * browser: spread them into `createRouter`. On the server, `dehydrate` sends
  * the session {@link loadSession} read; in the browser, `hydrate` starts the
@@ -72,10 +98,7 @@ export type DehydratedSession<U> = {
  *
  * @since 0.1.0
  */
-export function sessionHydration<U>(auth: MirrorAuth<U>): {
-	dehydrate: () => DehydratedSession<U>;
-	hydrate: (dehydrated: DehydratedSession<U>) => void;
-} {
+export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
 	return {
 		dehydrate() {
 			const { sessionId, user } = auth.state.get();

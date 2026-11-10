@@ -42,7 +42,6 @@ import {
 	type Session,
 	type UserInput,
 } from "../dist/index.js";
-import { useMirrorAuth } from "../dist/next/client.js";
 import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import {
@@ -50,7 +49,7 @@ import {
 	routerJar,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
-import { createAuthHooks } from "../dist/react/index.js";
+import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
 import { createServerAuth, type CookieJar } from "../dist/server/index.js";
 import {
 	connectAuth,
@@ -62,6 +61,7 @@ import {
 	loadSession,
 	sessionHydration,
 	type DehydratedSession,
+	type SessionHydration,
 } from "../dist/tanstack-start/index.js";
 import { startJar } from "../dist/tanstack-start/server.js";
 
@@ -515,7 +515,8 @@ void plainMirror.signIn;
 void plainMirror.lock;
 
 // TanStack Start: hydration and the request's jar.
-const hydration = sessionHydration(mirror);
+const hydration: SessionHydration<z.output<typeof userSchema>> =
+	sessionHydration(mirror);
 const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
 	hydration.dehydrate();
 hydration.hydrate(dehydrated);
@@ -526,7 +527,7 @@ void loadSession(auth);
 const startCookies: CookieJar = startJar();
 void startCookies;
 
-// Next: jars over cookies() and Proxy, and the mirror hook.
+// Next: jars over cookies() and Proxy.
 declare const nextCookies: NextCookies;
 const pageJar: CookieJar = nextJar(nextCookies);
 void pageJar;
@@ -535,6 +536,9 @@ void nextJar(nextCookies, { writable: true });
 void nextJar({});
 declare const nextRequest: NextRequest;
 void proxyJar(nextRequest, NextResponse.next());
+
+// The mirror hook, for any server-rendering framework.
+declare const renderAgain: () => void;
 const synced = useMirrorAuth(
 	(session) =>
 		createMirrorAuth({
@@ -544,14 +548,19 @@ const synced = useMirrorAuth(
 			signOut: async () => {},
 		}),
 	initial,
+	renderAgain,
 );
 const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
 void syncedUser;
 // @ts-expect-error The client must hold the server session's user.
-useMirrorAuth(() => plainMirror, initial);
-void useMirrorAuth(() => mirror, initial).signIn({ username: "emilys" });
+useMirrorAuth(() => plainMirror, initial, renderAgain);
+void useMirrorAuth(() => mirror, initial, renderAgain).signIn({
+	username: "emilys",
+});
+// @ts-expect-error The hook needs to know how to render on the server again.
+useMirrorAuth(() => mirror, initial);
 
-// React Router: the request's jar, its middleware, and the mirror hook.
+// React Router: the request's jar and its middleware.
 declare const requestContext: RouterContextLike;
 const loaderJar: CookieJar = routerJar(requestContext);
 void loaderJar;
@@ -562,21 +571,3 @@ const withCookies: Promise<Response> = cookieJarMiddleware(
 	async () => new Response(null),
 );
 void withCookies;
-const routerSynced = reactRouter.useMirrorAuth(
-	(session) =>
-		createMirrorAuth({
-			name: "type-test",
-			session,
-			revalidate: async () => session,
-			signOut: async () => {},
-		}),
-	initial,
-);
-const routerUser: z.output<typeof userSchema> | null =
-	routerSynced.state.get().user;
-void routerUser;
-// @ts-expect-error The client must hold the server session's user.
-reactRouter.useMirrorAuth(() => plainMirror, initial);
-void reactRouter
-	.useMirrorAuth(() => mirror, initial)
-	.signIn({ username: "emilys" });
