@@ -311,6 +311,34 @@ test("credentials follow the server: renew, sign-out, another session", async ()
 	assert.equal(ended.state.get().status, "unauthenticated");
 });
 
+test("renew asks again when the token another call cached has expired too", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let issued = 0;
+	const renewed: unknown[] = [];
+	const issue = () => ({
+		sessionId: "s1",
+		accessToken: `access-${++issued}`,
+		expiresIn: 60,
+	});
+	const auth = mirror({
+		credentials: {
+			get: async () => issue(),
+			renew: async (rejected) => {
+				renewed.push(rejected.accessToken);
+				return issue();
+			},
+		},
+	});
+	// A slow request holds the first token while a later call caches the second.
+	const first = await auth.credentials.get();
+	t.mock.timers.tick(56_000);
+	assert.equal((await auth.credentials.get())?.accessToken, "access-2");
+	t.mock.timers.tick(61_000);
+	assert.ok(first);
+	assert.equal((await auth.credentials.renew(first))?.accessToken, "access-3");
+	assert.deepEqual(renewed, ["access-1"]);
+});
+
 test("credentials.reject signs out only for the current token", async () => {
 	let signedOut = 0;
 	const auth = mirror({

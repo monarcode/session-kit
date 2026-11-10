@@ -225,6 +225,18 @@ const RECHECK_AFTER_MS = 10_000;
 /** Access tokens this close to expiry are asked for again, in milliseconds. */
 const RENEW_BEFORE_MS = 5_000;
 
+/** Whether `credentials` belong to `sessionId` and aren't about to expire. */
+function usable(
+	credentials: Credentials | undefined,
+	sessionId: string,
+): credentials is Credentials {
+	return (
+		credentials?.sessionId === sessionId &&
+		(credentials.expiresAt === undefined ||
+			credentials.expiresAt - Date.now() > RENEW_BEFORE_MS)
+	);
+}
+
 // Adapters that carry the session from a server render to the browser find
 // each mirror's `hydrate` here, by its `state`.
 const hydrators = new WeakMap<object, (session: unknown) => void>();
@@ -604,12 +616,7 @@ export function createMirrorAuth<U, In = never>(
 			async get() {
 				const source = requireCredentials();
 				if (!session) return null;
-				if (
-					cached?.sessionId === session.sessionId &&
-					(cached.expiresAt === undefined ||
-						cached.expiresAt - Date.now() > RENEW_BEFORE_MS)
-				)
-					return cached;
+				if (usable(cached, session.sessionId)) return cached;
 				if (pending?.sessionId === session.sessionId)
 					return pending.promise;
 				return request(session.sessionId, false, source.get);
@@ -619,7 +626,7 @@ export function createMirrorAuth<U, In = never>(
 				if (!session || session.sessionId !== rejected.sessionId)
 					throw sessionChanged();
 				if (
-					cached?.sessionId === rejected.sessionId &&
+					usable(cached, rejected.sessionId) &&
 					cached.accessToken !== rejected.accessToken
 				)
 					return cached;
