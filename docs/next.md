@@ -451,9 +451,13 @@ token. The example app does this.
   every call with the same store or response. If you build a `CookieJar`
   yourself, make a new one per request.
 - **Several server instances.** Parallel requests on one instance share one
-  refresh. Across instances, nothing is shared: with rotating refresh tokens,
-  give your backend a short reuse window, so two instances refreshing the
-  same session don't sign it out.
+  refresh. Next builds Proxy, Route Handlers, and pages with their Server
+  Functions separately, so each has its own `serverAuth`, even on one
+  server, and a serverless host runs them as separate functions. Across instances, nothing is shared: with
+  rotating refresh tokens, give your backend a short reuse window, so two
+  instances refreshing the same session don't sign it out. A matcher that
+  covers every route that reads the session lets Proxy refresh first, so
+  Route Handlers and Server Functions rarely need to.
 - **Rendering.** Reading cookies makes a page dynamic. Next sends such pages
   with `Cache-Control: no-store`, and plain `use cache` can't read cookies.
   Keep pages that read the session on the Node.js runtime, the default:

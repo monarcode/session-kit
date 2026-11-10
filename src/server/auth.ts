@@ -227,9 +227,12 @@ type ServerAuthBase<U, I> = {
  * comes from the access token. Prefer `typeof serverAuth`.
  *
  * Each method takes the request's {@link CookieJar}. Nothing is kept between
- * requests except a short record of new tokens, so parallel requests that
- * carry the same cookie use one refresh. Across server instances, nothing is
- * shared: with rotating refresh tokens, give the backend a short reuse window.
+ * requests except a short record of new tokens, so parallel requests to one
+ * instance that carry the same cookie use one refresh. Each call to
+ * `createServerAuth` is an instance, and a framework may make several on one
+ * server by loading the module that calls it once per bundle. Across
+ * instances, nothing is shared: with rotating refresh tokens, give the
+ * backend a short reuse window.
  *
  * `signIn` seals what it's given. When the browser sends the tokens and the
  * user, after signing in with the backend itself, the user in the cookie is
