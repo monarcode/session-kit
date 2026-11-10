@@ -2,11 +2,11 @@ import { atom } from "nanostores";
 
 import { createDebugger, registerDebugger, type AuthDebug } from "./debug.js";
 import { AuthError, sessionChanged, toAuthError } from "./errors.js";
-import { isRecord } from "./json.js";
 import { isAuthName } from "./persistence.js";
 import { countMounts, inBackground, stateView } from "./store.js";
 import type { AuthState, Credentials, Session } from "./types.js";
-import { sameSession, sameUser, toUser } from "./user.js";
+import { sameSession, sameUser } from "./user.js";
+import { readClientCredentials, readSession } from "./wire.js";
 
 /**
  * The access token as the server hands it to page scripts: what
@@ -274,25 +274,6 @@ function stateOf<U>(
 	}) as AuthState<U>;
 }
 
-/** Checks a session from the app's function, returning a frozen copy. */
-function toSession<U>(value: unknown): Session<U> | null {
-	if (value === null) return null;
-	if (
-		!isRecord(value) ||
-		typeof value.sessionId !== "string" ||
-		!value.sessionId ||
-		!isRecord(value.user)
-	)
-		throw new AuthError(
-			"INVALID_SESSION",
-			"Expected a session, { sessionId, user }, or null from the server",
-		);
-	return Object.freeze({
-		sessionId: value.sessionId,
-		user: toUser(value.user) as U,
-	});
-}
-
 /**
  * Creates a browser client ({@link MirrorAuth}) for a session the server keeps
  * in an encrypted cookie, with `createServerAuth` from
@@ -342,7 +323,7 @@ export function createMirrorAuth<U, In = never>(
 			"Pass a simple name, and revalidate and signOut functions",
 		);
 	const debug = createDebugger(options.name, options.debug);
-	let session = toSession<U>(options.session);
+	let session = readSession<U>(options.session);
 	const store = atom<AuthState<U>>(stateOf(session, null, 0));
 	// Increments on every change made here, so a revalidation that started
 	// before it doesn't apply what the server said earlier.
@@ -433,7 +414,7 @@ export function createMirrorAuth<U, In = never>(
 		debug.log("sync", `revalidating (${reason})`);
 		const promise = (async () => {
 			try {
-				const next = toSession<U>(await options.revalidate());
+				const next = readSession<U>(await options.revalidate());
 				checkedAt = Date.now();
 				answered = true;
 				if (generation === started) follow(next);
@@ -503,39 +484,18 @@ export function createMirrorAuth<U, In = never>(
 				);
 			}
 			if (session?.sessionId !== sessionId) throw sessionChanged();
-			if (value === null) {
+			const credentials = readClientCredentials(value);
+			if (!credentials) {
 				// The server has no session: it ended there.
 				debug.log("sync", "the server has no session");
 				change(null);
 				return null;
 			}
-			if (
-				!isRecord(value) ||
-				typeof value.sessionId !== "string" ||
-				typeof value.accessToken !== "string" ||
-				!value.accessToken ||
-				(value.expiresIn !== undefined &&
-					(typeof value.expiresIn !== "number" ||
-						!Number.isFinite(value.expiresIn) ||
-						value.expiresIn < 0))
-			)
-				throw new AuthError(
-					"INVALID_SESSION",
-					"Expected { sessionId, accessToken, expiresIn } or null from the server",
-				);
-			if (value.sessionId !== sessionId) {
+			if (credentials.sessionId !== sessionId) {
 				// The server holds another session: follow it.
 				inBackground(revalidate("another session on the server"));
 				throw sessionChanged();
 			}
-			const credentials: Credentials = Object.freeze({
-				sessionId,
-				accessToken: value.accessToken,
-				expiresAt:
-					value.expiresIn === undefined
-						? undefined
-						: Date.now() + value.expiresIn * 1000,
-			});
 			cached = credentials;
 			return credentials;
 		})();
@@ -591,7 +551,7 @@ export function createMirrorAuth<U, In = never>(
 		isCurrent: (captured) => session?.sessionId === captured.sessionId,
 		signOut,
 		adopt(next) {
-			change(toSession<U>(next));
+			change(readSession<U>(next));
 		},
 		mount: mounts.mount,
 		credentials: {
@@ -635,7 +595,7 @@ export function createMirrorAuth<U, In = never>(
 		client.signIn = async (input: In) => {
 			let next: Session<U> | null;
 			try {
-				next = toSession<U>(await signIn(input));
+				next = readSession<U>(await signIn(input));
 				if (!next)
 					throw new AuthError(
 						"INVALID_SESSION",
@@ -656,7 +616,7 @@ export function createMirrorAuth<U, In = never>(
 		};
 	handles.set(client.state, {
 		hydrate(value) {
-			replace(toSession<U>(value));
+			replace(readSession<U>(value));
 			generation++;
 			checkedAt = Date.now();
 			answered = true;

@@ -1,7 +1,6 @@
 import { createAuth, restoreSaved } from "../core/client.js";
 import type { AuthDebug } from "../core/debug.js";
 import { AuthError, sessionChanged } from "../core/errors.js";
-import { isRecord } from "../core/json.js";
 import type { ClientCredentials } from "../core/mirror.js";
 import { checkOptions } from "../core/persistence.js";
 import { resolveUserSource, type UserSource } from "../core/sources.js";
@@ -16,6 +15,7 @@ import type {
 	User,
 	UserInput,
 } from "../core/types.js";
+import { readRejected, toClientCredentials } from "../core/wire.js";
 import {
 	createShared,
 	jarStorage,
@@ -423,20 +423,6 @@ export function createServerAuth<Src extends UserSource>(
 		return client.credentials.renew(credentials);
 	}
 
-	function forClient(
-		credentials: Credentials | null,
-	): ClientCredentials | null {
-		if (!credentials) return null;
-		return Object.freeze({
-			sessionId: credentials.sessionId,
-			accessToken: credentials.accessToken,
-			expiresIn:
-				credentials.expiresAt === undefined
-					? undefined
-					: Math.max(0, (credentials.expiresAt - Date.now()) / 1000),
-		});
-	}
-
 	function requireClientCredentials() {
 		if (!options.clientCredentials)
 			throw new AuthError(
@@ -517,24 +503,12 @@ export function createServerAuth<Src extends UserSource>(
 		clientCredentials: {
 			async get(jar) {
 				requireClientCredentials();
-				return forClient(await getCredentials(jar));
+				return toClientCredentials(await getCredentials(jar));
 			},
 			async renew(jar, credentials) {
 				requireClientCredentials();
-				if (
-					!isRecord(credentials) ||
-					typeof credentials.sessionId !== "string" ||
-					typeof credentials.accessToken !== "string"
-				)
-					throw new AuthError(
-						"INVALID_OPTIONS",
-						"Pass the sessionId and accessToken the browser was given",
-					);
-				return forClient(
-					await renew(jar, {
-						sessionId: credentials.sessionId,
-						accessToken: credentials.accessToken,
-					}),
+				return toClientCredentials(
+					await renew(jar, readRejected(credentials)),
 				);
 			},
 		},
