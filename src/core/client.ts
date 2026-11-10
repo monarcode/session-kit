@@ -20,6 +20,7 @@ import {
 	type UserResolver,
 	type UserSource,
 } from "./sources.js";
+import { countMounts, inBackground, stateView } from "./store.js";
 import { runTask } from "./task.js";
 import { setLongTimeout, proactiveRefreshDelay } from "./timers.js";
 import { receiveTokens, tokensOf, type SessionTokens } from "./tokens.js";
@@ -56,14 +57,6 @@ type RefreshOutcome<U> =
 	/** The backend rejected the refresh token, so the session ended. */
 	| { kind: "signedOut" }
 	| { kind: "installed"; session: InternalSession<U> };
-
-/**
- * Starts work nobody awaits. Its failures are already published to
- * `state.error`, or are `SESSION_CHANGED` from work a newer session superseded.
- */
-function inBackground(work: Promise<unknown>) {
-	work.catch(() => {});
-}
 
 /** Statuses that expose `user`. Adding a status will not compile until it is listed. */
 const SIGNED_IN = {
@@ -222,13 +215,28 @@ export function createAuth<Src extends UserSource>(
 	});
 	// Lifecycle. `epoch` increments whenever the session is replaced; async
 	// work captures it and stops once it changes, and `controller` aborts that
-	// work. Timers and the storage watch run only while `mounts`, the number
-	// of connections, is above zero. Unmounting cancels neither: a restore or
+	// work. Timers and the storage watch run only while `mounts.count`, the
+	// number of connections, is above zero. Unmounting cancels neither: a restore or
 	// refresh already started finishes, and a remount joins it.
 	let epoch = 0;
 	let controller = new AbortController();
-	let mounts = 0;
-	let unwatch: (() => void) | undefined;
+	const mounts = countMounts(() => {
+		debug.log("mount", "mounted: timers running");
+		// Locking is for native apps, with no other tab to follow.
+		const unwatch = locking
+			? undefined
+			: persistence.watch(() => inBackground(sync()));
+		// Another tab may have changed the session while nothing watched.
+		if (!locking && initialized) inBackground(sync());
+		// Work in progress continues. A refresh the backend already answered
+		// may have rotated the refresh token, so cancelling it would lose the
+		// new one and send the spent one next time.
+		return () => {
+			debug.log("mount", "unmounted: timers stopped");
+			unwatch?.();
+			stopTimers();
+		};
+	});
 	let cancelExpiry: (() => void) | undefined;
 	let cancelProactive: (() => void) | undefined;
 	// The last timer plan reported to `debug`.
@@ -374,7 +382,12 @@ export function createAuth<Src extends UserSource>(
 	 */
 	function schedule() {
 		stopTimers();
-		if (!mounts || locked || !session || session.expiresAt === undefined)
+		if (
+			!mounts.count ||
+			locked ||
+			!session ||
+			session.expiresAt === undefined
+		)
 			return;
 		const remaining = session.expiresAt - Date.now();
 		if (remaining <= 0) return;
@@ -1330,54 +1343,17 @@ export function createAuth<Src extends UserSource>(
 		// Only the first mount and the last unmount start and stop the work.
 		// Later mounts, such as `SessionGate`'s own or a foreground re-check,
 		// only re-check the session.
-		if (mounts++ === 0) {
-			debug.log("mount", "mounted: timers running");
-			// Locking is for native apps, with no other tab to follow.
-			if (!locking) {
-				unwatch = persistence.watch(() => inBackground(sync()));
-				// Another tab may have changed the session while nothing watched.
-				if (initialized) inBackground(sync());
-			}
-		}
+		const unmount = mounts.mount();
 		// Restores synchronously when it can, before returning. On every call,
 		// not only the first: a re-check after timers were suspended, as in a
 		// backgrounded app, relies on it.
 		inBackground(resolveSession());
 		schedule();
-		let active = true;
-		return () => {
-			if (!active) return;
-			active = false;
-			// Work in progress continues. A refresh the backend already answered
-			// may have rotated the refresh token, so cancelling it would lose the
-			// new one and send the spent one next time.
-			if (--mounts === 0) {
-				debug.log("mount", "unmounted: timers stopped");
-				unwatch?.();
-				unwatch = undefined;
-				stopTimers();
-			}
-		};
+		return unmount;
 	}
 
 	const client = {
-		state: {
-			get: store.get,
-			// `listen`, not `subscribe`: nanostores' `subscribe` also calls the
-			// listener immediately with the current value.
-			subscribe: (listener: (state: AuthState<U>) => void) => ({
-				unsubscribe: store.listen((value) => {
-					try {
-						listener(value);
-					} catch (error) {
-						// A failing listener must not interrupt the auth operation that notified it.
-						queueMicrotask(() => {
-							throw error;
-						});
-					}
-				}),
-			}),
-		},
+		state: stateView(store),
 		signIn,
 		signOut: () => {
 			cancelSignIn();

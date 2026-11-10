@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MirrorAuth } from "../core/mirror.js";
 import { watchVersion } from "../core/revalidate.js";
 import type { Session } from "../core/types.js";
-import { sameUser } from "../core/user.js";
+import { sameSession } from "../core/user.js";
 
 /**
  * Creates the mirror once per mount from the session the server rendered,
@@ -51,12 +51,4 @@ export function useServerSession<U, C extends MirrorAuth<U>>(
 		[auth],
 	);
 	return auth;
-}
-
-function sameSession(
-	a: { sessionId: string; user: unknown } | null,
-	b: { sessionId: string; user: unknown } | null,
-): boolean {
-	if (a === null || b === null) return a === b;
-	return a.sessionId === b.sessionId && sameUser(a.user, b.user);
 }

@@ -4,8 +4,9 @@ import { createDebugger, registerDebugger, type AuthDebug } from "./debug.js";
 import { AuthError, sessionChanged, toAuthError } from "./errors.js";
 import { isRecord } from "./json.js";
 import { isAuthName } from "./persistence.js";
+import { countMounts, inBackground, stateView } from "./store.js";
 import type { AuthState, Credentials, Session } from "./types.js";
-import { sameUser, toUser } from "./user.js";
+import { sameSession, sameUser, toUser } from "./user.js";
 
 /**
  * The access token as the server hands it to page scripts: what
@@ -260,6 +261,21 @@ export function isMirror(client: { readonly state: object }): boolean {
 	return hydrators.has(client.state);
 }
 
+/** The mirror's `AuthState` while `session` is current. */
+function stateOf<U>(
+	session: Session<U> | null,
+	error: AuthError | null,
+	version: number,
+): AuthState<U> {
+	return Object.freeze({
+		status: session ? "authenticated" : "unauthenticated",
+		user: session?.user ?? null,
+		sessionId: session?.sessionId ?? null,
+		error,
+		version,
+	}) as AuthState<U>;
+}
+
 /** Checks a session from the app's function, returning a frozen copy. */
 function toSession<U>(value: unknown): Session<U> | null {
 	if (value === null) return null;
@@ -329,15 +345,7 @@ export function createMirrorAuth<U, In = never>(
 		);
 	const debug = createDebugger(options.name, options.debug);
 	let session = toSession<U>(options.session);
-	const store = atom<AuthState<U>>(
-		Object.freeze({
-			status: session ? "authenticated" : "unauthenticated",
-			user: session?.user ?? null,
-			sessionId: session?.sessionId ?? null,
-			version: 0,
-			error: null,
-		}) as AuthState<U>,
-	);
+	const store = atom<AuthState<U>>(stateOf(session, null, 0));
 	// Increments on every change made here, so a revalidation that started
 	// before it doesn't apply what the server said earlier.
 	let generation = 0;
@@ -347,9 +355,7 @@ export function createMirrorAuth<U, In = never>(
 	// When the server last answered, so returning to the tab soon after
 	// doesn't ask again.
 	let checkedAt = Date.now();
-	let mounts = 0;
 	let channel: BroadcastChannel | undefined;
-	let stopWatching: (() => void) | undefined;
 	// The access token for `session`, and the request getting one.
 	let cached: Credentials | undefined;
 	let pending:
@@ -385,15 +391,7 @@ export function createMirrorAuth<U, In = never>(
 				user: user as U,
 			});
 		if (!changed && previous.error === error) return;
-		store.set(
-			Object.freeze({
-				status: session ? "authenticated" : "unauthenticated",
-				user,
-				sessionId: session?.sessionId ?? null,
-				error,
-				version: previous.version + Number(changed),
-			}) as AuthState<U>,
-		);
+		store.set(stateOf(session, error, previous.version + Number(changed)));
 	}
 
 	function broadcast() {
@@ -403,18 +401,31 @@ export function createMirrorAuth<U, In = never>(
 		if (!channel) sender.close();
 	}
 
-	/** Makes `next` current. `tell` sends other tabs to the server for it. */
-	function apply(next: Session<U> | null, tell: boolean) {
-		const changed =
-			next?.sessionId !== session?.sessionId ||
-			(next && session && !sameUser(next.user, session.user));
+	/** Makes `next` the session, dropping another session's access token. */
+	function replace(next: Session<U> | null) {
 		if (next?.sessionId !== session?.sessionId) {
 			cached = undefined;
 			pending = undefined;
 		}
 		session = next;
+	}
+
+	/**
+	 * A change made in this tab: it wins over a revalidation under way, and
+	 * other tabs ask the server for it.
+	 */
+	function change(next: Session<U> | null) {
+		generation++;
+		const changed = !sameSession(next, session);
+		replace(next);
 		publish();
-		if (tell && changed) broadcast();
+		if (changed) broadcast();
+	}
+
+	/** Takes the session a revalidation read from the server. */
+	function follow(next: Session<U> | null) {
+		replace(next);
+		publish();
 	}
 
 	function revalidate(reason: string): Promise<Session<U> | null> {
@@ -425,7 +436,7 @@ export function createMirrorAuth<U, In = never>(
 			try {
 				const next = toSession<U>(await options.revalidate());
 				checkedAt = Date.now();
-				if (generation === started) apply(next, false);
+				if (generation === started) follow(next);
 				return session;
 			} catch (cause) {
 				const error = toAuthError(
@@ -447,10 +458,6 @@ export function createMirrorAuth<U, In = never>(
 		return promise;
 	}
 
-	function inBackground(work: Promise<unknown>) {
-		work.catch(() => {});
-	}
-
 	async function signOut() {
 		const ending = session?.sessionId ?? null;
 		try {
@@ -466,8 +473,7 @@ export function createMirrorAuth<U, In = never>(
 			throw error;
 		}
 		debug.log("sign-out", "signed out", { sessionId: ending });
-		generation++;
-		apply(null, true);
+		change(null);
 	}
 
 	function requireCredentials(): MirrorCredentials {
@@ -500,8 +506,7 @@ export function createMirrorAuth<U, In = never>(
 			if (value === null) {
 				// The server has no session: it ended there.
 				debug.log("sync", "the server has no session");
-				generation++;
-				apply(null, true);
+				change(null);
 				return null;
 			}
 			if (
@@ -543,75 +548,52 @@ export function createMirrorAuth<U, In = never>(
 		return promise;
 	}
 
+	const mounts = countMounts(() => {
+		debug.log("mount", "mounted: following other tabs");
+		const stops: Array<() => void> = [];
+		if (typeof BroadcastChannel === "function") {
+			const listening = new BroadcastChannel(`${options.name}:auth`);
+			listening.onmessage = () =>
+				inBackground(revalidate("another tab changed the session"));
+			channel = listening;
+			stops.push(() => {
+				listening.close();
+				if (channel === listening) channel = undefined;
+			});
+		}
+		const page = globalThis.document;
+		if (page && typeof page.addEventListener === "function") {
+			const onVisible = () => {
+				if (
+					page.visibilityState === "visible" &&
+					Date.now() - checkedAt >= RECHECK_AFTER_MS
+				)
+					inBackground(revalidate("the tab became visible"));
+			};
+			page.addEventListener("visibilitychange", onVisible);
+			stops.push(() =>
+				page.removeEventListener("visibilitychange", onVisible),
+			);
+		}
+		return () => {
+			debug.log("mount", "unmounted");
+			stops.forEach((stop) => stop());
+		};
+	});
+
 	const client: MirrorAuthBase<U> & {
 		signIn?: (input: In) => Promise<Session<U>>;
 	} = {
-		state: {
-			get: store.get,
-			subscribe: (listener) => ({
-				unsubscribe: store.listen((value) => {
-					try {
-						listener(value);
-					} catch (error) {
-						// A failing listener must not interrupt the change that notified it.
-						queueMicrotask(() => {
-							throw error;
-						});
-					}
-				}),
-			}),
-		},
+		state: stateView(store),
 		getSession: async () => session,
 		retry: () => revalidate("retry"),
 		refresh: () => revalidate("refresh"),
 		isCurrent: (captured) => session?.sessionId === captured.sessionId,
 		signOut,
 		adopt(next) {
-			const value = toSession<U>(next);
-			generation++;
-			apply(value, true);
+			change(toSession<U>(next));
 		},
-		mount() {
-			if (mounts++ === 0) {
-				debug.log("mount", "mounted: following other tabs");
-				const stops: Array<() => void> = [];
-				if (typeof BroadcastChannel === "function") {
-					const listening = new BroadcastChannel(`${options.name}:auth`);
-					listening.onmessage = () =>
-						inBackground(revalidate("another tab changed the session"));
-					channel = listening;
-					stops.push(() => {
-						listening.close();
-						if (channel === listening) channel = undefined;
-					});
-				}
-				const page = globalThis.document;
-				if (page && typeof page.addEventListener === "function") {
-					const onVisible = () => {
-						if (
-							page.visibilityState === "visible" &&
-							Date.now() - checkedAt >= RECHECK_AFTER_MS
-						)
-							inBackground(revalidate("the tab became visible"));
-					};
-					page.addEventListener("visibilitychange", onVisible);
-					stops.push(() =>
-						page.removeEventListener("visibilitychange", onVisible),
-					);
-				}
-				stopWatching = () => stops.forEach((stop) => stop());
-			}
-			let active = true;
-			return () => {
-				if (!active) return;
-				active = false;
-				if (--mounts === 0) {
-					debug.log("mount", "unmounted");
-					stopWatching?.();
-					stopWatching = undefined;
-				}
-			};
-		},
+		mount: mounts.mount,
 		credentials: {
 			async get() {
 				const source = requireCredentials();
@@ -668,32 +650,19 @@ export function createMirrorAuth<U, In = never>(
 				debug.log("sign-in", "rejected", undefined, error);
 				throw error;
 			}
-			generation++;
-			apply(next, true);
+			change(next);
 			debug.log("sign-in", "signed in", { sessionId: next.sessionId });
 			return session!;
 		};
 	hydrators.set(client.state, (value) => {
-		const next = toSession<U>(value);
-		if (next?.sessionId !== session?.sessionId) {
-			cached = undefined;
-			pending = undefined;
-		}
-		session = next;
+		replace(toSession<U>(value));
 		generation++;
 		checkedAt = Date.now();
 		debug.log("sync", "hydrated from the server render", {
 			sessionId: session?.sessionId ?? null,
 		});
-		store.set(
-			Object.freeze({
-				status: session ? "authenticated" : "unauthenticated",
-				user: session?.user ?? null,
-				sessionId: session?.sessionId ?? null,
-				error: null,
-				version: store.get().version,
-			}) as AuthState<U>,
-		);
+		// No version change: guards already ran with this session on the server.
+		store.set(stateOf(session, null, store.get().version));
 	});
 	registerDebugger(client, debug);
 	return client as MirrorAuth<U, In>;
