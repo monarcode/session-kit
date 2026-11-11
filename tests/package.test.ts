@@ -106,6 +106,20 @@ async function assertOnlyImports(pkg: string, allowed: string[]) {
 	}
 }
 
+test("the Effect entries never load server code", async () => {
+	const dist = new URL("dist/", packageRoot);
+	for (const directory of ["effect/", "effetch/"])
+		for (const entry of await readdir(new URL(directory, dist))) {
+			if (!entry.endsWith(".js")) continue;
+			const code = await readFile(new URL(directory + entry, dist), "utf8");
+			assert.doesNotMatch(
+				code,
+				/^\s*(?:import|export)\b[^;]*?["'][^"']*\/server\/[^"']*["']/m,
+				`${directory}${entry} loads server code`,
+			);
+		}
+});
+
 test("only the Effect entries import effect and effetch, optional peers", async () => {
 	await assertOnlyImports("effect", ["effect/", "effetch/"]);
 	await assertOnlyImports("@monarcode/effetch", ["effetch/"]);

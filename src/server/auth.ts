@@ -146,6 +146,8 @@ export type RefreshIfDueOptions = {
 	within?: number | undefined;
 };
 
+declare const requestAuth: unique symbol;
+
 /**
  * One request's session, from {@link ServerAuth}'s `forRequest`: the
  * `serverAuth` methods with that request's {@link CookieJar} filled in, shaped
@@ -187,6 +189,8 @@ export type RefreshIfDueOptions = {
  * @since 0.1.0
  */
 export type RequestAuth<U> = Readonly<{
+	/** Marks a request's session, so a client isn't taken for one. Types only. */
+	[requestAuth]: true;
 	/** Like `serverAuth.getSession(jar)`. */
 	getSession: () => Promise<Session<U> | null>;
 	/** Like `serverAuth.signOut(jar)`. */
@@ -473,7 +477,7 @@ export function createServerAuth<Src extends UserSource>(
 
 	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
 		if (jar.writable) return clientOf(jar).credentials.get();
-		const stored = await restoreSaved(readerOf(jar));
+		const stored = await restoreSaved(readerOf(jar), { publish: true });
 		if (!stored) return null;
 		if (stored.expiresAt !== undefined && stored.expiresAt <= Date.now())
 			throw new AuthError(
@@ -544,6 +548,61 @@ export function createServerAuth<Src extends UserSource>(
 				error: toAuthError("INVALID_OPTIONS", "Session unavailable", cause),
 				version: 0,
 			});
+		// The view's own state, numbered by the view: a read-only jar can move to
+		// its writable sibling's client, whose `version` counts separately.
+		let seen: AuthState<U> | undefined;
+		let shown: AuthState<U> | undefined;
+		let version = 0;
+		const stateOf = (): AuthState<U> => {
+			const next = sync(jar, (client) => client.state.get(), unusable);
+			if (
+				!shown ||
+				(next !== seen &&
+					!(
+						next.status === seen?.status &&
+						next.sessionId === seen.sessionId &&
+						next.error === seen.error &&
+						(next.user === seen.user || sameUser(next.user, seen.user))
+					))
+			)
+				shown = Object.freeze({ ...next, version: ++version });
+			seen = next;
+			return shown;
+		};
+		// Listens to every client the view can read, including a writable
+		// sibling paired later, and reports each new state `stateOf` returns.
+		const subscribe = (listener: (state: AuthState<U>) => void) => {
+			let last: AuthState<U> | undefined = stateOf();
+			const report = () => {
+				const next = stateOf();
+				if (!last || next === last) return;
+				last = next;
+				listener(next);
+			};
+			const stops: Array<() => void> = [];
+			const watch = (target: CookieJar) => {
+				const { unsubscribe } = clientOf(target).state.subscribe(report);
+				stops.push(() => unsubscribe());
+			};
+			try {
+				watch(jar);
+				if (!jar.writable) {
+					const sibling = writableSibling(jar);
+					// A sibling is paired before its client has read a session.
+					if (sibling) watch(sibling);
+					else stops.push(onPaired(jar, watch));
+				}
+			} catch {
+				// No secret: nothing will change.
+			}
+			return {
+				unsubscribe() {
+					last = undefined;
+					for (const stop of stops.splice(0)) stop();
+				},
+			};
+		};
+		// The brand exists in types only.
 		view = Object.freeze({
 			getSession: () => serverAuth.getSession(jar),
 			signOut: () => serverAuth.signOut(jar),
@@ -561,58 +620,8 @@ export function createServerAuth<Src extends UserSource>(
 					(client) => client.isCurrent(session),
 					() => false,
 				),
-			state: Object.freeze({
-				get: () => sync(jar, (client) => client.state.get(), unusable),
-				subscribe(listener: (state: AuthState<U>) => void) {
-					// Listens to every client the view can read, including a writable
-					// sibling paired later, and reports what `get` returns whenever one
-					// of them changes.
-					let last: AuthState<U> | undefined = view!.state.get();
-					const report = () => {
-						const next = view!.state.get();
-						// Moving to the sibling's client can repeat the same state.
-						if (
-							!last ||
-							(next.status === last.status &&
-								next.sessionId === last.sessionId &&
-								sameUser(next.user, last.user) &&
-								next.error === last.error)
-						)
-							return;
-						last = next;
-						listener(next);
-					};
-					const stops: Array<() => void> = [];
-					const watch = (target: CookieJar) => {
-						const { unsubscribe } =
-							clientOf(target).state.subscribe(report);
-						stops.push(unsubscribe);
-					};
-					try {
-						watch(jar);
-						if (!jar.writable) {
-							const sibling = writableSibling(jar);
-							if (sibling) watch(sibling);
-							else
-								stops.push(
-									onPaired(jar, (writable) => {
-										watch(writable);
-										report();
-									}),
-								);
-						}
-					} catch {
-						// No secret: nothing will change.
-					}
-					return {
-						unsubscribe() {
-							last = undefined;
-							for (const stop of stops.splice(0)) stop();
-						},
-					};
-				},
-			}),
-		});
+			state: Object.freeze({ get: stateOf, subscribe }),
+		}) as unknown as RequestAuth<U>;
 		views.set(jar, view);
 		return view;
 	}
@@ -620,7 +629,7 @@ export function createServerAuth<Src extends UserSource>(
 	const serverAuth: ServerAuthBase<U, I> = {
 		async getSession(jar) {
 			if (jar.writable) return clientOf(jar).getSession();
-			const stored = await restoreSaved(readerOf(jar));
+			const stored = await restoreSaved(readerOf(jar), { publish: true });
 			return (
 				stored && Object.freeze({ sessionId: stored.id, user: stored.user })
 			);

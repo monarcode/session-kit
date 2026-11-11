@@ -9,12 +9,16 @@ import {
 	sessionBearer,
 	type SessionBearerOptions,
 } from "@monarcode/session-kit/effetch";
+import type { CookieJar } from "@monarcode/session-kit/server";
 import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 
 import {
 	cleanups,
@@ -22,8 +26,10 @@ import {
 	code,
 	credentialsOf,
 	input,
+	serverSide,
 	setGlobal,
 	type TestClient,
+	tokens,
 	user,
 	useBrowserMocks,
 } from "./helpers.ts";
@@ -339,4 +345,143 @@ test("the app's own RequestInit is kept", async () => {
 	);
 	assert.equal(sent[0]?.init.credentials, "omit");
 	assert.equal(sent[0]?.init.redirect, "error");
+});
+
+test("on a request's server session, sends the cookie's token and saves a renewed one", async () => {
+	const { serverAuth, request } = serverSide("effetch-server");
+	await serverAuth.signIn(request(), tokens());
+	const api = await makeApi(serverAuth.forRequest(request()) as never);
+	const sent = serve(401, 200);
+	assert.equal(await status(api.get("/me")), 200);
+	assert.deepEqual(
+		sent.map((call) => call.authorization),
+		["Bearer access-1", "Bearer access-2"],
+	);
+	assert.equal(
+		(await serverAuth.credentials.get(request()))?.accessToken,
+		"access-2",
+	);
+});
+
+test("on a request's server session, a repeated 401 signs out with a writable jar only", async () => {
+	const writable = serverSide("effetch-server");
+	await writable.serverAuth.signIn(writable.request(), tokens());
+	const api = await makeApi(
+		writable.serverAuth.forRequest(writable.request()) as never,
+	);
+	serve(401);
+	assert.equal(await status(api.get("/me")), 401);
+	assert.equal(writable.cookies.has(writable.cookie), false);
+
+	// A read-only jar can't renew: the call fails, and the cookie stays.
+	const readOnly = serverSide("effetch-server");
+	await readOnly.serverAuth.signIn(readOnly.request(), tokens());
+	const render = await makeApi(
+		readOnly.serverAuth.forRequest(readOnly.request(false)) as never,
+	);
+	const sent = serve(401);
+	assert.equal((await failure(render.get("/me"))).code, "REFRESH_FAILED");
+	assert.equal(sent.length, 1);
+	assert.ok(readOnly.cookies.has(readOnly.cookie));
+});
+
+test("on a request's server session, optional sends a signed-out call without a token", async () => {
+	const { serverAuth, request } = serverSide("effetch-server");
+	const api = await makeApi(serverAuth.forRequest(request()) as never, {
+		optional: true,
+	});
+	const sent = serve(200);
+	assert.equal(await status(api.get("/public")), 200);
+	assert.equal(sent[0]?.authorization, null);
+});
+
+test("concurrent requests each build their API client over their own session", async () => {
+	const { serverAuth } = serverSide("effetch-server");
+	const users = 20;
+	const jars = await Promise.all(
+		Array.from({ length: users }, async (_, index) => {
+			const cookies = new Map<string, string>();
+			const jar: CookieJar = {
+				writable: true,
+				get: (cookie) => cookies.get(cookie),
+				set: (cookie, value) => void cookies.set(cookie, value),
+				delete: (cookie) => void cookies.delete(cookie),
+			};
+			await serverAuth.signIn(
+				jar,
+				tokens({ accessToken: `token-${index}` }),
+			);
+			return jar;
+		}),
+	);
+	// Later requests answer first, so the calls interleave the same way each run.
+	setGlobal("fetch", async (_url: URL | string, init: RequestInit = {}) => {
+		const token = new Headers(init.headers).get("authorization");
+		const index = Number(token?.split("-")[1]);
+		await new Promise((resolve) => setTimeout(resolve, users - index));
+		return Response.json({ token });
+	});
+
+	const Whoami = Schema.Struct({ token: Schema.NullOr(Schema.String) });
+	const whoami = Fetch.endpoint("GET /whoami", { output: Whoami });
+	let builds = 0;
+	const make = Effect.gen(function* () {
+		builds++;
+		const api = yield* Fetch.make({
+			baseUrl,
+			plugins: [sessionBearer({ baseUrl })],
+		});
+		return {
+			api,
+			own: api.endpoint("GET /whoami", { output: Whoami }),
+			bound: api.bind(whoami),
+		};
+	});
+	class ApiClient extends Context.Service<
+		ApiClient,
+		Effect.Success<typeof make>
+	>()("ApiClient") {}
+
+	// Built once: what belongs to no user. Per request: the session and the
+	// client that uses it.
+	const runtime = ManagedRuntime.make(
+		Layer.merge(
+			FetchHttpClient.layer,
+			Layer.succeed(FetchHttpClient.Fetch, (url, init) =>
+				globalThis.fetch(url, init),
+			),
+		),
+	);
+	cleanups.push(() => runtime.dispose());
+	// One layer for every request, as an app declares it: each `Effect.provide`
+	// must still build it again.
+	const ApiClientLive = Layer.effect(ApiClient, make);
+	const requestLayer = (jar: CookieJar) =>
+		ApiClientLive.pipe(
+			Layer.provideMerge(Auth.layer(serverAuth.forRequest(jar))),
+		);
+	const program = Effect.gen(function* () {
+		const { api, own, bound } = yield* ApiClient;
+		const session = yield* Auth.session;
+		const sent = [
+			(yield* api.get("/whoami", { output: Whoami })).token,
+			(yield* own()).token,
+			(yield* bound()).token,
+		];
+		return { sent, user: session.sessionId };
+	});
+
+	const results = await Promise.all(
+		jars.map((jar) =>
+			runtime.runPromise(Effect.provide(program, requestLayer(jar))),
+		),
+	);
+	assert.equal(builds, users);
+	const sessions = await Promise.all(
+		jars.map((jar) => serverAuth.getSession(jar)),
+	);
+	results.forEach((result, index) => {
+		assert.deepEqual(result.sent, Array(3).fill(`Bearer token-${index}`));
+		assert.equal(result.user, sessions[index]?.sessionId);
+	});
 });

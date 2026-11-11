@@ -11,6 +11,13 @@
   a renewed one after a 401. A read-only jar can't renew, so there a 401
   rejects with `REFRESH_FAILED`, and `credentials.reject` resolves without
   signing out.
+- `Auth.layer` in `@monarcode/session-kit/effect` also takes a request's
+  session, `serverAuth.forRequest(jar)`, whose user is the registered one.
+  `Auth.session`, `Auth.credentials`, `Auth.renew`, `Auth.signOut` and
+  effetch's `sessionBearer` then work in server functions, actions and route
+  handlers, refreshing and saving the cookie. Provide it per request, with
+  the services that use it. `Auth.signIn` and `Auth.updateUser` die there:
+  call `serverAuth.signIn(jar, …)` and `serverAuth.updateUser(jar, …)`.
 
 ### Fixed
 

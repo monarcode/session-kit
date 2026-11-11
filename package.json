@@ -110,7 +110,7 @@
 		"test": "pnpm run test:sync && pnpm run test:async",
 		"test:sync": "node --conditions=development --test tests/*.test.ts",
 		"test:async": "node --env-file=tests/async-storage.env --conditions=development --test tests/*.test.ts",
-		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && tsc -p tests/tsconfig.json --exactOptionalPropertyTypes false && pnpm run test:docs",
+		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && tsc -p tests/tsconfig.json --exactOptionalPropertyTypes false && tsc -p tests/tsconfig.mirror.json && tsc -p tests/tsconfig.mirror.bundler.json && pnpm run test:docs",
 		"test:docs": "node scripts/check-docs.mjs",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"

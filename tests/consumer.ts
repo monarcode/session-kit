@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
@@ -498,6 +499,16 @@ void requestAuth.signIn;
 void requestAuth.updateUser;
 // @ts-expect-error The view is read-only.
 requestAuth.getSession = async () => null;
+// @ts-expect-error So is its state.
+requestAuth.state.get = () => requestAuth.state.get();
+
+// On the server, `Auth.layer` takes a request's session with the registered user.
+const requestLayer: Layer.Layer<Auth> = Auth.layer(serverAuth.forRequest(jar));
+void Effect.runPromise(Effect.provide(Auth.session, requestLayer));
+// @ts-expect-error A request's session with another user doesn't fit.
+Auth.layer(tokenServer.forRequest(jar));
+// @ts-expect-error An Effect that needs the session doesn't run without it.
+void Effect.runPromise(Auth.session);
 
 declare const initial: Session<z.output<typeof userSchema>> | null;
 const mirror = createMirrorAuth({

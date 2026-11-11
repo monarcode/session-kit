@@ -112,7 +112,10 @@ const refuseRedirects = <A, E, R>(
  * if the call skipped the plugin, like effetch's `bearer`.
  *
  * Put it last in `plugins`, after `retry`, so each attempt reads the current
- * token. `Fetch.make` then needs the `Auth` service; calls don't.
+ * token. `Fetch.make` then needs the `Auth` service; calls don't. On the
+ * server, make the client per request, over that request's `Auth` from
+ * `serverAuth.forRequest(jar)`: it reads the token from the cookie and saves
+ * a renewed one.
  *
  * @example
  * ```ts

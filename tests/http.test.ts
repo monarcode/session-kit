@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createAuthFetch } from "@monarcode/session-kit/http";
-import {
-	createServerAuth,
-	type CookieJar,
-} from "@monarcode/session-kit/server";
 
 import {
 	cleanups,
@@ -13,11 +9,10 @@ import {
 	client,
 	code,
 	credentialsOf,
-	SECRET,
+	serverSide,
 	setGlobal,
 	tokens,
 	useBrowserMocks,
-	userSchema,
 } from "./helpers.ts";
 
 useBrowserMocks();
@@ -184,25 +179,8 @@ test("a sign-in during an optional signed-out request rejects with SESSION_CHANG
 	assert.equal(auth.state.get().status, "authenticated");
 });
 
-/** A server engine, and a jar per request over one browser's `cookies`. */
-function serverRequests(cookies = new Map<string, string>()) {
-	const serverAuth = createServerAuth({
-		name: "test",
-		user: userSchema,
-		secret: SECRET,
-		refresh: async () => ({ accessToken: "access-2", expiresIn: 900 }),
-	});
-	const request = (writable = true): CookieJar => ({
-		writable,
-		get: (name) => cookies.get(name),
-		set: (name, value) => void cookies.set(name, value),
-		delete: (name) => void cookies.delete(name),
-	});
-	return { serverAuth, request, cookies };
-}
-
 test("createAuthFetch over a request's view sends the cookie's token and saves a renewed one", async () => {
-	const { serverAuth, request } = serverRequests();
+	const { serverAuth, request } = serverSide("test");
 	await serverAuth.signIn(request(), tokens());
 	const headers: (string | null)[] = [];
 	setGlobal("fetch", async (sent: Request) => {
@@ -223,7 +201,7 @@ test("createAuthFetch over a request's view sends the cookie's token and saves a
 });
 
 test("createAuthFetch over a request's view ends the session after a repeated 401", async () => {
-	const { serverAuth, request, cookies } = serverRequests();
+	const { serverAuth, request, cookies, cookie } = serverSide("test");
 	await serverAuth.signIn(request(), tokens());
 	setGlobal("fetch", async () => new Response(null, { status: 401 }));
 	const authFetch = createAuthFetch(
@@ -231,12 +209,12 @@ test("createAuthFetch over a request's view ends the session after a repeated 40
 		"https://api.example.com/",
 	);
 	assert.equal((await authFetch("/me")).status, 401);
-	assert.equal(cookies.has("test.session"), false);
+	assert.equal(cookies.has(cookie), false);
 	assert.equal(await serverAuth.getSession(request()), null);
 });
 
 test("createAuthFetch over a read-only view can't renew after a 401, and keeps the session", async () => {
-	const { serverAuth, request, cookies } = serverRequests();
+	const { serverAuth, request, cookies, cookie } = serverSide("test");
 	await serverAuth.signIn(request(), tokens());
 	let calls = 0;
 	setGlobal("fetch", async () => {
@@ -249,6 +227,6 @@ test("createAuthFetch over a read-only view can't renew after a 401, and keeps t
 	);
 	await assert.rejects(authFetch("/me"), code("REFRESH_FAILED"));
 	assert.equal(calls, 1);
-	assert.ok(cookies.has("test.session"));
+	assert.ok(cookies.has(cookie));
 	assert.ok(await serverAuth.getSession(request(false)));
 });

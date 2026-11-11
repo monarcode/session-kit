@@ -817,3 +817,18 @@ test("forRequest's synchronous members don't throw without a secret", async () =
 	view.state.subscribe(() => {}).unsubscribe();
 	await assert.rejects(view.getSession(), code("INVALID_OPTIONS"));
 });
+
+test("a writable view with expired access goes straight to refreshing, never unavailable", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const app = server({
+		refresh: async () => ({ accessToken: "access-2", expiresIn: 900 }),
+	});
+	const tab = browser();
+	await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+	const view = app.forRequest(tab.request());
+	const seen: string[] = [];
+	view.state.subscribe((state) => seen.push(state.status));
+	assert.equal((await view.credentials.get())?.accessToken, "access-2");
+	assert.deepEqual(seen, ["refreshing", "authenticated"]);
+});

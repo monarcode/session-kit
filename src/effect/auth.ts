@@ -9,6 +9,7 @@ import * as Stream from "effect/Stream";
 
 import { AuthError } from "../core/errors.js";
 import type { AuthClient, Credentials } from "../core/types.js";
+import type { RequestAuth } from "../server/auth.js";
 import {
 	type AuthFailure,
 	fromAuthError,
@@ -18,7 +19,9 @@ import {
 
 /**
  * Register your client's type here, once, so `Auth`'s Effects carry your
- * user. Without it they're typed with an `unknown` user.
+ * user. Without it they're typed with an `unknown` user. The same
+ * registration types `Auth` on the server, where {@link Auth.layer} takes
+ * `serverAuth.forRequest(jar)`.
  *
  * @example
  * ```ts
@@ -133,7 +136,9 @@ export type RegisteredAuth = Register extends {
 
 /**
  * What {@link Auth.layer} takes: the client registered in {@link Register},
- * or any {@link AuthServiceClient} while none is.
+ * or any {@link AuthServiceClient} while none is. On the server, it also takes
+ * one request's session from `serverAuth.forRequest(jar)` (`RequestAuth` from
+ * `./server`) whose user is the registered one.
  *
  * @example
  * ```ts
@@ -149,8 +154,13 @@ export type RegisteredAuth = Register extends {
 export type AuthLayerClient = Register extends {
 	readonly auth: AuthServiceClient;
 }
-	? RegisteredAuth
+	? RegisteredAuth | RequestAuth<RegisteredUser>
 	: AuthServiceClient;
+
+/** The registered client's user, for a request's session. */
+type RegisteredUser = RegisteredSession extends { readonly user: infer U }
+	? U
+	: unknown;
 
 /**
  * The session {@link Auth.session} resolves: the registered client's
@@ -255,13 +265,36 @@ export type RegisteredUserInput = RegisteredAuth extends {
  * 	Effect.runPromise(Effect.provide(program, Auth.layer(auth)));
  * ```
  *
+ * @example
+ * On the server, each request provides its own session, from
+ * `serverAuth.forRequest(jar)`. Build what uses it per request too:
+ * ```ts
+ * import * as Effect from "effect/Effect";
+ * import { Auth } from "@monarcode/session-kit/effect";
+ * import type { CookieJar, ServerAuth } from "@monarcode/session-kit/server";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * const program = Effect.map(Auth.session, (session) => session.sessionId);
+ *
+ * export const sessionId = (jar: CookieJar) =>
+ * 	Effect.runPromise(
+ * 		Effect.provide(program, Auth.layer(serverAuth.forRequest(jar))),
+ * 	);
+ * ```
+ *
  * @since 0.1.0
  */
 export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	"@monarcode/session-kit/effect/Auth",
 ) {
 	/**
-	 * Provides `client` as the {@link Auth} service.
+	 * Provides `client` as the {@link Auth} service: a client, or on the server
+	 * one request's session from `serverAuth.forRequest(jar)`. A request's
+	 * session belongs to that request: provide it per run, with the services
+	 * that use it, never in a runtime shared by every request. It has only
+	 * what `Auth`'s Effects use: don't reach for the client's other methods
+	 * through `Auth.use` on the server.
 	 */
 	static readonly layer = (client: AuthLayerClient): Layer.Layer<Auth> =>
 		Layer.succeed(Auth, client as RegisteredAuth);
@@ -340,7 +373,8 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * Saves a new session from `input`, as `signIn` does: for example after
 	 * a login request. Fails with `USER_VALIDATION_FAILED`,
 	 * `INVALID_SESSION`, `PERSISTENCE_FAILED` or `SESSION_CHANGED`. Dies for
-	 * a `createMirrorAuth` client made without `signIn`.
+	 * a `createMirrorAuth` client made without `signIn`, and on the server,
+	 * where sign-in is `serverAuth.signIn(jar, …)`.
 	 */
 	static readonly signIn = (
 		input: RegisteredSignIn,
@@ -354,7 +388,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				: Effect.die(
 						new AuthError(
 							"INVALID_OPTIONS",
-							"This client has no signIn; pass signIn to createMirrorAuth",
+							"This client has no signIn: pass signIn to createMirrorAuth, or on the server call serverAuth.signIn(jar, input)",
 						),
 					);
 		});
@@ -376,8 +410,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * the session changes, failing with `SESSION_CHANGED`, and after 15
 	 * seconds, failing with `USER_VALIDATION_FAILED` whose `cause` is the
 	 * timeout. Dies for a client without `updateUser`: one whose user comes
-	 * from the access token, or a `createMirrorAuth` client, whose user comes
-	 * from the server.
+	 * from the access token, a `createMirrorAuth` client, whose user comes
+	 * from the server, and on the server, where it is
+	 * `serverAuth.updateUser(jar, …)`.
 	 */
 	static readonly updateUser = <E = never, R = never>(
 		input: RegisteredUserInput | Effect.Effect<RegisteredUserInput, E, R>,
@@ -395,7 +430,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				return yield* Effect.die(
 					new AuthError(
 						"INVALID_OPTIONS",
-						"This client has no updateUser: its user comes from the access token or from the server",
+						"This client has no updateUser: its user comes from the access token or from the server. On the server, unless the user comes from the access token, call serverAuth.updateUser(jar, input)",
 					),
 				);
 			if (!Effect.isEffect(input))

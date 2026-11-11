@@ -88,14 +88,17 @@ export type SavedSession<U> = SessionTokens & { id: string; user: U };
 // jar that can't save new tokens, and before ending the session.
 const restorers = new WeakMap<
 	object,
-	() => Promise<SavedSession<unknown> | null>
+	(publish: boolean) => Promise<SavedSession<unknown> | null>
 >();
 
 /** Restores `client`'s saved session, as `getSession` does, without refreshing it. */
 export function restoreSaved<U, I>(
 	client: AuthClient<U, I>,
+	options: { publish?: boolean } = {},
 ): Promise<SavedSession<U> | null> {
-	return restorers.get(client)!() as Promise<SavedSession<U> | null>;
+	return restorers.get(client)!(
+		options.publish === true,
+	) as Promise<SavedSession<U> | null>;
 }
 
 /** Whether `error` means the saved session itself is unusable, not storage. */
@@ -1394,11 +1397,11 @@ export function createAuth<Src extends UserSource>(
 		users.saved ? { ...client, updateUser } : client
 	) as AuthClient<U, I>;
 	registerDebugger(result, debug);
-	restorers.set(result, async () => {
+	restorers.set(result, async (show) => {
 		await initialize();
-		// An expired session publishes when its refresh starts, and this read
-		// doesn't refresh: show it as it stands.
-		if (store.get().status === "initializing") publish();
+		// An expired session publishes when its refresh starts. A read that
+		// won't refresh shows it as it stands instead.
+		if (show && store.get().status === "initializing") publish();
 		return (
 			session && { ...tokensOf(session), id: session.id, user: session.user }
 		);

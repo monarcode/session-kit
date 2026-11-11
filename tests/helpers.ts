@@ -14,6 +14,10 @@ import {
 	type Tokens,
 	type UserSource,
 } from "@monarcode/session-kit";
+import {
+	createServerAuth,
+	type CookieJar,
+} from "@monarcode/session-kit/server";
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { z } from "zod";
 
@@ -85,6 +89,31 @@ export const tokens = (overrides: object = {}) => ({
 	user,
 	...overrides,
 });
+
+/**
+ * A server engine whose refreshes return `access-2`, `access-3` and so on,
+ * and a cookie jar per request over one browser's `cookies`.
+ */
+export function serverSide(name = "server") {
+	let refreshes = 0;
+	const serverAuth = createServerAuth({
+		name,
+		user: userSchema,
+		secret: SECRET,
+		refresh: async () => ({
+			accessToken: `access-${++refreshes + 1}`,
+			expiresIn: 900,
+		}),
+	});
+	const cookies = new Map<string, string>();
+	const request = (writable = true): CookieJar => ({
+		writable,
+		get: (cookie) => cookies.get(cookie),
+		set: (cookie, value) => void cookies.set(cookie, value),
+		delete: (cookie) => void cookies.delete(cookie),
+	});
+	return { serverAuth, request, cookies, cookie: `${name}.session` };
+}
 
 const DELETED = /Expires=Thu, 01 Jan 1970/;
 

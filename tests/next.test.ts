@@ -212,3 +212,15 @@ test("a read-only view keeps its session until the writable jar has one, and rep
 	assert.deepEqual(seen, [null]);
 	unsubscribe();
 });
+
+test("a read-only view's version only grows when it moves to the writable jar's session", async () => {
+	const store = actionStore(nextRequest(), NextResponse.next());
+	const render = serverAuth.forRequest(nextJar(store));
+	assert.equal(await render.getSession(), null);
+	const signedOut = render.state.get();
+	assert.equal(render.state.get(), signedOut);
+	await serverAuth.signIn(nextJar(store, { writable: true }), tokens());
+	const signedIn = render.state.get();
+	assert.equal(signedIn.status, "authenticated");
+	assert.ok(signedIn.version > signedOut.version);
+});
