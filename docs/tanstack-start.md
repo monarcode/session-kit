@@ -36,8 +36,8 @@ random characters to seal the cookie, such as from
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-the cookie. It takes the options `createAuth` does, except storage, plus
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
+cookie. It takes the options `createAuth` does, except storage and locking, plus
 `secret`. Keep it in a server-only module: Start then refuses to bundle it for
 the browser.
 

@@ -367,7 +367,8 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * Fails with `UNAUTHENTICATED` when the session ended instead, and with
 	 * `SESSION_CHANGED` when another session replaced it.
 	 *
-	 * `sessionBearer` from `@monarcode/session-kit/effetch` calls it for you.
+	 * `sessionBearer` from `@monarcode/session-kit/effetch` renews on a 401
+	 * by itself.
 	 */
 	static readonly renew = (
 		credentials: Credentials,
@@ -413,9 +414,10 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	/**
 	 * Signs out, as the client's `signOut` does.
 	 *
-	 * Fails with `PERSISTENCE_FAILED` when storage can't be cleared, though
-	 * the client is signed out anyway. A failed `revoke` doesn't fail it, and
-	 * its error shows in `state.error`.
+	 * Fails with `PERSISTENCE_FAILED` when it can't sign out. A `createAuth`
+	 * client is signed out anyway when only its storage couldn't be cleared,
+	 * and a failed `revoke` doesn't fail it. A `createMirrorAuth` client
+	 * stays signed in when your server's sign-out fails.
 	 */
 	static readonly signOut: Effect.Effect<void, AuthFailure, Auth> = Auth.use(
 		(client) => fromPromise(() => client.signOut()),

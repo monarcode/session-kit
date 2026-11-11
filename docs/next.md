@@ -35,10 +35,10 @@ server. `next build` doesn't need it.
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-the cookie. It takes the options `createAuth` does, except storage, plus
-`secret`. Keep it in a server-only module: Next then refuses to bundle it
-for the browser.
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
+cookie. It takes the options `createAuth` does, except storage and locking, plus
+`secret`. Keep it in a server-only module: Next then refuses to bundle it for
+the browser.
 
 <!-- file: lib/auth/server.ts -->
 
@@ -135,7 +135,7 @@ import { serverAuth } from "./lib/auth/server";
 
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
-  // A failed refresh shows up when a page reads the session.
+  // If the refresh fails, the page still renders with the cookie as it is.
   await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
   return response;
 }
@@ -456,8 +456,9 @@ example app does this.
   in Server Functions and Route Handlers only. In a Server Component, a
   writable jar would refresh and then fail to save the new tokens, which
   spends a rotating refresh token.
-- **One jar per request.** `nextJar` and `proxyJar` return the same jar for
-  every call with the same store or response.
+- **One jar per request.** `nextJar` returns the same jar for the same store
+  and `writable`, and the read-only jar follows the writable one. `proxyJar`
+  returns the same jar for the same response.
 - **Separate instances.** Next builds Proxy, Route Handlers, and pages with
   their Server Functions separately, so each has its own `serverAuth`, even
   on one server: they share no refresh. A matcher that covers every route

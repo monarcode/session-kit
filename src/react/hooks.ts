@@ -71,7 +71,7 @@ export type AuthHooksOptions<Client extends AuthSource> = {
 export type AuthProviderProps<Client extends AuthSource> = {
 	/** The client for this tree. On a server, create one per request. */
 	client: Client;
-	/** The tree that reads `client` through the hooks. */
+	/** The tree that reads `client` through the hooks. Default: none. */
 	children?: ReactNode | undefined;
 };
 
@@ -82,7 +82,10 @@ export type AuthProviderProps<Client extends AuthSource> = {
  * @example
  * ```ts
  * import type { AuthClient } from "@monarcode/session-kit";
- * import { createAuthHooks, type AuthHooks } from "@monarcode/session-kit/react";
+ * import {
+ * 	createAuthHooks,
+ * 	type AuthHooks,
+ * } from "@monarcode/session-kit/react";
  *
  * type User = { name: string };
  * type AppAuth = AuthClient<User, User>;

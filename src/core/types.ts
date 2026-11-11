@@ -204,7 +204,8 @@ export type RefreshResult<I = never> =
  *
  * Auth calls it whenever it needs a new access token: shortly before the
  * current one expires (while mounted), once it has expired, when your API
- * rejects it, and on `refresh()` or `retry()`. It never runs two at once.
+ * rejects it, on `refresh()`, and on `retry()` once it has expired. It never
+ * runs two at once.
  * Callers that need a refresh while one runs share its result.
  *
  * @example
@@ -487,7 +488,7 @@ type AuthClientBase<U, I> = {
 	 *
 	 * If `revoke` fails, `state.error` shows `REVOKE_FAILED`, and `signOut()`
 	 * still resolves. If storage can't be cleared, it rejects with
-	 * `PERSISTENCE_FAILED`. This tab is signed out anyway, but the next load
+	 * `PERSISTENCE_FAILED`. The app is signed out anyway, but the next load
 	 * would restore the session, so call it again later.
 	 */
 	signOut: () => Promise<void>;
@@ -595,7 +596,10 @@ type AuthClientBase<U, I> = {
  *
  * type AppUser = { id: string; name: string };
  *
- * export async function rename(auth: AuthClient<AppUser, AppUser>, name: string) {
+ * export async function rename(
+ * 	auth: AuthClient<AppUser, AppUser>,
+ * 	name: string,
+ * ) {
  * 	const session = await auth.getSession();
  * 	if (session) await auth.updateUser({ ...session.user, name });
  * }
@@ -657,7 +661,11 @@ export type AuthLocking = {
  *
  * @example
  * ```ts
- * import { createAuth, webStorage, type AuthOptions } from "@monarcode/session-kit";
+ * import {
+ * 	createAuth,
+ * 	webStorage,
+ * 	type AuthOptions,
+ * } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
  * const userSchema = z.object({ id: z.string(), email: z.string() });
@@ -727,7 +735,7 @@ export type AuthOptions<Src extends UserSource> = {
 	 * `{ seal, open }` encrypts them with your app's key ({@link AuthLocking}).
 	 *
 	 * It's meant for native apps. In a browser, tabs stop following each
-	 * other: a sign-in, sign-out or lock in one tab doesn't reach the others.
+	 * other, so a sign-in, sign-out or lock in one tab doesn't reach the others.
 	 * With rotating refresh tokens, two tabs that refresh the same session can
 	 * sign one of them out.
 	 *

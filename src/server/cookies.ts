@@ -12,7 +12,11 @@ import type { Sealer } from "./seal.js";
  * ```ts
  * import type { CookieOptions } from "@monarcode/session-kit/server";
  *
- * export const toHeader = (name: string, value: string, options: CookieOptions) =>
+ * export const toHeader = (
+ * 	name: string,
+ * 	value: string,
+ * 	options: CookieOptions,
+ * ) =>
  * 	[
  * 		`${name}=${value}`,
  * 		`Path=${options.path}`,
@@ -56,7 +60,11 @@ export type CookieOptions = Readonly<{
  * import type { CookieJar } from "@monarcode/session-kit/server";
  *
  * declare const requestCookies: Map<string, string>;
- * declare function setCookie(name: string, value: string, maxAge?: number): void;
+ * declare function setCookie(
+ * 	name: string,
+ * 	value: string,
+ * 	maxAge?: number,
+ * ): void;
  *
  * export const jar: CookieJar = {
  * 	writable: true,

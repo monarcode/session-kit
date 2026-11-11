@@ -22,7 +22,7 @@ framework guides show the code:
 the user in one cookie, `<name>.session`, sealed with AES-256-GCM through Web
 Crypto. It is `httpOnly`, so page scripts can't read it, and `Secure` and
 `SameSite=Lax` unless you pass other `cookie` options. It takes the options
-`createAuth` does, except `storage`, plus `secret`.
+`createAuth` does, except `storage` and `locking`, plus `secret`.
 
 Keep the module that creates it on the server: each guide shows how its
 framework keeps such a module out of the browser bundle.

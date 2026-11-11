@@ -150,7 +150,11 @@ function toCredentials<U>(
  *
  * @example
  * ```ts
- * import { createAuth, webStorage, type RefreshFn } from "@monarcode/session-kit";
+ * import {
+ * 	createAuth,
+ * 	webStorage,
+ * 	type RefreshFn,
+ * } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
  * declare const refresh: RefreshFn<{ id: string; email: string }>;

@@ -499,7 +499,8 @@ client.
 - **Read-only jars,** such as a Next.js Server Component's: `Auth.session`
   returns the cookie's session as it is, while `Auth.credentials` and
   `sessionBearer` fail with `REFRESH_FAILED` once access has expired, and
-  after a 401, which can't be renewed there. Refresh in middleware or a
+  after a 401, which can't be renewed there unless the same request's
+  writable jar already renewed it. Refresh in middleware or a
   proxy first, with `serverAuth.refreshIfDue`, as the framework guides do.
   Sign out in an action or route handler.
 - **Only `Auth`'s Effects,** as `Auth.layer` says.

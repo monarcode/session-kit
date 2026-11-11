@@ -11,7 +11,10 @@ import { AuthError, type AuthErrorCode } from "../core/errors.js";
  * ```ts
  * import type { AuthFailureCode } from "@monarcode/session-kit/effect";
  *
- * const retryable: AuthFailureCode[] = ["REFRESH_FAILED", "PERSISTENCE_FAILED"];
+ * const retryable: AuthFailureCode[] = [
+ * 	"REFRESH_FAILED",
+ * 	"PERSISTENCE_FAILED",
+ * ];
  * ```
  *
  * @since 0.1.0

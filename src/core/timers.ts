@@ -1,6 +1,6 @@
 /** The longest delay `setTimeout` supports, about 24.8 days. */
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-/** Proactive refresh starts this long before expiry, or halfway, if sooner. */
+/** Early refresh runs this long before expiry, or halfway, if that's later. */
 const REFRESH_LEAD_MS = 60_000;
 
 /**

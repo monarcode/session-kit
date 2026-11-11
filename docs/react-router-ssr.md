@@ -38,10 +38,10 @@ server. `react-router build` doesn't need it.
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-the cookie. It takes the options `createAuth` does, except storage, plus
-`secret`. Keep it in a `.server` module: React Router then refuses to bundle
-it for the browser.
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
+cookie. It takes the options `createAuth` does, except storage and locking, plus
+`secret`. Keep it in a `.server` module: React Router then refuses to bundle it
+for the browser.
 
 <!-- file: app/auth/user.ts -->
 

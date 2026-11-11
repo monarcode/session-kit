@@ -43,7 +43,10 @@ export type ClientCredentials = Readonly<{
  *
  * @example
  * ```ts
- * import type { ClientCredentials, MirrorCredentials } from "@monarcode/session-kit";
+ * import type {
+ * 	ClientCredentials,
+ * 	MirrorCredentials,
+ * } from "@monarcode/session-kit";
  *
  * declare function getCredentialsFn(): Promise<ClientCredentials | null>;
  * declare function renewCredentialsFn(input: {
@@ -333,9 +336,11 @@ function stateOf<U>(
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
  *
  * type User = { id: number; firstName: string };
- * type Credentials = { username: string; password: string };
+ * type LoginInput = { username: string; password: string };
  * declare function getSessionFn(): Promise<Session<User> | null>;
- * declare function signInFn(input: { data: Credentials }): Promise<Session<User>>;
+ * declare function signInFn(input: {
+ * 	data: LoginInput;
+ * }): Promise<Session<User>>;
  * declare function signOutFn(): Promise<void>;
  *
  * // Called with the session the page was rendered with.
@@ -344,7 +349,7 @@ function stateOf<U>(
  * 		name: "app",
  * 		session,
  * 		revalidate: () => getSessionFn(),
- * 		signIn: (data: Credentials) => signInFn({ data }),
+ * 		signIn: (data: LoginInput) => signInFn({ data }),
  * 		signOut: () => signOutFn(),
  * 	});
  * ```

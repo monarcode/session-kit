@@ -112,7 +112,8 @@ export type AuthDebugOptions = {
  * import type { AuthDebug } from "@monarcode/session-kit";
  *
  * const toConsole: AuthDebug = true;
- * const toLogger: AuthDebug = (event) => console.debug(event.type, event.message);
+ * const toLogger: AuthDebug = (event) =>
+ * 	console.debug(event.type, event.message);
  * const withSecrets: AuthDebug = { sensitive: true };
  * ```
  *

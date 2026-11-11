@@ -36,7 +36,7 @@ import {
 export interface SessionBearerOptions {
 	/**
 	 * Your API's URL, usually the effetch client's `baseUrl`. The access token
-	 * goes only to requests on its origin. Default: none.
+	 * goes only to requests on its origin.
 	 */
 	baseUrl: string;
 	/**
@@ -137,7 +137,8 @@ const refuseRedirects = <A, E, R>(
  * 	baseUrl,
  * 	plugins: [retry(), sessionBearer({ baseUrl })],
  * }).pipe(Effect.provide(FetchHttpClient.layer));
- * // Per call: api.post("/auth/login", { body, plugins: { sessionBearer: false } })
+ * // Skip it for a call that needs no token:
+ * // api.post("/auth/login", { body, plugins: { sessionBearer: false } })
  * ```
  *
  * @see {@link SessionBearerOptions} for `optional` and `signOutOnRepeated401`

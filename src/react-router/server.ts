@@ -11,7 +11,10 @@ import { requestJar, type RequestJar } from "../server/request-jar.js";
  *
  * @example
  * ```ts
- * import { routerJar, type RouterContextLike } from "@monarcode/session-kit/react-router/server";
+ * import {
+ * 	routerJar,
+ * 	type RouterContextLike,
+ * } from "@monarcode/session-kit/react-router/server";
  * import type { ServerAuth } from "@monarcode/session-kit/server";
  *
  * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
@@ -98,7 +101,10 @@ export async function cookieJarMiddleware(
  *
  * @example
  * ```ts
- * import { routerJar, type RouterContextLike } from "@monarcode/session-kit/react-router/server";
+ * import {
+ * 	routerJar,
+ * 	type RouterContextLike,
+ * } from "@monarcode/session-kit/react-router/server";
  * import type { ServerAuth } from "@monarcode/session-kit/server";
  *
  * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;

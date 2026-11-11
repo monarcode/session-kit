@@ -1750,9 +1750,9 @@ throwing.
 
 A refresh runs at one of three moments:
 
-- **Early.** While the client is mounted, at the earlier of 60 seconds before
-  expiry or halfway through the token's lifetime, once per token. If it fails,
-  access stays usable until expiry.
+- **Early.** While the client is mounted, 60 seconds before expiry, or
+  halfway through for a token with under two minutes left, once per token. If
+  it fails, access stays usable until expiry.
 - **At expiry, or after a 401.** `status` is `refreshing` while it runs, with
   the user still on screen.
 - **On request.** `auth.refresh()` runs one now.

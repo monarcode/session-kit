@@ -148,15 +148,9 @@ export function rememberDeepLink(
 }
 
 /**
- * What a change of status or screen does to a remembered link.
- *
- * - Signed in: opens it if it was waiting, and forgets it either way.
- * - Signed out or locked: it waits. If its screen is already showing,
- *   anyone may see that screen, so the link is dropped.
- * - Restoring or unavailable: no change.
- *
- * While signed out or locked, a `pathname` still equal to `launch`, Expo
- * Router's reading of the launch URL, leaves the link as it is.
+ * What a change of status or screen does to a remembered link. A sign-in opens
+ * a waiting link, and while signed out or locked the link waits. Restoring and
+ * unavailable access leave it as it is.
  */
 function nextLink(
 	link: RememberedLink,
@@ -189,6 +183,7 @@ function nextLink(
 				// launch screen is open to anyone. Then the link is dropped at the
 				// sign-in, unopened.
 				if (pathname === launch) return { link };
+				// Its screen is showing to a signed-out user, so anyone may see it.
 				return {
 					link: undefined,
 					why: "dropped: its screen is open to anyone and already showing",

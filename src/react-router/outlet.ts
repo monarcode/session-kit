@@ -56,7 +56,7 @@ export type SessionOutletProps = {
 	/**
 	 * Shown when the session is `unavailable`, such as after a failed
 	 * refresh ({@link UnavailableProps}). Without it, the error is thrown to
-	 * the nearest error boundary or error element.
+	 * the nearest error boundary or error element. Default: none.
 	 */
 	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */

@@ -8,7 +8,9 @@ import type { Session } from "../core/types.js";
  *
  * @example
  * ```ts
- * import type { DehydratedSession } from "@monarcode/session-kit/tanstack-start";
+ * import type {
+ * 	DehydratedSession,
+ * } from "@monarcode/session-kit/tanstack-start";
  *
  * type User = { id: number; firstName: string };
  *
@@ -74,7 +76,10 @@ export type SessionHydration<U> = {
  * ```ts
  * import type { MirrorAuth } from "@monarcode/session-kit";
  * import { sessionHydration } from "@monarcode/session-kit/tanstack-start";
- * import { createRootRouteWithContext, createRouter } from "@tanstack/react-router";
+ * import {
+ * 	createRootRouteWithContext,
+ * 	createRouter,
+ * } from "@tanstack/react-router";
  *
  * declare function createAppAuth(): MirrorAuth<{ id: number }>;
  *
@@ -82,7 +87,11 @@ export type SessionHydration<U> = {
  * export function getRouter() {
  * 	const auth = createAppAuth();
  * 	const routeTree = createRootRouteWithContext<{ auth: typeof auth }>()();
- * 	return createRouter({ routeTree, context: { auth }, ...sessionHydration(auth) });
+ * 	return createRouter({
+ * 		routeTree,
+ * 		context: { auth },
+ * 		...sessionHydration(auth),
+ * 	});
  * }
  * ```
  *
@@ -133,7 +142,9 @@ export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
  * type User = { id: number; firstName: string };
  * declare const auth: MirrorAuth<User>;
  *
- * export const rootRoute = createRootRouteWithContext<{ auth: typeof auth }>()({
+ * type Context = { auth: typeof auth };
+ *
+ * export const rootRoute = createRootRouteWithContext<Context>()({
  * 	beforeLoad: ({ context }) => loadSession(context.auth),
  * });
  * ```

@@ -124,7 +124,10 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 * Default: 30 days.
 	 */
 	maxAge?: number | undefined;
-	/** The session cookie's attributes ({@link SessionCookieOptions}). */
+	/**
+	 * The session cookie's attributes ({@link SessionCookieOptions}). Default:
+	 * each attribute's own.
+	 */
 	cookie?: SessionCookieOptions | undefined;
 	/**
 	 * Lets `clientCredentials` give the access token to your own page scripts,
@@ -414,7 +417,8 @@ const DEFAULT_WITHIN = 60;
  * 			body: JSON.stringify({ refreshToken }),
  * 		});
  * 		if (response.status === 401) return null;
- * 		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+ * 		if (!response.ok)
+ * 			throw new Error(`Refresh failed (${response.status})`);
  * 		return response.json();
  * 	},
  * });
@@ -509,7 +513,8 @@ export function createServerAuth<Src extends UserSource>(
 
 	/**
 	 * The client that reads `jar`. A read-only jar switches to its writable
-	 * sibling's client once that client has read a session, and then stays
+	 * sibling's client once that client has restored or saved a session, and
+	 * then stays
 	 * with it, so a sign-in in an action shows in the same request's render.
 	 */
 	function readerOf(jar: CookieJar): AuthClient<U, I> {
@@ -676,7 +681,7 @@ export function createServerAuth<Src extends UserSource>(
 				if (!jar.writable) {
 					const sibling = writableSibling(jar);
 					// Watch the sibling now. The view may switch to its client
-					// once that client reads a session.
+					// once that client restores or saves a session.
 					if (sibling) watch(sibling);
 					else stops.push(onPaired(jar, watch));
 				}

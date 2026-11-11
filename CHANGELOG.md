@@ -32,6 +32,12 @@
 
 ### Changed
 
+- The JSDoc across every entry point is rewritten for app developers: each
+  hover says what the export does first, then its errors and platform
+  differences, with shorter examples. Several statements that no longer
+  matched the code are corrected, in the JSDoc, the README and the guides:
+  when the early refresh runs, which jar `nextJar` returns, and what
+  `createServerAuth` accepts.
 - The README's Effect example and `examples/tanstack-start-spa-effetch`
   refresh the session with a client method (`client.post`) instead of binding
   an endpoint on every call, as effetch's README recommends.

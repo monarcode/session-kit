@@ -25,7 +25,10 @@ import { sameSession } from "../core/user.js";
  * @example
  * ```tsx
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
- * import { createAuthHooks, useMirrorAuth } from "@monarcode/session-kit/react";
+ * import {
+ * 	createAuthHooks,
+ * 	useMirrorAuth,
+ * } from "@monarcode/session-kit/react";
  * import { Outlet, useLoaderData, useRevalidator } from "react-router";
  *
  * type User = { id: number; firstName: string };
@@ -34,7 +37,12 @@ import { sameSession } from "../core/user.js";
  * declare function loader(): Promise<{ session: Session<User> | null }>;
  *
  * const createAppAuth = (session: Session<User> | null) =>
- * 	createMirrorAuth({ name: "app", session, revalidate: fetchSession, signOut: postSignOut });
+ * 	createMirrorAuth({
+ * 		name: "app",
+ * 		session,
+ * 		revalidate: fetchSession,
+ * 		signOut: postSignOut,
+ * 	});
  * const { AuthProvider } = createAuthHooks<ReturnType<typeof createAppAuth>>();
  *
  * export default function App() {

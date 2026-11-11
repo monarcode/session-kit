@@ -13,7 +13,10 @@ import { sameUser, toUser, validateNewUser, validateUser } from "./user.js";
  *
  * @example
  * ```ts
- * import { fromAccessToken, type AccessTokenUser } from "@monarcode/session-kit";
+ * import {
+ * 	fromAccessToken,
+ * 	type AccessTokenUser,
+ * } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
  * const claims = z.object({ sub: z.string(), email: z.string() });
@@ -49,7 +52,11 @@ export type AccessTokenUser<C, U> = {
  *
  * @example
  * ```ts
- * import { createAuth, webStorage, type UserSource } from "@monarcode/session-kit";
+ * import {
+ * 	createAuth,
+ * 	webStorage,
+ * 	type UserSource,
+ * } from "@monarcode/session-kit";
  *
  * // A constraint keeps the user type of whichever source is passed.
  * export function createAppAuth<Src extends UserSource>(user: Src) {
@@ -111,14 +118,18 @@ function decodeAccessToken(accessToken: string): Record<string, unknown> {
  *   `auth.refresh()` to pick up a change.
  *
  * `map` runs on every restore and every new token, so keep it pure and
- * synchronous: the same claims must give the same user. Leave out claims that
+ * synchronous. The same claims must give the same user. Leave out claims that
  * change on every refresh, such as `exp`, `iat` or `jti`. A token that can't be
  * read, or whose claims the schema rejects, fails with
  * `USER_VALIDATION_FAILED`.
  *
  * @example
  * ```ts
- * import { createAuth, fromAccessToken, webStorage } from "@monarcode/session-kit";
+ * import {
+ * 	createAuth,
+ * 	fromAccessToken,
+ * 	webStorage,
+ * } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
  * declare const accessToken: string;

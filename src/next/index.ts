@@ -193,7 +193,8 @@ const proxyJars = new WeakMap<object, CookieJar>();
  * export async function proxy(request: NextRequest) {
  * 	const response = NextResponse.next();
  * 	// If the refresh fails, the page still renders with the cookie as it is.
- * 	await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
+ * 	const jar = proxyJar(request, response);
+ * 	await serverAuth.refreshIfDue(jar).catch(() => {});
  * 	return response;
  * }
  * ```
