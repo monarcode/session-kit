@@ -26,7 +26,7 @@ export function setLongTimeout(
 	return () => clearTimeout(timer);
 }
 
-/** How long to wait before refreshing a token that expires in `remaining` ms. */
+/** The delay before refreshing a token that expires in `remaining` ms. */
 export function proactiveRefreshDelay(remaining: number): number {
 	return remaining - Math.min(REFRESH_LEAD_MS, remaining / 2);
 }

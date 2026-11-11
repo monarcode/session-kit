@@ -133,7 +133,9 @@ export type Debugger = {
 		data?: Record<string, unknown>,
 		error?: AuthError,
 	): void;
-	/** `fields` while `sensitive`, otherwise nothing, for spreading into `data`. */
+	/**
+	 * `fields` while `sensitive`, otherwise nothing, for spreading into `data`.
+	 */
 	secret(fields: Record<string, unknown>): Record<string, unknown>;
 };
 
@@ -192,7 +194,7 @@ export function createDebugger(
 			try {
 				log(event);
 			} catch (failure) {
-				// A failing logger must not interrupt the auth operation it reports.
+				// A failing logger must not interrupt what it reports.
 				queueMicrotask(() => {
 					throw failure;
 				});

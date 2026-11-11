@@ -191,7 +191,8 @@ export type RefreshResult<I = never> =
 				: {
 						/**
 						 * The user, if your backend sends one with the tokens. If
-						 * `updateUser` ran during the refresh, its user is kept instead.
+						 * `updateUser` ran during the refresh, its user is kept
+						 * instead.
 						 */
 						user?: I | undefined;
 					}))
@@ -607,8 +608,9 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 		? unknown
 		: {
 				/**
-				 * Replaces the signed-in user, such as after a profile edit. Pass the
-				 * user, or an async function that fetches it. The session ID stays.
+				 * Replaces the signed-in user, such as after a profile edit. Pass
+				 * the user, or an async function that fetches it. The session ID
+				 * stays.
 				 *
 				 * Rejects with `UNAUTHENTICATED` when signed out, and with
 				 * `USER_VALIDATION_FAILED` for a user the schema rejects, or when

@@ -145,7 +145,9 @@ export function sameUser(a: unknown, b: unknown): boolean {
 	return JSON.stringify(a) === JSON.stringify(b);
 }
 
-/** Whether two sessions are one account with the same user, or both signed out. */
+/**
+ * Whether two sessions are one account with the same user, or both signed out.
+ */
 export function sameSession(
 	a: { sessionId: string; user: unknown } | null,
 	b: { sessionId: string; user: unknown } | null,

@@ -6,7 +6,9 @@ import type { AuthStorage } from "./storage.js";
 import { tokensOf, validateTokens, type SessionTokens } from "./tokens.js";
 import type { AuthLocking } from "./types.js";
 
-/** A saved session. `user` is absent when the user comes from the access token. */
+/**
+ * A saved session. `user` is absent when the user comes from the access token.
+ */
 export type StoredSession = SessionTokens & {
 	id: string;
 	user?: unknown;
@@ -56,7 +58,10 @@ function storageError(cause: unknown): AuthError {
 			});
 }
 
-/** Whether `name` can name an auth: in storage keys, locks, cookies and channels. */
+/**
+ * Whether `name` can name an auth: in storage keys, locks, cookies and
+ * channels.
+ */
 export function isAuthName(name: unknown): name is string {
 	return typeof name === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(name);
 }
@@ -75,6 +80,7 @@ export function checkOptions(name: unknown, maxAge: unknown): void {
 	}
 }
 
+/** Reads and writes one auth's saved session, one storage call at a time. */
 export function createPersistence(
 	storage: AuthStorage,
 	name: string,
@@ -254,7 +260,10 @@ export function createPersistence(
 		return enqueue(async () => then(await text));
 	}
 
-	/** Reads the saved entry without opening its tokens, as restoring a locked session does. */
+	/**
+	 * Reads the saved entry without opening its tokens, as restoring a locked
+	 * session does.
+	 */
 	function readEntry(): MaybePromise<SavedEntry | null> {
 		return readWith(parse);
 	}
@@ -267,7 +276,7 @@ export function createPersistence(
 		});
 	}
 
-	/** The fields saved for `session`, with its tokens sealed when `sealing` is set. */
+	/** The fields saved for `session`, tokens sealed when `sealing` is set. */
 	async function fieldsOf(session: StoredSession): Promise<object> {
 		if (!sealing) return session;
 		const payload = JSON.stringify({ id: session.id, ...tokensOf(session) });
@@ -291,6 +300,7 @@ export function createPersistence(
 	function write(session: StoredSession): Promise<void> {
 		return enqueue(async () => {
 			const fields = await fieldsOf(session);
+			// Each save, such as a refresh's, starts `maxAge` again.
 			const persistUntil = Date.now() + maxAge * 1000;
 			const value = JSON.stringify({
 				v: STORAGE_VERSION,
@@ -306,11 +316,10 @@ export function createPersistence(
 	}
 
 	/**
-	 * Runs `work` while holding this auth name's lock, shared by every context
-	 * using the storage, so only one at a time spends a refresh token. Without a
-	 * lock it runs directly. Aborting `signal` stops waiting for the lock. Once
-	 * granted, the lock is held until `work` settles, so `work` must bound its
-	 * own duration.
+	 * Runs `work` under `AuthStorage.lock`, so only one tab spends a refresh
+	 * token at a time, or directly without a lock. Aborting `signal` only
+	 * stops waiting for the lock. Once granted, it's held until `work`
+	 * settles, so `work` must bound its own duration.
 	 */
 	function exclusive<T>(
 		signal: AbortSignal,

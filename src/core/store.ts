@@ -21,7 +21,7 @@ export function stateView<T>(store: ReadableAtom<T>) {
 				try {
 					listener(value as T);
 				} catch (error) {
-					// A failing listener must not interrupt the change that notified it.
+					// A failing listener must not interrupt the change.
 					queueMicrotask(() => {
 						throw error;
 					});

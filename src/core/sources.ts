@@ -111,9 +111,10 @@ function decodeAccessToken(accessToken: string): Record<string, unknown> {
  *   `auth.refresh()` to pick up a change.
  *
  * `map` runs on every restore and every new token, so keep it pure and
- * synchronous: the same claims must give the same user. Leave out claims
- * that change on every refresh, such as `exp`, `iat` or `jti`. A token that can't be read, or whose claims the schema
- * rejects, fails with `USER_VALIDATION_FAILED`.
+ * synchronous: the same claims must give the same user. Leave out claims that
+ * change on every refresh, such as `exp`, `iat` or `jti`. A token that can't be
+ * read, or whose claims the schema rejects, fails with
+ * `USER_VALIDATION_FAILED`.
  *
  * @example
  * ```ts
@@ -160,16 +161,22 @@ export function fromAccessToken<
 
 /** How the engine obtains users, whichever the source. */
 export type UserResolver<U> = {
-	/** Whether the user is saved beside the tokens, rather than read from them. */
+	/**
+	 * Whether the user is saved beside the tokens, rather than read from them.
+	 */
 	saved: boolean;
-	/** The user for new tokens and `input`; `input` is ignored when not saved. */
+	/**
+	 * The user for new tokens and `input`; `input` is ignored when not saved.
+	 */
 	receive: (accessToken: string, input: unknown) => MaybePromise<U>;
 	/**
 	 * The user for a saved session. Synchronous when the source is, so a
 	 * session can be restored before the first render.
 	 */
 	restore: (saved: StoredSession) => MaybePromise<U>;
-	/** Whether `saved` holds the same user as `current`, without validating it. */
+	/**
+	 * Whether `saved` holds the same user as `current`, without validating it.
+	 */
 	unchanged: (
 		saved: StoredSession,
 		current: SessionTokens & { user: U },
