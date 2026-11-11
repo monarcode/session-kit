@@ -35,30 +35,31 @@ import {
  */
 export interface SessionBearerOptions {
 	/**
-	 * Your API's URL, usually the client's `baseUrl`. The access token goes
-	 * only to requests on its origin.
+	 * Your API's URL, usually the effetch client's `baseUrl`. The access token
+	 * goes only to requests on its origin. Default: none.
 	 */
 	baseUrl: string;
 	/**
 	 * Whether a call made while signed out is sent without an `Authorization`
-	 * header, rather than failing with `UNAUTHENTICATED`. Default: `false`.
-	 * Set `true` when one client serves public and private endpoints. A
-	 * locked client still fails with `LOCKED`. Calls can override it.
+	 * header, rather than failing with `UNAUTHENTICATED`. Set `true` when one
+	 * client serves public and private endpoints. A locked client still fails
+	 * with `LOCKED`. Calls can override it. Default: `false`.
 	 */
 	optional?: boolean | undefined;
 	/**
-	 * Whether a 401 on the replayed request, after a successful renewal, ends
-	 * the session. Default: `true`. Set `false` when some endpoints answer 401
-	 * for reasons other than a rejected token. Calls can override it.
+	 * Whether a second 401, after a successful refresh, signs the user out.
+	 * Set `false` when some endpoints answer 401 for reasons other than a
+	 * rejected token. Calls can override it. Default: `true`.
 	 */
 	signOutOnRepeated401?: boolean | undefined;
 }
 
 /**
- * The plugin {@link sessionBearer} makes: calls can fail with
- * `AuthFailure`, and `Fetch.make` needs the `Auth` service. Calls can skip
- * it (`plugins: { sessionBearer: false }`) or override `optional` and
- * `signOutOnRepeated401`.
+ * The plugin {@link sessionBearer} returns. Its calls can fail with
+ * `AuthFailure`, and `Fetch.make` needs the `Auth` service.
+ *
+ * A call can skip it with `plugins: { sessionBearer: false }`, or override
+ * `optional` and `signOutOnRepeated401`.
  *
  * @example
  * ```ts
@@ -81,7 +82,9 @@ export type SessionBearerPlugin = Plugin<
 	{ readonly optional: boolean; readonly signOutOnRepeated401: boolean }
 >;
 
-/** Runs `effect` with `fetch` refusing redirects, so a token never follows one. */
+/**
+ * Runs `effect` with `fetch` refusing redirects, so a token never follows one.
+ */
 const refuseRedirects = <A, E, R>(
 	effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
@@ -94,28 +97,31 @@ const refuseRedirects = <A, E, R>(
 
 /**
  * An effetch plugin that sends the current access token as
- * `Authorization: Bearer`, with `createAuthFetch`'s behaviour. An invalid
- * `baseUrl` throws `INVALID_OPTIONS`; a request on another origin, or with
- * credentials in its URL, dies with `INVALID_OPTIONS`, so the token never
- * leaves your API. With Effect's `FetchHttpClient`, a redirect fails as a
- * `NetworkError` rather than being followed.
+ * `Authorization: Bearer`. After a 401, it gets a new access token once.
+ * `GET` and `HEAD` requests are then sent again; other requests return the
+ * 401 for you to retry. If the request sent again gets a 401 too, the user
+ * is signed out, unless `signOutOnRepeated401` is off. If the renewal ends
+ * the session, the call returns the 401.
  *
- * Calls fail with `AuthFailure`: `UNAUTHENTICATED` when signed out, unless
- * `optional` sends them without a token, and `LOCKED` while locked, without
- * sending the request. A 401 response renews the access token once. `GET`
- * and `HEAD` requests are then sent again with the new token; other requests
- * return the 401 for the caller to retry. If the session changes during a
- * call, it fails with `SESSION_CHANGED` rather than return a response for
- * another account.
+ * Calls fail with `AuthFailure`, before sending anything: `UNAUTHENTICATED`
+ * when signed out, unless `optional` sends them without a token, and
+ * `LOCKED` while locked. If the session changes during a call, it fails with
+ * `SESSION_CHANGED` rather than return a response meant for another account.
+ *
+ * The token never leaves your API. A request on another origin, or with a
+ * username or password in its URL, dies with `INVALID_OPTIONS`. With
+ * Effect's `FetchHttpClient`, a redirect fails as a `NetworkError` rather
+ * than being followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
  *
  * A request that already has an `Authorization` header is sent as it is, as
- * if the call skipped the plugin, like effetch's `bearer`.
+ * effetch's `bearer` does.
  *
  * Put it last in `plugins`, after `retry`, so each attempt reads the current
- * token. `Fetch.make` then needs the `Auth` service; calls don't. On the
- * server, make the client per request, over that request's `Auth` from
- * `serverAuth.forRequest(jar)`: it reads the token from the cookie and saves
- * a renewed one.
+ * token. `Fetch.make` then needs the `Auth` service, but calls don't.
+ *
+ * On the server, make the effetch client per request, and provide it the
+ * `Auth` layer for that request's `serverAuth.forRequest(jar)`. That view
+ * reads the token from the request's cookie and saves a renewed one.
  *
  * @example
  * ```ts
@@ -133,6 +139,8 @@ const refuseRedirects = <A, E, R>(
  * }).pipe(Effect.provide(FetchHttpClient.layer));
  * // Per call: api.post("/auth/login", { body, plugins: { sessionBearer: false } })
  * ```
+ *
+ * @see {@link SessionBearerOptions} for `optional` and `signOutOnRepeated401`
  *
  * @since 0.1.0
  */
@@ -161,6 +169,8 @@ export function sessionBearer(
 						);
 					const auth = yield* Auth;
 					const { optional, signOutOnRepeated401 } = yield* callOptions;
+					// The session can change while the token is read and while the
+					// request is in flight. Either way, the response isn't ours.
 					const send = (credentials: Credentials) =>
 						Effect.gen(function* () {
 							if (!auth.isCurrent(credentials))
@@ -190,8 +200,9 @@ export function sessionBearer(
 						const response = yield* refuseRedirects(
 							client.execute(request),
 						);
-						// A 401 for the signed-out request must not reach a 401 handler
-						// that would then sign out the account that just signed in.
+						// A 401 for the signed-out request must not reach a 401
+						// handler that would then sign out the account that just
+						// signed in.
 						if (auth.state.get().sessionId !== null)
 							return yield* fromAuthError(sessionChanged());
 						return response;

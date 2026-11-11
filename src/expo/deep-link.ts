@@ -14,9 +14,9 @@ import type { AuthStatus } from "../core/types.js";
 import type { AuthSource } from "../react/context.js";
 
 /**
- * Options for {@link rememberDeepLink}: the same as `safeReturnTo`'s.
- * Set `loginPath` when the sign-in screen isn't `/login`, so a link to it is
- * ignored rather than kept.
+ * Options for {@link rememberDeepLink}, the same as `safeReturnTo`'s. Set
+ * `loginPath` when your sign-in screen isn't `/login`, so links to it are
+ * dropped rather than kept.
  *
  * @example
  * ```ts
@@ -90,17 +90,18 @@ export function deepLinkPath(url: string): string {
 }
 
 /**
- * Keeps an incoming deep link, so `SessionGate` can open it once the
- * user has signed in. Call it from `redirectSystemPath` in
- * `app/+native-intent.tsx`, which Expo Router calls with every URL that opens
- * the app, before routing: `Stack.Protected` sends a link to a guarded screen
- * to the first screen the user may see, and the link would be lost. Return
- * the path unchanged, so Expo Router still shows it to a signed-in user.
+ * Keeps an incoming deep link, so `SessionGate` can open it after the user
+ * signs in. Without it, `Stack.Protected` sends a signed-out user from a
+ * guarded screen to one they may see, and the link is lost.
  *
- * The path is checked with `safeReturnTo`, so the sign-in path, the
- * root, and anything that could leave the app are ignored. A newer link
- * replaces an older one. The link waits in memory, so an app restart forgets
- * it. What `SessionGate` does with it:
+ * Call it from `redirectSystemPath` in `app/+native-intent.tsx`, which Expo
+ * Router calls with every URL that opens the app. `url` can be a full URL or
+ * a path. Return the path unchanged, so a signed-in user still lands on it.
+ *
+ * The path is checked with `safeReturnTo`, so the sign-in path, the root, and
+ * anything that could leave the app are ignored. A newer link replaces an
+ * older one. The link is kept in memory only, so an app restart forgets it.
+ * What `SessionGate` does with it:
  *
  * - **Signed in already**: drops it, since Expo Router opens it as usual.
  * - **Signed out or locked**: opens it with `router.replace` after the next
@@ -147,13 +148,15 @@ export function rememberDeepLink(
 }
 
 /**
- * What a change of status or screen does to a remembered link: a sign-in
- * opens it if it was waiting and forgets it; while signed out or locked, it
- * waits, unless the screen it names is already showing, since anyone may see
- * that one. Restoring and unavailable access leave it as it is, as does a
- * `pathname` still equal to `launch`, Expo Router's reading of the launch
- * URL: until the navigator applies its guards, it names a screen nobody has
- * seen.
+ * What a change of status or screen does to a remembered link.
+ *
+ * - Signed in: opens it if it was waiting, and forgets it either way.
+ * - Signed out or locked: it waits. If its screen is already showing,
+ *   anyone may see that screen, so the link is dropped.
+ * - Restoring or unavailable: no change.
+ *
+ * While signed out or locked, a `pathname` still equal to `launch`, Expo
+ * Router's reading of the launch URL, leaves the link as it is.
  */
 function nextLink(
 	link: RememberedLink,
@@ -178,12 +181,13 @@ function nextLink(
 						link: undefined,
 						why: "dropped: the app opened signed in, so Expo Router showed it",
 					};
-		// Unlocking opens it, as a sign-in does.
+		// Locked waits like signed out, and unlocking opens it like a sign-in.
 		case "locked":
 		case "unauthenticated":
 			if (sameRoute(pathname, link.path)) {
-				// A guarded screen moves off it; one open to anyone stays, and the
-				// link is dropped at the sign-in, unopened.
+				// Either the guards haven't moved off the launch URL yet, or the
+				// launch screen is open to anyone. Then the link is dropped at the
+				// sign-in, unopened.
 				if (pathname === launch) return { link };
 				return {
 					link: undefined,
