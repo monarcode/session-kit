@@ -59,17 +59,37 @@ export type AuthFetchOptions = {
 	signOutOnRepeated401?: boolean | undefined;
 };
 
+/**
+ * The `fetch` that {@link createAuthFetch} returns. Call it with a path
+ * under your API's base URL, and `init` as you would pass to `fetch`. Use the
+ * name to type a prop, a context or a test fake that stands in for it.
+ *
+ * @example
+ * ```ts
+ * import type { AuthFetch } from "@monarcode/session-kit/http";
+ *
+ * // A stand-in for tests: every request gets an empty list.
+ * export const fakeFetch: AuthFetch = async () =>
+ * 	new Response("[]", { headers: { "Content-Type": "application/json" } });
+ * ```
+ *
+ * @see {@link createAuthFetch} for how it sends the token and handles a 401
+ *
+ * @since 0.1.0
+ */
+export type AuthFetch = (path: string, init?: RequestInit) => Promise<Response>;
+
 /** Releases a response the caller will never see. */
 async function discard(response: Response) {
 	await response.body?.cancel().catch(() => {});
 }
 
 /**
- * Creates a `fetch` for your API that sends the current access token as
- * `Authorization: Bearer`. After a 401, it gets a new access token once.
- * `GET` and `HEAD` requests are then sent again; other requests resolve the
- * 401 for you to retry. If the request sent again gets a 401 too, the user
- * is signed out, unless `signOutOnRepeated401` is off.
+ * Creates a `fetch` for your API ({@link AuthFetch}) that sends the current
+ * access token as `Authorization: Bearer`. After a 401, it gets a new access
+ * token once. `GET` and `HEAD` requests are then sent again; other requests
+ * resolve the 401 for you to retry. If the request sent again gets a 401 too,
+ * the user is signed out, unless `signOutOnRepeated401` is off.
  *
  * Rejects with `UNAUTHENTICATED` when signed out, unless `optional` sends the
  * request without a token, and with `LOCKED` while locked. If the session
@@ -109,14 +129,11 @@ export function createAuthFetch(
 	auth: AuthFetchClient,
 	baseUrl: string,
 	options: AuthFetchOptions = {},
-) {
+): AuthFetch {
 	const base = parseUrl(baseUrl);
 	const optional = options.optional ?? false;
 	const signOutOnRepeated401 = options.signOutOnRepeated401 ?? true;
-	return async function authFetch(
-		path: string,
-		init: RequestInit = {},
-	): Promise<Response> {
+	return async function authFetch(path: string, init: RequestInit = {}) {
 		const url = parseUrl(path, base);
 		if (url.origin !== base.origin || url.username || url.password) {
 			throw new AuthError(

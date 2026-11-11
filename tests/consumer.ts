@@ -23,7 +23,7 @@ import {
 	type SessionBearerPlugin,
 } from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
-import { createAuthFetch } from "../dist/http/index.js";
+import { createAuthFetch, type AuthFetch } from "../dist/http/index.js";
 import {
 	createAuth,
 	createMirrorAuth,
@@ -99,6 +99,13 @@ connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
 createAuthFetch(auth, "https://api.example.com", { optional: true });
 createAuthFetch(auth, "https://api.example.com", { optional: undefined });
+const authFetch: AuthFetch = createAuthFetch(auth, "https://api.example.com");
+void authFetch("orders", { method: "POST" }).then((response) => response.ok);
+const fakeFetch: AuthFetch = async () => new Response("[]");
+const plainFetch: AuthFetch = fetch;
+void [fakeFetch, plainFetch];
+// @ts-expect-error: a path is required.
+void authFetch();
 
 // Provider-free hooks typed by the registered Router.
 const { useAuth, useAuthClient } = createAuthHooks({

@@ -4,6 +4,10 @@
 
 ### Added
 
+- `AuthFetch` in `@monarcode/session-kit/http`: the type of the function
+  `createAuthFetch` returns, to type a prop, a context or a test fake.
+  `createAuthFetch` now declares it as its return type: the signature is the
+  same, and hovers show `AuthFetch`.
 - `serverAuth.forRequest(jar)` in `@monarcode/session-kit/server`: one
   request's session shaped like a client's read side (`RequestAuth`), with
   `getSession`, `signOut`, `credentials`, `isCurrent` and `state`. With it,

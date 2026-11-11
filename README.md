@@ -1986,7 +1986,7 @@ tokens it answers with. See [What it doesn't do](#what-it-doesnt-do).
 | `@monarcode/session-kit/tanstack-start`        | `sessionHydration`, `loadSession`, types                                                                               |
 | `@monarcode/session-kit/tanstack-start/server` | `startJar`                                                                                                             |
 | `@monarcode/session-kit/next`                  | `nextJar`, `proxyJar`, types                                                                                           |
-| `@monarcode/session-kit/http`                  | `createAuthFetch`                                                                                                      |
+| `@monarcode/session-kit/http`                  | `createAuthFetch`, types                                                                                               |
 | `@monarcode/session-kit/effect`                | `Auth`, `AuthFailure`, `Register`, types                                                                               |
 | `@monarcode/session-kit/effetch`               | `sessionBearer`, types                                                                                                 |
 
