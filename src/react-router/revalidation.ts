@@ -9,13 +9,15 @@ import {
 } from "../react/context.js";
 
 /**
- * Re-runs loaders whenever auth changes in a way guards care about: a
- * sign-in, sign-out, account switch, profile update, lock, or a refresh that
- * fails once access has expired. Token refreshes alone do not, nor does a
- * failed refresh while the access token is still valid. Call it once in the
- * root layout, in data or framework mode, so guards such as `requireSession`
- * run again; declarative mode has no loaders to re-run. Watches `client`, or
- * the nearest `AuthProvider`'s.
+ * Runs your loaders again when the session changes, so guards such as
+ * `requireSession` check it again. That's on sign-in, sign-out, a switch of
+ * account, a profile update, a lock, or a refresh that fails once the access
+ * token has expired. A token refresh alone doesn't, nor does a failed
+ * refresh while the token is still valid.
+ *
+ * Call it once in the root layout, in data or framework mode. Declarative
+ * mode has no loaders. It watches `client`, or the nearest `AuthProvider`'s,
+ * and doesn't mount the client itself.
  *
  * @example
  * ```tsx

@@ -14,7 +14,7 @@ export type { SessionOutletProps } from "./outlet.js";
 
 /**
  * The auth client type in your registered Router's context, which
- * {@link useRouterAuth} returns. `never` until the Router is registered.
+ * {@link useRouterAuth} returns. It's `never` until the Router is registered.
  *
  * @example
  * ```ts
@@ -51,12 +51,14 @@ export type RegisteredAuth = Register extends {
 	: never;
 
 /**
- * Reads the auth client from Router context. Pass it to
- * `createAuthHooks` so the hooks need no `AuthProvider`;
- * `connectAuth` mounts the client instead. Router context is per
- * request in TanStack Start, so this stays safe when rendering on a server.
- * Throws `INVALID_OPTIONS` when Router context has no `auth` client. The
- * client's type comes from the registered Router: see {@link RegisteredAuth}.
+ * Reads the auth client from Router context, where it's `auth`. Pass it to
+ * `createAuthHooks` as `useClient`, so the hooks need no `AuthProvider`.
+ * Then mount the client with `connectAuth`.
+ *
+ * Router context is per request in TanStack Start, so this is safe during
+ * server rendering. Throws `INVALID_OPTIONS` when Router context has no
+ * `auth`. The client's type comes from your registered Router
+ * ({@link RegisteredAuth}).
  *
  * @example
  * ```ts

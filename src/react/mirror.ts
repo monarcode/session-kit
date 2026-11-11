@@ -6,17 +6,21 @@ import type { Session } from "../core/types.js";
 import { sameSession } from "../core/user.js";
 
 /**
- * For server rendering with a `createMirrorAuth` client: creates the client
- * once per mount from the session the server rendered, and keeps the two in
- * step. When a server render brings another session, as after a server
- * action signs in or out, the client adopts it and tells other tabs. When the
- * client's session changes in the browser, as after `signOut` or a change in
- * another tab, it calls `onChange`, which should render on the server again
- * so its redirects run: `router.refresh()` from `useRouter()` in Next.js,
- * `revalidate` from `useRevalidator()` in React Router. Call it in the
- * component that renders `AuthProvider`. Creating the client here, not at
- * module level, keeps one per request on the server. `onChange` may change
- * between renders: the latest one is called.
+ * Creates a `createMirrorAuth` client once, from the session the page was
+ * rendered with, and keeps it in step with your server. Call it in the
+ * component that renders `AuthProvider`.
+ *
+ * When a new server render brings another session, such as after a server
+ * action signs in or out, the client takes it and tells other tabs.
+ *
+ * When the session changes in the browser, such as after `signOut()` or in
+ * another tab, it calls `onChange`. Make that render on the server again, so
+ * its redirects run: `router.refresh()` in Next.js, or `revalidate` from
+ * `useRevalidator()` in React Router.
+ *
+ * Creating the client here, rather than at module level, keeps one per
+ * request during server rendering. `onChange` can be a new function on each
+ * render, as the latest one is called.
  *
  * @example
  * ```tsx
@@ -62,8 +66,8 @@ export function useMirrorAuth<U, C extends MirrorAuth<U>>(
 		function followServer() {
 			const previous = rendered.current;
 			rendered.current = session;
-			// Only a change: a render begun before a change in the browser
-			// mustn't undo it.
+			// Only when the server's session changed, so a server render that
+			// began before a change in the browser can't undo it.
 			if (!sameSession(previous, session)) auth.adopt(session);
 		},
 		[auth, session],
@@ -73,6 +77,8 @@ export function useMirrorAuth<U, C extends MirrorAuth<U>>(
 			const unwatch = watchVersion(auth, () => {
 				const { sessionId, user } = auth.state.get();
 				const current = sessionId === null ? null : { sessionId, user };
+				// Skip a session the server already rendered, such as right after
+				// `adopt`, or the two would re-render each other.
 				if (!sameSession(current, rendered.current))
 					return latestOnChange.current();
 			});

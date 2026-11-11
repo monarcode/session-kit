@@ -34,10 +34,11 @@ import {
  */
 export type AuthHooksOptions<Client extends AuthSource> = {
 	/**
-	 * Finds the client instead of reading it from `AuthProvider`, for example
-	 * from router context with `useRouterAuth`. Called as a hook, on
-	 * every render of every hook. The hooks then need no `AuthProvider`, so
-	 * mount the client some other way, such as with `connectAuth`.
+	 * Finds the client some other way than `AuthProvider`, such as from router
+	 * context with `useRouterAuth`. It's called as a hook, inside every hook,
+	 * on every render. The hooks then need no `AuthProvider`, so mount the
+	 * client another way, such as with `connectAuth`. Default: reads the
+	 * nearest `AuthProvider`.
 	 */
 	useClient?: (() => Client) | undefined;
 };
@@ -93,11 +94,10 @@ export type AuthProviderProps<Client extends AuthSource> = {
  */
 export type AuthHooks<Client extends AuthSource> = {
 	/**
-	 * Provides `client` to the hooks below it and mounts it while rendered,
-	 * starting expiry timers and cross-tab sync. With synchronous storage and
-	 * schemas, mounting restores the saved session before the first paint.
-	 * Effects never run on a server, so server rendering starts no background
-	 * work.
+	 * Gives `client` to the hooks below it, and mounts it while rendered,
+	 * which starts expiry timers and following other tabs. Mounting restores
+	 * the saved session, before the first paint with synchronous storage and
+	 * schemas. On a server, nothing starts, as effects don't run there.
 	 */
 	AuthProvider: (props: AuthProviderProps<Client>) => ReactElement;
 	/**
