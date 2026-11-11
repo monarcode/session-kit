@@ -7,9 +7,9 @@ import { decodeJwtPayload, type SessionTokens } from "./tokens.js";
 import { sameUser, toUser, validateNewUser, validateUser } from "./user.js";
 
 /**
- * A user read from the access token's claims, made by {@link fromAccessToken}
- * and passed as `createAuth`'s `user` option. `C` is the validated claims; `U`
- * is the user mapped from them.
+ * A user read from the access token, made by {@link fromAccessToken}. Pass it
+ * as `createAuth`'s `user` option. `C` is the token's claims, and `U` is the
+ * user made from them.
  *
  * @example
  * ```ts
@@ -29,24 +29,29 @@ import { sameUser, toUser, validateNewUser, validateUser } from "./user.js";
  * @since 0.1.0
  */
 export type AccessTokenUser<C, U> = {
+	/** Marks a user read from the access token. */
 	readonly kind: "accessToken";
-	/** Validates the decoded claims. */
+	/** Checks the claims read from the token. */
 	readonly claims: StandardSchemaV1<unknown, C>;
-	/** Turns the validated claims into the user. */
+	/** Turns the checked claims into the user. */
 	readonly map: (claims: C) => U;
-	/** Turns the access token into the claims. See {@link FromAccessTokenOptions.decode}. */
+	/**
+	 * Reads the claims from the access token
+	 * ({@link FromAccessTokenOptions.decode}).
+	 */
 	readonly decode: (accessToken: string) => unknown;
 };
 
 /**
- * Where `createAuth`'s `user` comes from: a Standard Schema, such as a Zod
- * schema, validating the `user` passed to `signIn`, or
- * {@link fromAccessToken} reading it from the access token.
+ * What `createAuth`'s `user` option takes: a schema, such as Zod's, that
+ * checks the `user` passed to `signIn`, or {@link fromAccessToken}, which
+ * reads the user from the access token.
  *
  * @example
  * ```ts
  * import { createAuth, webStorage, type UserSource } from "@monarcode/session-kit";
  *
+ * // A constraint keeps the user type of whichever source is passed.
  * export function createAppAuth<Src extends UserSource>(user: Src) {
  * 	return createAuth({ name: "my-app", user, storage: webStorage() });
  * }
@@ -72,11 +77,12 @@ export type UserSource = StandardSchemaV1 | AccessTokenUser<any, any>;
  */
 export type FromAccessTokenOptions = {
 	/**
-	 * Turns the access token into the claims to validate. May return a promise,
-	 * though then a saved session can't be restored before the first render.
-	 * Default: the JWT payload, decoded **without verifying its signature**.
-	 * That suits a browser, which trusts its own backend's responses anyway;
-	 * code running on a server must pass a verifier instead.
+	 * Reads the claims from the access token. It may return a promise, but then
+	 * a saved session can't show before the first render.
+	 *
+	 * The default doesn't verify the signature. That's fine in a browser,
+	 * which trusts its own backend's responses. On a server, pass a function
+	 * that verifies the token. Default: the JWT's payload, **unverified**.
 	 */
 	decode?: ((accessToken: string) => unknown) | undefined;
 };
@@ -92,19 +98,22 @@ function decodeAccessToken(accessToken: string): Record<string, unknown> {
 }
 
 /**
- * Reads the user from the access token instead of the `signIn` input. The
- * token's claims are validated by `claims`, then `map` turns them into the
- * user; without `map`, the validated claims are the user. Pass the result as
- * `createAuth`'s `user` option.
+ * Reads the user from the access token, rather than from what `signIn` is
+ * given. Pass the result as `createAuth`'s `user` option.
  *
- * `signIn` and the refresh callback then take tokens only, `updateUser` is
- * unavailable, and the user changes whenever the token does; call
- * `auth.refresh()` to pick up a changed user. `map` runs on every restore and
- * token change, so keep it pure and synchronous, and leave out claims that
- * change on every refresh, such as `exp`, `iat`, or `jti`. A token that can't
- * be decoded, or whose claims fail validation, rejects with
- * `USER_VALIDATION_FAILED`. See {@link FromAccessTokenOptions} to verify or
- * decode the token yourself.
+ * The `claims` schema checks the token's claims, and `map` turns them into
+ * the user. Without `map`, the claims are the user.
+ *
+ * The client then works a little differently:
+ * - `signIn` takes tokens only, and your refresh callback returns tokens
+ *   only.
+ * - There's no `updateUser`. The user changes when the token does, so call
+ *   `auth.refresh()` to pick up a change.
+ *
+ * `map` runs on every restore and every new token, so keep it pure and
+ * synchronous: the same claims must give the same user. Leave out claims
+ * that change on every refresh, such as `exp`, `iat` or `jti`. A token that can't be read, or whose claims the schema
+ * rejects, fails with `USER_VALIDATION_FAILED`.
  *
  * @example
  * ```ts
@@ -125,6 +134,8 @@ function decodeAccessToken(accessToken: string): Record<string, unknown> {
  *
  * await auth.signIn({ accessToken, refreshToken });
  * ```
+ *
+ * @see {@link FromAccessTokenOptions} to verify the token yourself
  *
  * @since 0.1.0
  */
@@ -149,9 +160,9 @@ export function fromAccessToken<
 
 /** How the engine obtains users, whichever the source. */
 export type UserResolver<U> = {
-	/** Whether the user is saved beside the tokens, rather than derived from them. */
+	/** Whether the user is saved beside the tokens, rather than read from them. */
 	saved: boolean;
-	/** The user for newly received tokens and `input`, which is ignored when derived. */
+	/** The user for new tokens and `input`; `input` is ignored when not saved. */
 	receive: (accessToken: string, input: unknown) => MaybePromise<U>;
 	/**
 	 * The user for a saved session. Synchronous when the source is, so a
@@ -184,7 +195,6 @@ export function resolveUserSource(source: UserSource): UserResolver<unknown> {
 			"Pass a Standard Schema or fromAccessToken(…) as the user option",
 		);
 	}
-	/** Decodes and validates the claims, then maps them to the user. */
 	const derive = (accessToken: string) =>
 		attempt(
 			() =>

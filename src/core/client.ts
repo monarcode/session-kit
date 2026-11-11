@@ -134,51 +134,42 @@ function toCredentials<U>(
 }
 
 /**
- * Creates the auth client ({@link AuthClient}) from {@link AuthOptions}. Put
- * one in Router context per auth `name` per tab. Throws `INVALID_OPTIONS` for
- * options it can't use.
+ * Creates an auth client. It keeps the session your backend issued, saves
+ * it, refreshes its tokens, and tells your app when it changes.
  *
- * The saved session is restored by the first `mount()`, which `AuthProvider`
- * and the router adapters call, or the first method that needs it, such as
- * `getSession()`. Until then, `state` is `initializing`.
+ * Create one client per `name`. Throws `INVALID_OPTIONS` for options it
+ * can't use. To keep sessions on your server instead, in a cookie, use
+ * `createServerAuth` from `@monarcode/session-kit/server`.
  *
- * Token expiry comes from `expiresAt`, `expiresIn`, or JWT claims; see
- * `Tokens`. Prefer `expiresIn` so a wrong browser clock cannot expire
- * tokens early.
+ * The saved session is read on the first `mount()`, which `AuthProvider` and
+ * the router adapters call, or by the first method that needs it, such as
+ * `getSession()`. Until then, `state.status` is `initializing`.
  *
  * @example
  * ```ts
- * import { createAuth, webStorage } from "@monarcode/session-kit";
+ * import { createAuth, webStorage, type RefreshFn } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
- * declare const accessToken: string;
- * declare const refreshToken: string;
+ * declare const refresh: RefreshFn<{ id: string; email: string }>;
  *
  * export const auth = createAuth({
  * 	name: "my-app",
  * 	user: z.object({ id: z.string(), email: z.string() }),
  * 	storage: webStorage(),
- * 	refresh: async ({ refreshToken, signal }) => {
- * 		const response = await fetch("/api/auth/refresh", {
- * 			method: "POST",
- * 			signal,
- * 			headers: { "Content-Type": "application/json" },
- * 			body: JSON.stringify({ refreshToken }),
- * 		});
- * 		if (response.status === 401) return null; // rejected: sign out
- * 		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
- * 		const body = await response.json();
- * 		return { accessToken: body.access_token, expiresIn: body.expires_in };
- * 	},
+ * 	refresh,
  * });
  *
+ * // After your login endpoint answers:
  * await auth.signIn({
- * 	accessToken,
- * 	refreshToken,
+ * 	accessToken: "eyJhbGciOi…",
+ * 	refreshToken: "r1",
  * 	expiresIn: 900,
  * 	user: { id: "1", email: "ada@example.com" },
  * });
  * ```
+ *
+ * @see {@link AuthOptions} for every option
+ * @see {@link AuthClient} for what the client does
  *
  * @since 0.1.0
  */

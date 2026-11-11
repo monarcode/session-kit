@@ -4,12 +4,14 @@ import { AuthError } from "./errors.js";
 type MaybePromise<T> = T | Promise<T>;
 
 /**
- * Where auth saves the session, passed as `createAuth`'s `storage` option.
- * Values are strings whose format auth owns. Operations may return promises;
- * auth applies them one at a time, in the order it issued them, so storage
- * that settles out of order is safe. Use {@link webStorage} in browsers,
- * `secureStorage()` from `@monarcode/session-kit/expo` in Expo apps, and
- * {@link memoryStorage} in tests, or implement it for another store.
+ * Where auth saves the session: `createAuth`'s `storage` option. Use
+ * {@link webStorage} in browsers, `secureStorage()` from
+ * `@monarcode/session-kit/expo` in Expo apps, and {@link memoryStorage} in
+ * tests. Implement it yourself for another store.
+ *
+ * Values are strings in a format auth owns. Methods may return promises. Auth
+ * runs them one at a time, in order, so a store that answers out of order is
+ * still safe.
  *
  * @example
  * ```ts
@@ -39,13 +41,13 @@ type MaybePromise<T> = T | Promise<T>;
  */
 export type AuthStorage = {
 	/**
-	 * The value saved under `key`, or `null` when there is none. Answering
-	 * synchronously lets auth restore a saved session before the first render.
+	 * Returns the value saved under `key`, or `null` when there's none. If it
+	 * answers synchronously, a saved session shows before the first render.
 	 */
 	get: (key: string) => MaybePromise<string | null>;
 	/**
-	 * Saves `value` under `key`. `meta.expiresAt` is when auth stops restoring
-	 * the saved session, in Unix milliseconds, for storage that can expire
+	 * Saves `value` under `key`. `meta.expiresAt` is when the saved session
+	 * stops being valid, in Unix milliseconds, for a store that can expire
 	 * entries itself.
 	 */
 	set: (
@@ -53,18 +55,19 @@ export type AuthStorage = {
 		value: string,
 		meta: { expiresAt: number },
 	) => MaybePromise<void>;
+	/** Removes the value saved under `key`. */
 	remove: (key: string) => MaybePromise<void>;
 	/**
-	 * Calls `onChange` when another context, such as another tab, changes `key`,
-	 * and returns a function that stops listening. Omit it where no other
-	 * context shares the storage.
+	 * Calls `onChange` when another tab changes `key`, and returns a function
+	 * that stops listening. Leave it out when nothing else shares the store.
+	 * Default: none.
 	 */
 	subscribe?: ((key: string, onChange: () => void) => () => void) | undefined;
 	/**
-	 * Runs `work` while holding lock `name` across every context sharing this
-	 * storage, so only one spends a refresh token at a time. Aborting `signal`
-	 * stops waiting for the lock. Omit it where no other context shares the
-	 * storage.
+	 * Runs `work` while holding the lock `name` in every tab that shares the
+	 * store, so only one tab refreshes at a time. Aborting `signal` stops
+	 * waiting for the lock. Leave it out when nothing else shares the store.
+	 * Default: none.
 	 */
 	lock?:
 		| (<T>(
@@ -74,11 +77,13 @@ export type AuthStorage = {
 		  ) => Promise<T>)
 		| undefined;
 	/**
-	 * Called by each `createAuth` whose `debug` option is on, with the key it
-	 * saves under and a function that adds the adapter's own events about that
-	 * key, such as why it discarded a saved value, to that auth's debug log.
-	 * One adapter can serve several auth names, so keep a function per key.
-	 * `sensitive` says whether saved values may appear in `data`.
+	 * Lets your adapter add its own events to the debug log, such as why it
+	 * discarded a saved value.
+	 *
+	 * Each `createAuth` with `debug` on calls it with the key it saves under
+	 * and a `report` function for that key. One adapter can serve several
+	 * auths, so keep a `report` per key. `sensitive` says whether saved values
+	 * may appear in `data`. Default: none.
 	 */
 	debug?:
 		| ((
@@ -103,21 +108,25 @@ export type AuthStorage = {
  */
 export type WebStorageOptions = {
 	/**
-	 * `"local"` keeps the session across browser restarts and shares it with
-	 * every tab. `"session"` gives each tab its own session, which ends with the
-	 * tab; avoid it with rotating refresh tokens, since a duplicated tab starts
-	 * with the same one. Default: `"local"`.
+	 * Which browser storage to use. `"local"` keeps the session across browser
+	 * restarts and shares it with every tab. `"session"` gives each tab its own
+	 * session, which ends with the tab.
+	 *
+	 * Avoid `"session"` with rotating refresh tokens. A duplicated tab starts
+	 * with the same refresh token, and the first to use it signs the other
+	 * out. Default: `"local"`.
 	 */
 	area?: "local" | "session" | undefined;
 };
 
 /**
- * Saves the session in `localStorage`, or in `sessionStorage` with
- * `{ area: "session" }`; see {@link WebStorageOptions}. Tabs follow each
- * other's changes through `storage` events, and coordinate refresh through Web
- * Locks where the browser has them. Browser storage is read only when used, so
- * creating auth on a server is safe; reading the session there fails with
- * `PERSISTENCE_FAILED`.
+ * Saves the session in the browser's `localStorage`, or in `sessionStorage`
+ * with `{ area: "session" }`. Tabs follow each other's changes, such as a
+ * sign-out, and take turns to refresh where the browser supports Web Locks.
+ *
+ * It touches browser storage only when auth reads or saves, so creating auth
+ * in code that also runs on a server is safe. Reading the session on a server
+ * fails with `PERSISTENCE_FAILED`.
  *
  * @example
  * ```ts
@@ -177,9 +186,9 @@ export function webStorage(options: WebStorageOptions = {}): AuthStorage {
 }
 
 /**
- * Keeps the session in memory, so it ends when the page unloads and other tabs
- * never see it. Each call has its own entries. Useful in tests, and where
- * credentials must not be persisted. See {@link AuthStorage}.
+ * Keeps the session in memory only. It ends when the page unloads, and other
+ * tabs never see it. Use it in tests, or where tokens must never be written
+ * to disk. Each call has its own entries.
  *
  * @example
  * ```ts

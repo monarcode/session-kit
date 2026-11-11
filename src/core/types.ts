@@ -6,8 +6,8 @@ import type { AccessTokenUser, UserSource } from "./sources.js";
 import type { AuthStorage } from "./storage.js";
 
 /**
- * What the user source produces: the shape exposed in `state.user` and
- * {@link Session}`.user`. See {@link UserInput} for what it accepts.
+ * The signed-in user's type, inferred from the `user` option: what
+ * `state.user` and `session.user` hold.
  *
  * @example
  * ```ts
@@ -19,6 +19,8 @@ import type { AuthStorage } from "./storage.js";
  * type AppUser = User<typeof userSchema>; // { id: string; email: string }
  * ```
  *
+ * @see {@link UserInput} for the user that `signIn` accepts
+ *
  * @since 0.1.0
  */
 export type User<Src extends UserSource> =
@@ -29,9 +31,12 @@ export type User<Src extends UserSource> =
 			: never;
 
 /**
- * What the user schema accepts: the `user` passed to `signIn` and
- * `updateUser`. `never` when the user comes from the access token, so those
- * take no user. See {@link User} for what the schema produces.
+ * The user that `signIn` and `updateUser` accept, inferred from the `user`
+ * option. It differs from {@link User} when the schema has defaults or
+ * transforms.
+ *
+ * It's `never` with `fromAccessToken`. The user is then read from the token,
+ * so `signIn` takes tokens only.
  *
  * @example
  * ```ts
@@ -57,19 +62,20 @@ export type UserInput<Src extends UserSource> =
 			: never;
 
 /**
- * Tokens from your backend, passed to `signIn` or returned by the refresh
- * callback ({@link RefreshFn}).
+ * The tokens your backend issues. Pass them to `signIn`, and return them from
+ * your refresh callback ({@link RefreshFn}).
  *
- * Expiry comes from the first of these that is present:
- * 1. `expiresAt`: an absolute deadline, compared with the browser clock.
- * 2. `expiresIn`: a lifetime, counted from when auth receives the tokens.
- * 3. A JWT access token's `exp - iat` lifetime, counted from receipt.
- * 4. A JWT access token's `exp` alone, compared with the browser clock.
+ * When the access token expires comes from the first of these that is set:
+ * 1. `expiresIn` or `expiresAt`. Pass one, not both.
+ * 2. A JWT access token's `exp - iat`, counted from when auth receives it.
+ * 3. A JWT access token's `exp` alone, compared with the device's clock.
  *
- * Prefer `expiresIn` (or a JWT with `iat`): browser clocks can be minutes off, and
- * a fast clock makes an absolute deadline look already passed, rejecting sign-in.
- * With none of these, the token never expires locally and is only replaced
- * after a 401. Passing both `expiresIn` and `expiresAt` is rejected.
+ * With none of them, the token never expires on its own. It's replaced only
+ * after your API rejects it.
+ *
+ * Prefer `expiresIn`, or a JWT with `iat`. Device clocks can be minutes off,
+ * and a clock that runs fast makes a fixed deadline look already passed, so
+ * `signIn` would reject the tokens.
  *
  * @example
  * ```ts
@@ -91,30 +97,34 @@ export type UserInput<Src extends UserSource> =
  * @since 0.1.0
  */
 export type Tokens = {
-	/** Sent as `Authorization: Bearer <accessToken>` by `createAuthFetch`. */
+	/**
+	 * The token your API accepts. `createAuthFetch` sends it as
+	 * `Authorization: Bearer <accessToken>`.
+	 */
 	accessToken: string;
 	/**
-	 * Passed to the refresh callback. Without it, an expired or rejected access
-	 * token signs the user out. When refresh omits it, the current one is kept.
+	 * The token your refresh callback exchanges for new tokens. Without one,
+	 * the user is signed out when the access token expires or is rejected. A
+	 * refresh that returns none keeps the current one. Default: none.
 	 */
 	refreshToken?: string | undefined;
 	/**
-	 * Access token lifetime in **seconds**, as in OAuth `expires_in`, such as
-	 * `900` for 15 minutes. Counted from receipt, so a wrong browser clock
-	 * cannot expire the token early or late.
+	 * How long the access token lasts, in **seconds**, like OAuth's
+	 * `expires_in` (`900` is 15 minutes). It's counted from when auth receives
+	 * the token, so a wrong device clock doesn't matter. Default: none.
 	 */
 	expiresIn?: number | undefined;
 	/**
-	 * Absolute expiry as Unix time in **milliseconds**, such as
-	 * `Date.parse("2026-10-02T12:15:00Z")`, compared with the browser clock.
-	 * Use only when the backend gives no lifetime; prefer `expiresIn`.
+	 * When the access token expires, as Unix time in **milliseconds**, such as
+	 * `Date.parse("2026-10-02T12:15:00Z")`. It's compared with the device's
+	 * clock, so use it only when your backend gives no lifetime. Default: none.
 	 */
 	expiresAt?: number | undefined;
 };
 
 /**
- * Input to `signIn`: {@link Tokens}, plus the user when a schema validates it.
- * When the user comes from the access token (`I` is `never`), tokens only.
+ * What `signIn` takes: the {@link Tokens}, plus the `user` when a schema
+ * validates it. With `fromAccessToken` (`I` is `never`), it takes tokens only.
  *
  * @example
  * ```ts
@@ -137,19 +147,25 @@ export type Tokens = {
 export type SignInInput<I> = [I] extends [never]
 	? Tokens & { user?: undefined }
 	: Tokens & {
-			/** Validated, copied, and frozen. Must be a plain JSON object. */
+			/**
+			 * The signed-in user, checked against the `user` schema. It must be a
+			 * plain JSON object. Auth keeps a frozen copy.
+			 */
 			user: I;
 		};
 
 /**
- * What the refresh callback ({@link RefreshFn}) returns:
- * - {@link Tokens}: install them. They must last at least five seconds. An
- *   omitted `refreshToken` or `user` keeps the current value.
- * - `null`: the backend rejected the refresh token. Sign out and clear storage.
+ * What your refresh callback ({@link RefreshFn}) returns:
+ * - {@link Tokens}: the new tokens. They must last at least five seconds.
+ *   Leave out `refreshToken` or `user` to keep the current one.
+ * - `null`: your backend rejected the refresh token. The user is signed out.
  *
- * Throw instead for operational failures (network errors, 5xx). Credentials are
- * kept and the error is exposed in `state.error`. When the user comes from the
- * access token, return tokens only; the user is read from the new token.
+ * For any other failure, such as a network error or a 5xx, throw. The session
+ * is kept, and the failure shows as a `REFRESH_FAILED` error whose `cause` is
+ * what you threw.
+ *
+ * With `fromAccessToken`, return tokens only. The user is read from the new
+ * access token.
  *
  * @example
  * ```ts
@@ -173,15 +189,22 @@ export type RefreshResult<I = never> =
 			([I] extends [never]
 				? { user?: undefined }
 				: {
-						/** Replaces the profile unless `updateUser` ran during the refresh. */
+						/**
+						 * The user, if your backend sends one with the tokens. If
+						 * `updateUser` ran during the refresh, its user is kept instead.
+						 */
 						user?: I | undefined;
 					}))
 	| null;
 
 /**
- * Exchanges a refresh token for new tokens: the `refresh` option of
- * {@link AuthOptions}. Concurrent refreshes share one call. See
- * {@link RefreshResult} for what to return or throw.
+ * Exchanges a refresh token for new tokens. It's the `refresh` option of
+ * {@link AuthOptions}.
+ *
+ * Auth calls it whenever it needs a new access token: shortly before the
+ * current one expires (while mounted), once it has expired, when your API
+ * rejects it, and on `refresh()` or `retry()`. It never runs two at once.
+ * Callers that need a refresh while one runs share its result.
  *
  * @example
  * ```ts
@@ -206,21 +229,30 @@ export type RefreshResult<I = never> =
  * };
  * ```
  *
+ * @see {@link RefreshResult} for what to return or throw
+ *
  * @since 0.1.0
  */
 export type RefreshFn<I = never> = (context: {
+	/** The current refresh token, to send to your backend. */
 	refreshToken: string;
-	/** Aborted when the session changes or after the 15-second deadline. */
+	/**
+	 * Aborted when the session changes, such as on sign-out, or after 15
+	 * seconds. Pass it to `fetch`.
+	 */
 	signal: AbortSignal;
 }) => Promise<RefreshResult<I>>;
 
 /**
- * Revokes the signed-out session's tokens on the backend: the `revoke` option
- * of {@link AuthOptions}. Called by `signOut()` after the local session is
- * gone, so the UI never waits for it to change. A failure is published as
- * `REVOKE_FAILED` without rejecting `signOut()`. Not called when the backend
- * itself ended the session, or when signing out from `locked`, since the
- * tokens are sealed.
+ * Asks your backend to revoke the tokens of a session that just signed out.
+ * It's the `revoke` option of {@link AuthOptions}.
+ *
+ * `signOut()` calls it after the user is already signed out, so the UI never
+ * waits for it. If it fails, `state.error` shows `REVOKE_FAILED`, and
+ * `signOut()` still resolves.
+ *
+ * It isn't called when your backend ended the session itself, or when a
+ * `locked` session signs out, as its tokens aren't in memory.
  *
  * @example
  * ```ts
@@ -242,13 +274,13 @@ export type RefreshFn<I = never> = (context: {
 export type RevokeFn = (context: {
 	accessToken: string;
 	refreshToken?: string | undefined;
-	/** Aborted after the 15-second deadline. */
+	/** Aborted after 15 seconds. Pass it to `fetch`. */
 	signal: AbortSignal;
 }) => Promise<void>;
 
 /**
- * Who is signed in, from `getSession()`. Holds no tokens, so it is safe in
- * route context. See {@link Credentials} for the access token.
+ * Who is signed in: the session ID and the user, from `getSession()`. It
+ * holds no tokens, so it's safe to keep in route context or pass around.
  *
  * @example
  * ```ts
@@ -261,16 +293,21 @@ export type RevokeFn = (context: {
  * }
  * ```
  *
+ * @see {@link Credentials} for the access token
+ *
  * @since 0.1.0
  */
 export type Session<U> = Readonly<{
-	/** Stable across refreshes and profile updates; new on every sign-in. */
+	/**
+	 * Identifies this sign-in. It stays the same across refreshes and profile
+	 * updates, and is new on every sign-in.
+	 */
 	sessionId: string;
 	user: U;
 }>;
 
 /**
- * The current access token, from `credentials.get()`, for attaching to
+ * The current access token, from `credentials.get()`, to send with your API
  * requests. `createAuthFetch` from `@monarcode/session-kit/http` does this
  * for you.
  *
@@ -296,21 +333,27 @@ export type Credentials = Readonly<{
 	sessionId: string;
 	accessToken: string;
 	/**
-	 * Unix time in milliseconds on **this browser's clock**, normalized from
-	 * `expiresIn`, `expiresAt`, or JWT claims. Safe to compare with `Date.now()`.
+	 * When the access token expires, as Unix time in milliseconds on **this
+	 * device's clock**, so you can compare it with `Date.now()`. `undefined`
+	 * when the token has no known expiry.
 	 */
 	expiresAt?: number | undefined;
 }>;
 
 /**
- * Where the session stands, as `state.status` ({@link AuthState}):
- * - `initializing`: restoring the saved session has not finished.
- * - `authenticated`: access is locally usable; `user` is set.
- * - `refreshing`: a refresh is replacing expired or rejected access; `user` stays visible.
- * - `locked`: with `locking`, a session is saved and `user` is set, but its
- *   tokens wait for `unlock()`.
- * - `unauthenticated`: no session; sign-in is needed.
- * - `unavailable`: restoration failed, or the credentials cannot supply usable access.
+ * Where the session stands: `state.status` ({@link AuthState}).
+ * - `initializing`: the saved session hasn't been read yet.
+ * - `authenticated`: signed in, with an access token that hasn't expired or
+ *   been rejected.
+ * - `refreshing`: signed in, and replacing an access token that expired or
+ *   was rejected.
+ * - `locked`: signed in, but the tokens wait for `unlock()` (with `locking`).
+ * - `unauthenticated`: signed out.
+ * - `unavailable`: the access token expired or was rejected and couldn't be
+ *   refreshed, or the saved session couldn't be read. `state.error` usually
+ *   says why. On a client, `retry()` tries again.
+ *
+ * `user` is set while `authenticated`, `refreshing` or `locked`.
  *
  * @example
  * ```ts
@@ -337,9 +380,16 @@ export type AuthStatus =
 	| "unavailable";
 
 type StateFields = {
-	/** Changes when guards must run again. */
+	/**
+	 * A number that changes when route guards should check the session again:
+	 * on sign-in, sign-out, a new user or a change of status. A token refresh
+	 * doesn't change it.
+	 */
 	readonly version: number;
-	/** The latest failure, cleared by the next successful change. */
+	/**
+	 * The latest failure, such as a refresh that failed. The next successful
+	 * change clears it.
+	 */
 	readonly error: AuthError | null;
 };
 
@@ -357,10 +407,12 @@ type SignedOutState<Status extends AuthStatus> = StateFields & {
 };
 
 /**
- * Reactive auth snapshot, from `state.get()` or `useAuth()`. Tokens are
- * intentionally excluded. Checking `status` narrows `user`: it is set exactly
- * while `authenticated`, `refreshing`, or `locked`, so check `status`, not
- * `user`, to know whether access is usable.
+ * The current auth state, from `state.get()` or `useAuth()`. It holds no
+ * tokens.
+ *
+ * Check `status`, not `user`, to know whether requests can be made. `user`
+ * stays set while `refreshing` or `locked`. Checking `status` also narrows
+ * `user`, so TypeScript knows when it's set.
  *
  * @example
  * ```ts
@@ -394,15 +446,21 @@ export type AuthState<U> =
 	| (StateFields & {
 			readonly status: "unavailable";
 			readonly user: null;
-			/** The session whose access is unusable, if any. */
+			/**
+			 * The session whose access token can't be used, or `null` when the
+			 * saved session couldn't be read.
+			 */
 			readonly sessionId: string | null;
 	  });
 
 type AuthClientBase<U, I> = {
 	/**
-	 * Reactive {@link AuthState}. Read it in React with `useAuth`. `subscribe`
-	 * reports later changes, not the current value. A listener that throws does
-	 * not interrupt auth; its error is rethrown asynchronously.
+	 * The current {@link AuthState}, and a way to listen for changes. In React,
+	 * read it with `useAuth`.
+	 *
+	 * `subscribe` calls the listener on each later change, not with the
+	 * current state. A listener that throws doesn't break auth. Its error is
+	 * rethrown asynchronously.
 	 */
 	state: {
 		get: () => AuthState<U>;
@@ -411,92 +469,124 @@ type AuthClientBase<U, I> = {
 		};
 	};
 	/**
-	 * Validates and saves a new session, replacing any current one, locked or
-	 * not. The latest call wins: an earlier one still validating rejects with
-	 * `SESSION_CHANGED`, as it does after `signOut()`. Rejects expired tokens
-	 * with `INVALID_SESSION` and an invalid user with `USER_VALIDATION_FAILED`,
-	 * keeping the previous session.
+	 * Signs in with the tokens your backend issued, and saves the session. It
+	 * replaces any current session, even a locked one.
+	 *
+	 * Rejects with `INVALID_SESSION` for tokens that already expired, and with
+	 * `USER_VALIDATION_FAILED` for a user the schema rejects. The previous
+	 * session then stays. If `signIn` or `signOut()` is called again while it's
+	 * still checking the user, it rejects with `SESSION_CHANGED`, as the latest
+	 * call wins.
 	 */
 	signIn: (input: SignInInput<I>) => Promise<void>;
 	/**
-	 * Ends the session in this tab and clears storage, then calls `revoke`. A
-	 * failed revocation is published as `REVOKE_FAILED` without rejecting.
-	 * Rejects with `PERSISTENCE_FAILED` if storage cannot be cleared; call it
-	 * again later.
+	 * Signs out at once, clears the saved session, then calls your `revoke`
+	 * option. Other tabs that share the storage sign out too, when it reports
+	 * changes (`subscribe`) and `locking` is off.
+	 *
+	 * If `revoke` fails, `state.error` shows `REVOKE_FAILED`, and `signOut()`
+	 * still resolves. If storage can't be cleared, it rejects with
+	 * `PERSISTENCE_FAILED`. This tab is signed out anyway, but the next load
+	 * would restore the session, so call it again later.
 	 */
 	signOut: () => Promise<void>;
 	/**
-	 * Resolves who is signed in, restoring or refreshing the session if needed,
-	 * or `null` when signed out. After a failed refresh, rethrows that failure
-	 * until `retry()`, sign-in, or sign-out. Rejects with `LOCKED` while locked,
-	 * as `retry`, `refresh`, `updateUser`, `credentials.get`, and
-	 * `credentials.renew` do.
+	 * Resolves who is signed in, or `null` when signed out. It reads the saved
+	 * session first if needed, and refreshes an expired access token.
+	 *
+	 * After a refresh fails, it rejects with that failure until `retry()`,
+	 * `signIn` or `signOut()`. Rejects with `LOCKED` while locked.
 	 */
 	getSession: () => Promise<Session<U> | null>;
-	/** Like `getSession()`, but tries a failed refresh again. */
+	/**
+	 * Like `getSession()`, but tries a failed refresh again instead of
+	 * rejecting with its error. Use it for a "Try again" button.
+	 */
 	retry: () => Promise<Session<U> | null>;
 	/**
-	 * Refreshes now, even if the access token is still usable, for example to
-	 * pick up a changed user. Concurrent refreshes share one request. Rejects
-	 * with `REFRESH_FAILED` without a refresh callback or refresh token.
+	 * Refreshes the tokens now, even if the access token is still valid, for
+	 * example to pick up changes to the user. Resolves `null` when signed out.
+	 *
+	 * Rejects with `REFRESH_FAILED` when there's no `refresh` option or no
+	 * refresh token, and with `LOCKED` while locked.
 	 */
 	refresh: () => Promise<Session<U> | null>;
-	/** Whether this snapshot belongs to the current session (same `sessionId`). */
+	/**
+	 * Whether `session` is still the signed-in one, by its `sessionId`. Use it
+	 * to drop a response that arrives after the user signed out or switched
+	 * accounts.
+	 */
 	isCurrent: (session: { sessionId: string }) => boolean;
 	/**
-	 * Locks the session, with `locking`: the tokens leave memory and timers
-	 * stop, while the saved session stays. `state` turns `locked` at once. A
-	 * refresh already running still saves its tokens, and the promise settles
-	 * after that save, so keep the key `seal` needs until then. Does nothing
-	 * while signed out or locked. Rejects with `INVALID_OPTIONS` without
+	 * Locks the session (with `locking`). The tokens leave memory and timers
+	 * stop, but the saved session and `state.user` stay. `state.status` turns
+	 * `locked` at once.
+	 *
+	 * While locked, `getSession`, `retry`, `refresh`, `updateUser`,
+	 * `credentials.get` and `credentials.renew` reject with `LOCKED`. Call
+	 * `unlock()` to continue, or `signOut()`.
+	 *
+	 * A refresh already running still saves its tokens, and `lock()` resolves
+	 * after that save. Keep the key `seal` needs until then. Does nothing when
+	 * signed out or already locked. Rejects with `INVALID_OPTIONS` without
 	 * `locking`.
 	 */
 	lock: () => Promise<void>;
 	/**
-	 * Unlocks a `locked` session, with `locking`: reads the saved tokens,
-	 * opening them with `locking.open`, and resolves the session. Expired
-	 * access is refreshed at once; a refresh token the backend rejects signs
-	 * out and resolves `null`. A refresh that fails otherwise rejects with
-	 * `REFRESH_FAILED`, but the session is unlocked all the same, and
-	 * `unavailable` until `retry()`. Rejects with `UNLOCK_FAILED` when `open`
-	 * throws or returns something other than a string, and the session stays
-	 * locked; a saved session that can't be used signs out and rejects with
-	 * `INVALID_SESSION`. Overlapping calls share one unlock. When not locked,
-	 * resolves like `getSession()`. Rejects with `INVALID_OPTIONS` without
-	 * `locking`.
+	 * Unlocks a `locked` session and resolves it. It reads the saved tokens and
+	 * opens them with `locking.open`. When not locked, it acts like
+	 * `getSession()`. Overlapping calls share one unlock.
+	 *
+	 * If `open` throws or doesn't return a string, it rejects with
+	 * `UNLOCK_FAILED`, and the session stays locked. If the saved session can't
+	 * be used, it signs out and rejects with `INVALID_SESSION`.
+	 *
+	 * An expired access token is refreshed at once. If your backend rejects the
+	 * refresh token, it signs out and resolves `null`. If the refresh fails
+	 * otherwise, it rejects with `REFRESH_FAILED`. The session is then unlocked,
+	 * but `unavailable` until `retry()`.
+	 *
+	 * Rejects with `INVALID_OPTIONS` without `locking`.
 	 */
 	unlock: () => Promise<Session<U> | null>;
 	/**
-	 * Starts background work: expiry timers and cross-tab sync. Called by
-	 * `AuthProvider` and the router adapters; mounts are counted, and the last
-	 * cleanup stops the work. Every call also re-checks the session against
-	 * the current clock: it restores the session if that is still to do or
-	 * failed, refreshes access that has expired, and re-arms the timers.
+	 * Starts the background work: expiry timers, and following other tabs.
+	 * Returns a function that stops it. `AuthProvider` and the router adapters
+	 * call it for you.
+	 *
+	 * Calls are counted, and the work stops when the last one is stopped. Each
+	 * call also checks the session again. It reads the saved session if that
+	 * hasn't worked yet, and refreshes an access token that expired.
 	 */
 	mount: () => () => void;
 	/**
-	 * Access tokens ({@link Credentials}), for code that attaches them to
+	 * The access token ({@link Credentials}), for code that sends it with
 	 * requests, such as `createAuthFetch`.
 	 */
 	credentials: {
 		/** Like `getSession()`, but resolves the current access token. */
 		get: () => Promise<Credentials | null>;
 		/**
-		 * Recovers after the server rejected these credentials, e.g. with a 401.
-		 * Concurrent calls share one refresh. Without a refresh callback or
-		 * refresh token, signs out and resolves `null`.
+		 * Gets a new access token after your API rejected `credentials`, such as
+		 * with a 401. Calls that overlap share one refresh. Without a `refresh`
+		 * option or a refresh token, it signs out and resolves `null`.
 		 */
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
-		/** Signs out only if these credentials are still current. */
+		/**
+		 * Signs out because your API rejected `credentials` for good. Does
+		 * nothing if they're no longer current, such as after a refresh.
+		 */
 		reject: (credentials: Credentials) => Promise<void>;
 	};
 };
 
 /**
- * The auth client from `createAuth`. `U` is the user; `I` is what `signIn` and
- * `updateUser` accept as the user, or `never` when the user comes from the
- * access token, in which case there is no `updateUser`. Prefer
- * `typeof auth`, which gets both right.
+ * The auth client that `createAuth` returns. It holds the session, saves it,
+ * refreshes it, and tells your app when it changes.
+ *
+ * `U` is the user ({@link User}) and `I` is the user `signIn` accepts
+ * ({@link UserInput}). With `fromAccessToken`, `I` is `never` and there's no
+ * `updateUser`. Write `typeof auth` rather than spelling out both.
  *
  * @example
  * ```ts
@@ -517,21 +607,24 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 		? unknown
 		: {
 				/**
-				 * Replaces the user and keeps the session ID. Accepts the user or an
-				 * async function returning it. If calls overlap, only the latest
-				 * commits; the others reject with `SESSION_CHANGED`. Rejects with
-				 * `UNAUTHENTICATED` while signed out, and with
-				 * `USER_VALIDATION_FAILED` for an invalid user or when the input
-				 * function rejects or times out.
+				 * Replaces the signed-in user, such as after a profile edit. Pass the
+				 * user, or an async function that fetches it. The session ID stays.
+				 *
+				 * Rejects with `UNAUTHENTICATED` when signed out, and with
+				 * `USER_VALIDATION_FAILED` for a user the schema rejects, or when
+				 * the function rejects or times out. If calls overlap, the latest
+				 * wins and the others reject with `SESSION_CHANGED`.
 				 */
 				updateUser: (input: I | (() => Promise<I>)) => Promise<void>;
 			});
 
 /**
- * Encrypts the saved tokens with a key the app holds: the `locking` option of
- * {@link AuthOptions}. session-kit stores what `seal` returns beside the user
- * and session ID, which stay readable while locked, and calls `open` only from
- * `unlock()`: after that, the tokens are in memory.
+ * Encrypts the saved tokens with a key your app holds, such as one behind
+ * Face ID. Pass it as the `locking` option of {@link AuthOptions}.
+ *
+ * Auth calls `seal` whenever it saves tokens, and `open` only from
+ * `unlock()`. The user and session ID are saved unencrypted, so a locked
+ * session can still show who is signed in.
  *
  * @example
  * ```ts
@@ -550,15 +643,15 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
  * @since 0.1.0
  */
 export type AuthLocking = {
-	/** Encrypts the tokens, a JSON string, whenever they are saved. */
+	/** Encrypts the tokens, given as a JSON string. */
 	seal: (payload: string) => string | Promise<string>;
-	/** Decrypts what `seal` returned. Must throw when it can't. */
+	/** Decrypts what `seal` returned. It must throw when it can't. */
 	open: (sealed: string) => string | Promise<string>;
 };
 
 /**
- * Options for `createAuth`. `Src` is the user source, from which the client's
- * user types ({@link User}, {@link UserInput}) are inferred.
+ * Options for `createAuth`. The client's user types ({@link User},
+ * {@link UserInput}) are inferred from the `user` option.
  *
  * @example
  * ```ts
@@ -581,47 +674,63 @@ export type AuthLocking = {
  */
 export type AuthOptions<Src extends UserSource> = {
 	/**
-	 * Storage namespace: letters, digits, `_` or `-`, up to 64 characters. Uses
-	 * the storage key `<name>:auth:session` and the lock `<name>:auth:refresh`.
+	 * Names this auth, so several can share one storage. It's used in the
+	 * storage key (`<name>:auth:session`) and in the lock that keeps tabs from
+	 * refreshing at once. Letters, digits, `_` or `-`, up to 64 characters.
 	 */
 	name: string;
 	/**
-	 * Where the user comes from. A Standard Schema V1 schema validates the
-	 * `user` passed to `signIn`; its output must be a plain JSON object that
-	 * the schema accepts again unchanged, because restoring validates it again.
-	 * `fromAccessToken(…)` reads the user from the access token instead.
+	 * Where the user comes from: a schema, or `fromAccessToken(…)`.
+	 *
+	 * A Standard Schema schema, such as Zod's, checks the `user` passed to
+	 * `signIn`. Its output must be a plain JSON object that it accepts again
+	 * unchanged, as a restored session is checked again. `fromAccessToken`
+	 * reads the user from the access token instead.
 	 */
 	user: Src;
-	/** Where the session is saved, such as `webStorage()`. See {@link AuthStorage}. */
+	/**
+	 * Where the session is saved, such as `webStorage()`
+	 * ({@link AuthStorage}).
+	 */
 	storage: AuthStorage;
 	/**
-	 * Exchanges a refresh token for new tokens, at expiry or after a 401. Without
-	 * it, expired or rejected access signs the user out. See {@link RefreshFn}.
+	 * Exchanges a refresh token for new tokens ({@link RefreshFn}). Without it,
+	 * the user is signed out when the access token expires or your API rejects
+	 * it. Default: none.
 	 */
 	refresh?: RefreshFn<NoInfer<UserInput<Src>>> | undefined;
-	/** Revokes tokens on the backend after `signOut()`. See {@link RevokeFn}. */
+	/**
+	 * Asks your backend to revoke the tokens after `signOut()`
+	 * ({@link RevokeFn}). Default: none.
+	 */
 	revoke?: RevokeFn | undefined;
-	/** Saved-session lifetime in seconds, renewed on successful writes. Default: 30 days. */
+	/**
+	 * How long a saved session lasts, in seconds. Each save, such as after a
+	 * refresh, starts it again. Default: 30 days.
+	 */
 	maxAge?: number | undefined;
 	/**
-	 * Reports what auth does, for debugging: restores, refreshes, timers,
-	 * storage operations, and state changes. `true` logs to the console; a
-	 * function receives each `AuthDebugEvent` instead. Tokens, saved values,
-	 * user fields, and errors' causes are left out unless `{ sensitive: true }`.
-	 * Pass a development flag, such as Expo's `__DEV__`, to keep it out of
-	 * production. See {@link AuthDebug}. Default: off.
+	 * Logs what auth does, for debugging: restores, refreshes, timers, storage
+	 * and state changes. `true` logs to the console, and a function receives
+	 * each event instead ({@link AuthDebug}).
+	 *
+	 * Tokens, user fields, saved values and error details are left out unless
+	 * you pass `{ sensitive: true }`. Pass a development flag, such as Expo's
+	 * `__DEV__`, to keep it out of production. Default: off.
 	 */
 	debug?: AuthDebug | undefined;
 	/**
-	 * Restores a saved session as `locked`, with its user but not its tokens,
-	 * until `unlock()`. `true` stores the tokens as they are; `{ seal, open }`
-	 * encrypts them with the app's key ({@link AuthLocking}). For native apps,
-	 * which have one JavaScript context: in a browser, tabs don't follow each
-	 * other with `locking`. A sign-in, sign-out or lock in one tab doesn't
-	 * reach the others, and with rotating refresh tokens, two tabs refreshing
-	 * the same session can sign one of them out. Needs a user schema,
-	 * since a user read from the access token can't be shown without its
-	 * token. Default: off.
+	 * Restores a saved session as `locked`. Its user shows, but its tokens
+	 * wait for `unlock()`. `true` saves the tokens as they are, and
+	 * `{ seal, open }` encrypts them with your app's key ({@link AuthLocking}).
+	 *
+	 * It's meant for native apps. In a browser, tabs stop following each
+	 * other: a sign-in, sign-out or lock in one tab doesn't reach the others.
+	 * With rotating refresh tokens, two tabs that refresh the same session can
+	 * sign one of them out.
+	 *
+	 * It needs a user schema, as a user read from the access token can't show
+	 * while the token is locked. Default: off.
 	 */
 	locking?:
 		| (Src extends AccessTokenUser<any, any> ? never : true | AuthLocking)
