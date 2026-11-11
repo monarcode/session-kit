@@ -813,6 +813,7 @@ test("forRequest's synchronous members don't throw without a secret", async () =
 	const state = view.state.get();
 	assert.equal(state.status, "unavailable");
 	assert.equal(state.error?.code, "INVALID_OPTIONS");
+	assert.equal(view.state.get(), state);
 	assert.equal(view.isCurrent({ sessionId: "x" }), false);
 	view.state.subscribe(() => {}).unsubscribe();
 	await assert.rejects(view.getSession(), code("INVALID_OPTIONS"));
@@ -827,8 +828,13 @@ test("a writable view with expired access goes straight to refreshing, never una
 	await app.signIn(tab.request(), tokens());
 	t.mock.timers.tick(901_000);
 	const view = app.forRequest(tab.request());
-	const seen: string[] = [];
-	view.state.subscribe((state) => seen.push(state.status));
+	const seen: Array<[string, number]> = [];
+	view.state.subscribe((state) => seen.push([state.status, state.version]));
 	assert.equal((await view.credentials.get())?.accessToken, "access-2");
-	assert.deepEqual(seen, ["refreshing", "authenticated"]);
+	// A refresh keeps the version, as a client's does.
+	const [[, version]] = seen as [[string, number]];
+	assert.deepEqual(seen, [
+		["refreshing", version],
+		["authenticated", version],
+	]);
 });

@@ -10,6 +10,7 @@ framework guides show the code:
 - [The cookie](#the-cookie)
 - [The secret](#the-secret)
 - [Cookie jars](#cookie-jars)
+- [Code that takes a client](#code-that-takes-a-client)
 - [Refreshing](#refreshing)
 - [Signing out](#signing-out)
 - [The access token in the browser](#the-access-token-in-the-browser)
@@ -48,6 +49,15 @@ Component renders or a page streams. There, nothing is refreshed or saved:
 see `CookieJar.writable` for which calls reject and with what. Refresh before
 rendering, in middleware or a proxy, with `serverAuth.refreshIfDue`. For
 another server, build a `CookieJar` over its cookies.
+
+## Code that takes a client
+
+`serverAuth.forRequest(jar)` is one request's session shaped like a client
+(`RequestAuth`). Code written for a client works on the server with it:
+`createAuthFetch(serverAuth.forRequest(jar), baseUrl)` sends the cookie's
+token and saves a renewed one after a 401, and Effect's `Auth.layer` takes
+it ([Effect on the server](./effect.md#on-the-server)). Make it per request,
+like the jar.
 
 ## Refreshing
 

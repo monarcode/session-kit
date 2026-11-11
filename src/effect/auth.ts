@@ -154,13 +154,14 @@ export type RegisteredAuth = Register extends {
 export type AuthLayerClient = Register extends {
 	readonly auth: AuthServiceClient;
 }
-	? RegisteredAuth | RequestAuth<RegisteredUser>
+	?
+			| RegisteredAuth
+			| RequestAuth<
+					RegisteredSession extends { readonly user: infer U }
+						? U
+						: unknown
+			  >
 	: AuthServiceClient;
-
-/** The registered client's user, for a request's session. */
-type RegisteredUser = RegisteredSession extends { readonly user: infer U }
-	? U
-	: unknown;
 
 /**
  * The session {@link Auth.session} resolves: the registered client's

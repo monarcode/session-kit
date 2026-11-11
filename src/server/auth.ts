@@ -469,9 +469,10 @@ export function createServerAuth<Src extends UserSource>(
 	function readerOf(jar: CookieJar): AuthClient<U, I> {
 		if (jar.writable) return clientOf(jar);
 		const sibling = writableSibling(jar);
-		const shared = sibling && clients.get(sibling);
-		return shared && shared.state.get().status !== "initializing"
-			? shared
+		const siblingClient = sibling && clients.get(sibling);
+		return siblingClient &&
+			siblingClient.state.get().status !== "initializing"
+			? siblingClient
 			: clientOf(jar);
 	}
 
@@ -540,32 +541,52 @@ export function createServerAuth<Src extends UserSource>(
 	function forRequest(jar: CookieJar): RequestAuth<U> {
 		let view = views.get(jar);
 		if (view) return view;
-		const unusable = (cause: unknown): AuthState<U> =>
-			Object.freeze({
-				status: "unavailable",
-				user: null,
-				sessionId: null,
-				error: toAuthError("INVALID_OPTIONS", "Session unavailable", cause),
-				version: 0,
-			});
-		// The view's own state, numbered by the view: a read-only jar can move to
-		// its writable sibling's client, whose `version` counts separately.
+		let unusable: AuthState<U> | undefined;
+		// The view's own state. A read-only jar can move to its writable
+		// sibling's client, whose `version` counts separately, so the view
+		// numbers its own: it grows when the client's does, or when the view
+		// moves to another client with a different state.
+		let seenClient: AuthClient<U, I> | undefined;
 		let seen: AuthState<U> | undefined;
 		let shown: AuthState<U> | undefined;
 		let version = 0;
 		const stateOf = (): AuthState<U> => {
-			const next = sync(jar, (client) => client.state.get(), unusable);
-			if (
-				!shown ||
-				(next !== seen &&
-					!(
-						next.status === seen?.status &&
-						next.sessionId === seen.sessionId &&
-						next.error === seen.error &&
-						(next.user === seen.user || sameUser(next.user, seen.user))
-					))
-			)
-				shown = Object.freeze({ ...next, version: ++version });
+			let client: AuthClient<U, I> | undefined;
+			const next = sync(
+				jar,
+				(reader) => (client = reader).state.get(),
+				(cause) =>
+					(unusable ??= Object.freeze({
+						status: "unavailable",
+						user: null,
+						sessionId: null,
+						error: toAuthError(
+							"INVALID_OPTIONS",
+							"Session unavailable",
+							cause,
+						),
+						version: 0,
+					})),
+			);
+			if (!shown || !seen) {
+				shown = Object.freeze({ ...next, version });
+			} else if (next !== seen) {
+				const moved = client !== seenClient;
+				const same =
+					next.status === seen.status &&
+					next.sessionId === seen.sessionId &&
+					next.error === seen.error &&
+					(next.user === seen.user || sameUser(next.user, seen.user));
+				if (!(moved && same))
+					shown = Object.freeze({
+						...next,
+						version:
+							moved || next.version !== seen.version
+								? ++version
+								: version,
+					});
+			}
+			seenClient = client;
 			seen = next;
 			return shown;
 		};

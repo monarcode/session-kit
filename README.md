@@ -902,9 +902,11 @@ state, and the refresh token never reaches the browser.
   session the server rendered. `AuthProvider`, the hooks, and the router
   guards work with it, and sign-ins and sign-outs reach every tab.
 - **Your server code** signs in and out with your backend and calls your API
-  with the access token. To call it from the browser too, with
-  `createAuthFetch` or `sessionBearer`, opt in with `clientCredentials`: page
-  scripts then get the access token in memory, never the refresh token.
+  with the access token. `serverAuth.forRequest(jar)` gives code written for
+  a client, such as `createAuthFetch` or Effect's `Auth`, one request's
+  session. To call your API from the browser too, opt in with
+  `clientCredentials`: page scripts then get the access token in memory,
+  never the refresh token.
 
 The engine is the same call in every framework. This one is from the TanStack
 Start guide:
@@ -1246,8 +1248,9 @@ session from the `Auth` service, as `Auth.session`, and fail with a tagged
 A complete app is in
 [`examples/tanstack-start-spa-effetch`](./examples/tanstack-start-spa-effetch).
 The [Effect guide](./docs/effect.md) covers the `Auth` service: reading the
-session, handling its failures, signing in and out, updating the user, and
-watching the session as a `Stream`.
+session, handling its failures, signing in and out, updating the user,
+watching the session as a `Stream`, and using it on the server, one request
+at a time.
 
 ## Using the client
 

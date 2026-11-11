@@ -18,6 +18,11 @@
   handlers, refreshing and saving the cookie. Provide it per request, with
   the services that use it. `Auth.signIn` and `Auth.updateUser` die there:
   call `serverAuth.signIn(jar, …)` and `serverAuth.updateUser(jar, …)`.
+- The Effect guide's "On the server" section replaces "With server
+  rendering": a runtime for what belongs to no user, the API client and the
+  session built per request, signing in through `serverAuth`, and what to
+  know about typing, memo maps and read-only jars. The server sessions guide
+  and the README point to `forRequest`.
 
 ### Fixed
 

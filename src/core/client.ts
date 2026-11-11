@@ -94,7 +94,7 @@ const restorers = new WeakMap<
 /** Restores `client`'s saved session, as `getSession` does, without refreshing it. */
 export function restoreSaved<U, I>(
 	client: AuthClient<U, I>,
-	options: { publish?: boolean } = {},
+	options: { publish?: boolean | undefined } = {},
 ): Promise<SavedSession<U> | null> {
 	return restorers.get(client)!(
 		options.publish === true,
