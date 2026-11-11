@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Added
+
+- `serverAuth.forRequest(jar)` in `@monarcode/session-kit/server`: one
+  request's session shaped like a client's read side (`RequestAuth`), with
+  `getSession`, `signOut`, `credentials`, `isCurrent` and `state`. With it,
+  `createAuthFetch` runs on the server: it sends the cookie's token and saves
+  a renewed one after a 401. A read-only jar can't renew, so there a 401
+  rejects with `REFRESH_FAILED`, and `credentials.reject` resolves without
+  signing out.
+
+### Fixed
+
+- A server session read with a read-only jar whose access token had expired
+  left the client's `state` at `initializing`. It is now `unavailable`, with
+  the session ID.
+
 ### Changed
 
 - The README's Effect example and `examples/tanstack-start-spa-effetch`

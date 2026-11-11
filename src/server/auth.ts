@@ -1,12 +1,13 @@
 import { createAuth, restoreSaved } from "../core/client.js";
 import type { AuthDebug } from "../core/debug.js";
-import { AuthError, sessionChanged } from "../core/errors.js";
+import { AuthError, sessionChanged, toAuthError } from "../core/errors.js";
 import type { ClientCredentials } from "../core/mirror.js";
 import { checkOptions } from "../core/persistence.js";
 import { resolveUserSource, type UserSource } from "../core/sources.js";
 import type { AuthStorage } from "../core/storage.js";
 import type {
 	AuthClient,
+	AuthState,
 	Credentials,
 	RefreshFn,
 	RevokeFn,
@@ -15,10 +16,12 @@ import type {
 	User,
 	UserInput,
 } from "../core/types.js";
+import { sameUser } from "../core/user.js";
 import { readRejected, toClientCredentials } from "../core/wire.js";
 import {
 	createShared,
 	jarStorage,
+	onPaired,
 	writableSibling,
 	type CookieJar,
 	type CookieOptions,
@@ -143,6 +146,64 @@ export type RefreshIfDueOptions = {
 	within?: number | undefined;
 };
 
+/**
+ * One request's session, from {@link ServerAuth}'s `forRequest`: the
+ * `serverAuth` methods with that request's {@link CookieJar} filled in, shaped
+ * like a client's read side, so code that takes a client's `getSession`,
+ * `credentials`, `isCurrent` and `state`, such as `createAuthFetch` from
+ * `./http`, runs on the server. It has no `signIn` or `updateUser`: call those
+ * on `serverAuth`. Make one per request, never at module level.
+ *
+ * Refreshing, saving the cookie and the read-only rules are the `serverAuth`
+ * methods'. With a read-only jar, a token the backend rejects can't be
+ * renewed: `credentials.renew` rejects with `REFRESH_FAILED`, so
+ * `createAuthFetch` rejects instead of returning the 401; refresh in
+ * middleware or a proxy first, with `refreshIfDue`. `credentials.reject`
+ * resolves there without signing out, since that jar can't clear the cookie.
+ *
+ * `state` and `isCurrent` follow the session this request has read: `state`
+ * is `initializing` until a call reads the cookie, and `unavailable` when a
+ * read-only jar holds expired access. A read-only jar paired with a writable
+ * one, as Next's are, follows the writable jar's session once that has read
+ * or written one.
+ *
+ * @example
+ * ```ts
+ * import { createAuthFetch } from "@monarcode/session-kit/http";
+ * import type { CookieJar, ServerAuth } from "@monarcode/session-kit/server";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * // Sends the cookie's token, and renews it after a 401.
+ * export async function orders(jar: CookieJar) {
+ * 	const authFetch = createAuthFetch(
+ * 		serverAuth.forRequest(jar),
+ * 		"https://api.example.com",
+ * 	);
+ * 	return (await authFetch("/orders")).json();
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RequestAuth<U> = Readonly<{
+	/** Like `serverAuth.getSession(jar)`. */
+	getSession: () => Promise<Session<U> | null>;
+	/** Like `serverAuth.signOut(jar)`. */
+	signOut: () => Promise<void>;
+	/** Like `serverAuth.credentials`, for this request's jar. */
+	credentials: Readonly<{
+		get: () => Promise<Credentials | null>;
+		renew: (credentials: Credentials) => Promise<Credentials | null>;
+		/** Signs out if `credentials` are still current; see above for read-only jars. */
+		reject: (credentials: Credentials) => Promise<void>;
+	}>;
+	/** Whether `session` is the one this request has read. */
+	isCurrent: (session: { sessionId: string }) => boolean;
+	/** The `AuthState` of this request's session. */
+	state: Readonly<AuthClient<U, never>["state"]>;
+}>;
+
 type ServerAuthBase<U, I> = {
 	/**
 	 * Who is signed in, from the cookie, or `null`. With a writable jar,
@@ -220,6 +281,8 @@ type ServerAuthBase<U, I> = {
 			credentials: unknown,
 		) => Promise<ClientCredentials | null>;
 	};
+	/** This request's session, a {@link RequestAuth}; the same object for the same jar. */
+	forRequest: (jar: CookieJar) => RequestAuth<U>;
 };
 
 /**
@@ -227,7 +290,9 @@ type ServerAuthBase<U, I> = {
  * what `signIn` and `updateUser` accept as the user, or `never` when the user
  * comes from the access token. Prefer `typeof serverAuth`.
  *
- * Each method takes the request's {@link CookieJar}. Nothing is kept between
+ * Each method takes the request's {@link CookieJar}; `forRequest(jar)` gives
+ * one request's session shaped like a client ({@link RequestAuth}). Nothing is
+ * kept between
  * requests except a short record of new tokens, so parallel requests to one
  * instance that carry the same cookie use one refresh. Each call to
  * `createServerAuth` is an instance, and a framework may make several on one
@@ -393,12 +458,17 @@ export function createServerAuth<Src extends UserSource>(
 	}
 
 	/**
-	 * The client that reads read-only `jar`: its writable sibling's, once that
-	 * has one, so a sign-in through the sibling shows here.
+	 * The client that reads `jar`. For a read-only jar, its writable sibling's
+	 * once that has restored or saved a session, so a sign-in through the
+	 * sibling shows here, and a sibling that hasn't read yet changes nothing.
 	 */
 	function readerOf(jar: CookieJar): AuthClient<U, I> {
+		if (jar.writable) return clientOf(jar);
 		const sibling = writableSibling(jar);
-		return (sibling && clients.get(sibling)) ?? clientOf(jar);
+		const shared = sibling && clients.get(sibling);
+		return shared && shared.state.get().status !== "initializing"
+			? shared
+			: clientOf(jar);
 	}
 
 	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
@@ -444,6 +514,107 @@ export function createServerAuth<Src extends UserSource>(
 		const session = await client.getSession();
 		if (!session) throw sessionChanged();
 		return session;
+	}
+
+	const views = new WeakMap<CookieJar, RequestAuth<U>>();
+
+	/** `read` on `jar`'s client, or `fallback` when it can't be made: no secret. */
+	function sync<T>(
+		jar: CookieJar,
+		read: (client: AuthClient<U, I>) => T,
+		fallback: (error: unknown) => T,
+	): T {
+		let client: AuthClient<U, I>;
+		try {
+			client = readerOf(jar);
+		} catch (error) {
+			return fallback(error);
+		}
+		return read(client);
+	}
+
+	function forRequest(jar: CookieJar): RequestAuth<U> {
+		let view = views.get(jar);
+		if (view) return view;
+		const unusable = (cause: unknown): AuthState<U> =>
+			Object.freeze({
+				status: "unavailable",
+				user: null,
+				sessionId: null,
+				error: toAuthError("INVALID_OPTIONS", "Session unavailable", cause),
+				version: 0,
+			});
+		view = Object.freeze({
+			getSession: () => serverAuth.getSession(jar),
+			signOut: () => serverAuth.signOut(jar),
+			credentials: Object.freeze({
+				get: () => getCredentials(jar),
+				renew: (credentials: Credentials) => renew(jar, credentials),
+				reject: async (credentials: Credentials) => {
+					if (jar.writable)
+						await serverAuth.credentials.reject(jar, credentials);
+				},
+			}),
+			isCurrent: (session: { sessionId: string }) =>
+				sync(
+					jar,
+					(client) => client.isCurrent(session),
+					() => false,
+				),
+			state: Object.freeze({
+				get: () => sync(jar, (client) => client.state.get(), unusable),
+				subscribe(listener: (state: AuthState<U>) => void) {
+					// Listens to every client the view can read, including a writable
+					// sibling paired later, and reports what `get` returns whenever one
+					// of them changes.
+					let last: AuthState<U> | undefined = view!.state.get();
+					const report = () => {
+						const next = view!.state.get();
+						// Moving to the sibling's client can repeat the same state.
+						if (
+							!last ||
+							(next.status === last.status &&
+								next.sessionId === last.sessionId &&
+								sameUser(next.user, last.user) &&
+								next.error === last.error)
+						)
+							return;
+						last = next;
+						listener(next);
+					};
+					const stops: Array<() => void> = [];
+					const watch = (target: CookieJar) => {
+						const { unsubscribe } =
+							clientOf(target).state.subscribe(report);
+						stops.push(unsubscribe);
+					};
+					try {
+						watch(jar);
+						if (!jar.writable) {
+							const sibling = writableSibling(jar);
+							if (sibling) watch(sibling);
+							else
+								stops.push(
+									onPaired(jar, (writable) => {
+										watch(writable);
+										report();
+									}),
+								);
+						}
+					} catch {
+						// No secret: nothing will change.
+					}
+					return {
+						unsubscribe() {
+							last = undefined;
+							for (const stop of stops.splice(0)) stop();
+						},
+					};
+				},
+			}),
+		});
+		views.set(jar, view);
+		return view;
 	}
 
 	const serverAuth: ServerAuthBase<U, I> = {
@@ -520,6 +691,7 @@ export function createServerAuth<Src extends UserSource>(
 				);
 			},
 		},
+		forRequest,
 	};
 	if (!users.saved) return serverAuth as ServerAuth<U, I>;
 	return {

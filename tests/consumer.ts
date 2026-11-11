@@ -50,7 +50,11 @@ import {
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
 import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
-import { createServerAuth, type CookieJar } from "../dist/server/index.js";
+import {
+	createServerAuth,
+	type CookieJar,
+	type RequestAuth,
+} from "../dist/server/index.js";
 import {
 	connectAuth,
 	requireSession,
@@ -475,6 +479,25 @@ const tokenServer = createServerAuth({
 });
 // @ts-expect-error A user read from the token has no updateUser.
 void tokenServer.updateUser;
+
+// One request's session, shaped like a client's read side.
+const requestAuth: RequestAuth<z.output<typeof userSchema>> =
+	serverAuth.forRequest(jar);
+async function requestSide() {
+	const session = await requestAuth.getSession();
+	const viewEmail: string | undefined = session?.user.email;
+	const status: AuthState<unknown>["status"] = requestAuth.state.get().status;
+	return [viewEmail, status, await requestAuth.credentials.get()];
+}
+void requestSide;
+createAuthFetch(requestAuth, "https://api.example.com");
+createAuthFetch(tokenServer.forRequest(jar), "https://api.example.com");
+// @ts-expect-error Signing in stays on serverAuth.
+void requestAuth.signIn;
+// @ts-expect-error So does updateUser.
+void requestAuth.updateUser;
+// @ts-expect-error The view is read-only.
+requestAuth.getSession = async () => null;
 
 declare const initial: Session<z.output<typeof userSchema>> | null;
 const mirror = createMirrorAuth({

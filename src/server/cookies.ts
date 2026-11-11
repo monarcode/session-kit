@@ -114,9 +114,24 @@ const refreshing = new WeakMap<CookieJar, Set<Promise<unknown>>>();
 // shows here.
 const writableSiblings = new WeakMap<CookieJar, CookieJar>();
 
+const pairings = new WeakMap<CookieJar, Set<(writable: CookieJar) => void>>();
+
 /** Records that `readOnly` reads the cookies `writable` writes. */
 export function pairJars(readOnly: CookieJar, writable: CookieJar): void {
+	if (writableSiblings.get(readOnly) === writable) return;
 	writableSiblings.set(readOnly, writable);
+	for (const listener of pairings.get(readOnly) ?? []) listener(writable);
+}
+
+/** Calls `listener` when `readOnly` is paired with a writable jar; returns a stop. */
+export function onPaired(
+	readOnly: CookieJar,
+	listener: (writable: CookieJar) => void,
+): () => void {
+	let listeners = pairings.get(readOnly);
+	if (!listeners) pairings.set(readOnly, (listeners = new Set()));
+	listeners.add(listener);
+	return () => listeners.delete(listener);
 }
 
 /** The writable jar over the same cookies as `jar`, if an adapter paired them. */

@@ -1396,6 +1396,9 @@ export function createAuth<Src extends UserSource>(
 	registerDebugger(result, debug);
 	restorers.set(result, async () => {
 		await initialize();
+		// An expired session publishes when its refresh starts, and this read
+		// doesn't refresh: show it as it stands.
+		if (store.get().status === "initializing") publish();
 		return (
 			session && { ...tokensOf(session), id: session.id, user: session.user }
 		);

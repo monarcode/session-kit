@@ -663,3 +663,157 @@ test("refreshIfDue refreshes once per request, even for short-lived tokens", asy
 	await app.refreshIfDue(tab.request());
 	assert.equal(calls, 1);
 });
+
+test("forRequest gives one request's session, shaped like a client", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const app = server({
+		refresh: async () => ({
+			accessToken: "access-2",
+			refreshToken: "refresh-2",
+			expiresIn: 900,
+		}),
+	});
+	const tab = browser();
+	const signedIn = await app.signIn(tab.request(), tokens());
+
+	const jar = tab.request();
+	const view = app.forRequest(jar);
+	assert.equal(app.forRequest(jar), view);
+	assert.notEqual(app.forRequest(tab.request()), view);
+	assert.ok(
+		Object.isFrozen(view) &&
+			Object.isFrozen(view.credentials) &&
+			Object.isFrozen(view.state),
+	);
+	assert.equal(view.state.get().status, "initializing");
+	assert.equal(view.isCurrent(signedIn), false);
+
+	assert.deepEqual(await view.getSession(), signedIn);
+	assert.equal(view.state.get().sessionId, signedIn.sessionId);
+	assert.equal(view.isCurrent(signedIn), true);
+
+	// Expired access is refreshed and saved, as serverAuth's methods do.
+	t.mock.timers.tick(901_000);
+	const seen: string[] = [];
+	const { unsubscribe } = view.state.subscribe((state) =>
+		seen.push(state.status),
+	);
+	const fresh = await view.credentials.get();
+	unsubscribe();
+	assert.equal(fresh?.accessToken, "access-2");
+	assert.ok(seen.includes("refreshing"));
+	assert.equal(
+		(await app.credentials.get(tab.request()))?.accessToken,
+		"access-2",
+	);
+
+	await view.signOut();
+	assert.equal(view.state.get().sessionId, null);
+	assert.equal(view.isCurrent(signedIn), false);
+	assert.equal(tab.cookies.has("test.session"), false);
+	assert.equal(await app.getSession(tab.request()), null);
+});
+
+test("forRequest renews and rejects as serverAuth's credentials do", async () => {
+	let refreshes = 0;
+	const app = server({
+		refresh: async () => {
+			refreshes++;
+			return { accessToken: `access-${refreshes + 1}`, expiresIn: 900 };
+		},
+	});
+	const tab = browser();
+	await app.signIn(tab.request(), tokens());
+	const view = app.forRequest(tab.request());
+
+	const first = await view.credentials.get();
+	assert.ok(first);
+	const renewed = await view.credentials.renew(first);
+	assert.equal(renewed?.accessToken, "access-2");
+	// A stale token leaves the session; the current one ends it.
+	await view.credentials.reject(first);
+	assert.ok(await view.getSession());
+	await view.credentials.reject(renewed!);
+	assert.equal(await view.getSession(), null);
+	assert.equal(refreshes, 1);
+});
+
+test("forRequest over a read-only jar reads, never writes, and its reject keeps the session", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let refreshes = 0;
+	const app = server({
+		refresh: async () => {
+			refreshes++;
+			return { accessToken: "access-2" };
+		},
+	});
+	const tab = browser();
+	const signedIn = await app.signIn(tab.request(), tokens());
+	const render = app.forRequest(tab.request(false));
+
+	assert.deepEqual(await render.getSession(), signedIn);
+	assert.equal(render.isCurrent(signedIn), true);
+	const credentials = await render.credentials.get();
+	assert.equal(credentials?.accessToken, "access-1");
+	await render.credentials.reject(credentials!);
+	assert.deepEqual(await render.getSession(), signedIn);
+	assert.ok(tab.cookies.has("test.session"));
+
+	t.mock.timers.tick(901_000);
+	const expired = app.forRequest(tab.request(false));
+	assert.deepEqual(await expired.getSession(), signedIn);
+	// Its access has expired and this jar can't refresh it.
+	assert.equal(expired.state.get().status, "unavailable");
+	assert.equal(expired.state.get().sessionId, signedIn.sessionId);
+	assert.equal(expired.isCurrent(signedIn), true);
+	await assert.rejects(expired.credentials.get(), code("REFRESH_FAILED"));
+	await assert.rejects(
+		expired.credentials.renew(credentials!),
+		code("REFRESH_FAILED"),
+	);
+	await assert.rejects(expired.signOut(), code("INVALID_OPTIONS"));
+	// serverAuth's own reject still refuses a read-only jar.
+	await assert.rejects(
+		app.credentials.reject(tab.request(false), credentials!),
+		code("INVALID_OPTIONS"),
+	);
+	assert.deepEqual(await expired.getSession(), signedIn);
+	assert.equal(refreshes, 0);
+});
+
+test("views of parallel requests with the same expired cookie share one refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const answer = deferred();
+	let refreshes = 0;
+	const app = server({
+		refresh: async () => {
+			refreshes++;
+			return answer.promise;
+		},
+	});
+	const tab = browser();
+	await app.signIn(tab.request(), tokens());
+	t.mock.timers.tick(901_000);
+
+	const a = app.forRequest(tab.request()).credentials.get();
+	const b = app.forRequest(tab.request()).credentials.get();
+	answer.resolve({
+		accessToken: "access-2",
+		refreshToken: "refresh-2",
+		expiresIn: 900,
+	});
+	assert.equal((await a)?.accessToken, "access-2");
+	assert.equal((await b)?.accessToken, "access-2");
+	assert.equal(refreshes, 1);
+});
+
+test("forRequest's synchronous members don't throw without a secret", async () => {
+	const app = server({ secret: "" });
+	const view = app.forRequest(browser().request());
+	const state = view.state.get();
+	assert.equal(state.status, "unavailable");
+	assert.equal(state.error?.code, "INVALID_OPTIONS");
+	assert.equal(view.isCurrent({ sessionId: "x" }), false);
+	view.state.subscribe(() => {}).unsubscribe();
+	await assert.rejects(view.getSession(), code("INVALID_OPTIONS"));
+});
