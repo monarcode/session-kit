@@ -9,8 +9,8 @@
   `getSession`, `signOut`, `credentials`, `isCurrent` and `state`. With it,
   `createAuthFetch` runs on the server: it sends the cookie's token and saves
   a renewed one after a 401. A read-only jar can't renew, so there a 401
-  rejects with `REFRESH_FAILED`, and `credentials.reject` resolves without
-  signing out.
+  rejects with `REFRESH_FAILED`, unless the writable jar of the same request
+  already renewed it, and `credentials.reject` resolves without signing out.
 - `Auth.layer` in `@monarcode/session-kit/effect` also takes a request's
   session, `serverAuth.forRequest(jar)`, whose user is the registered one.
   `Auth.session`, `Auth.credentials`, `Auth.renew`, `Auth.signOut` and

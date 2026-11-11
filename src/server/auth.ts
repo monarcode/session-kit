@@ -164,8 +164,11 @@ declare const requestAuth: unique symbol;
  * resolves there without signing out, since that jar can't clear the cookie.
  *
  * `state` and `isCurrent` follow the session this request has read: `state`
- * is `initializing` until a call reads the cookie, and `unavailable` when a
- * read-only jar holds expired access. A read-only jar paired with a writable
+ * is `initializing` until a call reads the cookie, or, with a writable jar
+ * holding expired access, until a call refreshes it, and `unavailable` when a
+ * read-only jar holds expired access or the secret is missing. Listeners
+ * must not throw: as a client's, their errors are rethrown asynchronously,
+ * which on a server is an uncaught exception. A read-only jar paired with a writable
  * one, as Next's are, follows the writable jar's session once that has read
  * or written one.
  *
@@ -352,7 +355,8 @@ const DEFAULT_WITHIN = 60;
  * can't use, such as a bad `name`. A missing or short `secret` is checked
  * when a method first runs instead, so build tools that load the module
  * without it, such as `next build`, work: every method then rejects with
- * `INVALID_OPTIONS`. See {@link ServerAuthOptions}.
+ * `INVALID_OPTIONS`, and `forRequest`'s view reports `unavailable` with that
+ * error. See {@link ServerAuthOptions}.
  *
  * @example
  * ```ts
@@ -461,19 +465,27 @@ export function createServerAuth<Src extends UserSource>(
 		return client;
 	}
 
+	// Read-only jars that read through their writable sibling's client.
+	const followers = new WeakSet<CookieJar>();
+
 	/**
 	 * The client that reads `jar`. For a read-only jar, its writable sibling's
-	 * once that has restored or saved a session, so a sign-in through the
-	 * sibling shows here, and a sibling that hasn't read yet changes nothing.
+	 * once that has restored or saved a session, and from then on, so a
+	 * sign-in through the sibling shows here, and a sibling that hasn't read
+	 * yet changes nothing.
 	 */
 	function readerOf(jar: CookieJar): AuthClient<U, I> {
 		if (jar.writable) return clientOf(jar);
 		const sibling = writableSibling(jar);
 		const siblingClient = sibling && clients.get(sibling);
-		return siblingClient &&
-			siblingClient.state.get().status !== "initializing"
-			? siblingClient
-			: clientOf(jar);
+		if (!siblingClient) return clientOf(jar);
+		if (
+			!followers.has(jar) &&
+			siblingClient.state.get().status === "initializing"
+		)
+			return clientOf(jar);
+		followers.add(jar);
+		return siblingClient;
 	}
 
 	async function getCredentials(jar: CookieJar): Promise<Credentials | null> {
@@ -496,11 +508,24 @@ export function createServerAuth<Src extends UserSource>(
 		jar: CookieJar,
 		credentials: Credentials,
 	): Promise<Credentials | null> {
-		if (!jar.writable)
+		if (!jar.writable) {
+			// The writable jar of the same request may already hold a newer token.
+			const stored = await restoreSaved(readerOf(jar), { publish: true });
+			if (
+				stored?.id === credentials.sessionId &&
+				stored.accessToken !== credentials.accessToken &&
+				(stored.expiresAt === undefined || stored.expiresAt > Date.now())
+			)
+				return Object.freeze({
+					sessionId: stored.id,
+					accessToken: stored.accessToken,
+					expiresAt: stored.expiresAt,
+				});
 			throw new AuthError(
 				"REFRESH_FAILED",
 				"This cookie jar can't save a refreshed token; renew in a server function, action or route handler",
 			);
+		}
 		const client = clientOf(jar);
 		// Restores the cookie's session first: renewing compares against it.
 		await restoreSaved(client);
@@ -572,12 +597,12 @@ export function createServerAuth<Src extends UserSource>(
 				shown = Object.freeze({ ...next, version });
 			} else if (next !== seen) {
 				const moved = client !== seenClient;
-				const same =
-					next.status === seen.status &&
-					next.sessionId === seen.sessionId &&
-					next.error === seen.error &&
-					(next.user === seen.user || sameUser(next.user, seen.user));
-				if (!(moved && same))
+				const same = () =>
+					next.status === seen!.status &&
+					next.sessionId === seen!.sessionId &&
+					next.error === seen!.error &&
+					(next.user === seen!.user || sameUser(next.user, seen!.user));
+				if (!(moved && same()))
 					shown = Object.freeze({
 						...next,
 						version:

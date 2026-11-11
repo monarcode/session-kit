@@ -477,8 +477,15 @@ client.
 - **One registration.** An app with server rendering registers its mirror
   client, and that registration types `Auth` on the server too: `Auth.layer`
   takes a request's session whose user is the registered one. In the
-  browser, the mirror is `Auth`; `sessionBearer` needs its `credentials`
-  option there.
+  browser, `Auth.layer(mirror)` is built where the mirror is created;
+  `Auth.signIn` needs the mirror's `signIn` option there, `sessionBearer`
+  its `credentials` option, and `Auth.updateUser` isn't available, since the
+  user comes from the server.
+- **Keep server modules free of the browser client.** Here, `src/auth.ts`
+  and `src/api.ts` stand in for your app's shared schema and API client
+  modules. In a server-rendered app, the module that defines
+  `ApiClientLive` and the user schema mustn't also create a browser client
+  or its layer, or the server loads it too.
 - **Name the services in `runRequest`'s signature,** as above, rather than
   inferring them from `requestLayer`. With a mirror registered, the
   registration depends on the server functions the mirror calls, which call

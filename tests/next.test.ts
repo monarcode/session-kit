@@ -224,3 +224,29 @@ test("a read-only view's version only grows when it moves to the writable jar's 
 	assert.equal(signedIn.status, "authenticated");
 	assert.ok(signedIn.version > signedOut.version);
 });
+
+test("a read-only view's renew returns a token the writable jar already renewed", async () => {
+	const response = NextResponse.next();
+	await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), response), { writable: true }),
+		tokens(),
+	);
+	const store = actionStore(nextRequest(response), NextResponse.next());
+	const render = serverAuth.forRequest(nextJar(store));
+	const first = await render.credentials.get();
+	assert.equal(first?.accessToken, "access-1");
+	const renewed = await serverAuth.credentials.renew(
+		nextJar(store, { writable: true }),
+		first!,
+	);
+	assert.equal(renewed?.accessToken, "access-2");
+	assert.equal(
+		(await render.credentials.renew(first!))?.accessToken,
+		"access-2",
+	);
+	// With nothing newer to give, it still can't renew.
+	await assert.rejects(
+		render.credentials.renew(renewed!),
+		code("REFRESH_FAILED"),
+	);
+});
