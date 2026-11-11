@@ -1031,11 +1031,6 @@ export const SessionTokens = Schema.Struct({
   refreshToken: Schema.String,
 });
 
-const refreshEndpoint = Fetch.endpoint("POST /auth/refresh", {
-  input: Schema.Struct({ refreshToken: Schema.String }),
-  output: SessionTokens,
-});
-
 // Not the app's API client: its session plugin waits for this refresh.
 const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 
@@ -1043,7 +1038,10 @@ const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 const refreshSession = (refreshToken: string) =>
   Effect.gen(function* () {
     const client = yield* makeRefreshClient;
-    return yield* client.bind(refreshEndpoint)({ body: { refreshToken } });
+    return yield* client.post("/auth/refresh", {
+      body: { refreshToken },
+      output: SessionTokens,
+    });
   }).pipe(
     Effect.catchTag("HttpError", (error) =>
       error.status === 401 || error.status === 403

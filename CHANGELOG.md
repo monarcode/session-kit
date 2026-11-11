@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- The README's Effect example and `examples/tanstack-start-spa-effetch`
+  refresh the session with a client method (`client.post`) instead of binding
+  an endpoint on every call, as effetch's README recommends.
+
 ## 0.1.0-alpha.7
 
 ### Added

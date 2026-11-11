@@ -36,14 +36,6 @@ export const SessionUser = Schema.Struct({
 	image: Schema.String,
 });
 
-const refreshEndpoint = Fetch.endpoint("POST /auth/refresh", {
-	input: Schema.Struct({
-		refreshToken: Schema.String,
-		expiresInMins: Schema.Finite,
-	}),
-	output: SessionTokens,
-});
-
 // Not the app's API client: its session plugin waits for this refresh.
 const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 
@@ -56,8 +48,9 @@ const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 const refreshSession = (refreshToken: string) =>
 	Effect.gen(function* () {
 		const client = yield* makeRefreshClient;
-		return yield* client.bind(refreshEndpoint)({
+		return yield* client.post("/auth/refresh", {
 			body: { refreshToken, expiresInMins },
+			output: SessionTokens,
 		});
 	}).pipe(
 		Effect.catchTag("HttpError", (error) =>
