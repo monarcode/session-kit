@@ -4,8 +4,9 @@ import type { AuthStorage } from "../core/storage.js";
 import type { Sealer } from "./seal.js";
 
 /**
- * Attributes of the session cookie, as {@link CookieJar} receives them. Every
- * framework's cookie API accepts this shape, or maps from it in a line.
+ * The session cookie's attributes, as {@link CookieJar}'s `set` and `delete`
+ * receive them. Every framework's cookie API takes this shape, or maps from
+ * it in a line.
  *
  * @example
  * ```ts
@@ -34,20 +35,21 @@ export type CookieOptions = Readonly<{
 	sameSite: "lax" | "strict" | "none";
 	/** The paths that receive the cookie. */
 	path: string;
-	/** The domain that receives the cookie; absent for this host only. */
+	/** The domain that receives the cookie, or none for this host only. */
 	domain?: string | undefined;
 	/** Lifetime in seconds. Absent when deleting. */
 	maxAge?: number | undefined;
 }>;
 
 /**
- * Reads and writes the request's cookies, for `createServerAuth`'s methods.
- * Each framework adapter builds one; for anything else, wrap the request's
- * cookies and the response's `Set-Cookie` yourself. Pass the same jar to every
- * call while handling one request, so they share one refresh and see each
- * other's writes. Make a new one for each request, and never keep one at
- * module level: calls with the same jar share what it read, so a reused jar
- * would show one request's session to the next.
+ * Reads and writes one request's cookies, for `createServerAuth`'s methods.
+ * The framework adapters, such as `nextJar` and `startJar`, build one.
+ * Elsewhere, wrap the request's cookies and the response's `Set-Cookie`.
+ *
+ * Make a new jar for each request, and pass it to every call while handling
+ * that request, so they share one refresh and see each other's writes. Never
+ * keep one at module level, or one request's session would show in the
+ * next.
  *
  * @example
  * ```ts
@@ -67,27 +69,27 @@ export type CookieOptions = Readonly<{
  * @since 0.1.0
  */
 export type CookieJar = {
-	/** The request's cookie `name`, or `undefined` when it has none. */
+	/** Returns the request's cookie `name`, or `undefined` when it has none. */
 	get: (name: string) => string | undefined;
 	/** Sets cookie `name` on the response. */
 	set: (name: string, value: string, options: CookieOptions) => void;
 	/** Removes cookie `name`, with the attributes it was set with. */
 	delete: (name: string, options: CookieOptions) => void;
 	/**
-	 * Whether the response can still set cookies. `false` where the framework
-	 * can't, such as while a Next.js Server Component renders: then nothing is
-	 * refreshed or saved. Calls that need a fresh token reject with
-	 * `REFRESH_FAILED`: `credentials.get` with expired access, and
-	 * `credentials.renew`. Calls that must change the cookie reject with
-	 * `INVALID_OPTIONS`: `signIn`, `signOut`, `credentials.reject`,
-	 * `updateUser` and `refreshIfDue`.
+	 * Whether the response can still set cookies. It's `false` where the
+	 * framework can't, such as while a Next.js Server Component renders. Then
+	 * nothing is refreshed or saved, and calls that would write reject, as
+	 * each `serverAuth` method says.
 	 */
 	readonly writable: boolean;
 };
 
 /** Cookie values stay below browsers' 4 KB limit, with room for attributes. */
 const CHUNK_SIZE = 3800;
-/** A head naming its chunks: `c` and their count. Sealed values start with a digit. */
+/**
+ * The head cookie of a split value, `c<count>`. A sealed value starts with a
+ * digit, so the two can't be confused.
+ */
 const CHUNKED = /^c([1-9])$/;
 /**
  * Servers and proxies refuse requests whose headers are too large (nginx:
@@ -95,13 +97,20 @@ const CHUNKED = /^c([1-9])$/;
  * a session that needs more is refused at sign-in rather than sent.
  */
 const MAX_CHUNKS = 2;
-/** How long a refresh's result serves requests that still carry the old cookie. */
+/**
+ * How long a refresh's result serves requests that still carry the old cookie.
+ */
 const REUSE_MS = 10_000;
 const MAX_REUSED = 10_000;
-/** The most saves followed from one cookie: a refresh, a profile update, another refresh. */
+/**
+ * How many later saves an outdated cookie is followed through, such as a
+ * refresh, a profile update, then another refresh. It bounds the walk.
+ */
 const MAX_FOLLOWED = 10;
 
-/** A session's saved entry and when it expires; `text` is `null` once it ended. */
+/**
+ * A session's saved entry and when it expires; `text` is `null` once it ended.
+ */
 type Save = { text: string | null; expiresAt: number };
 type Reused = Save & { until: number };
 
@@ -123,7 +132,7 @@ export function pairJars(readOnly: CookieJar, writable: CookieJar): void {
 	for (const listener of pairings.get(readOnly) ?? []) listener(writable);
 }
 
-/** Calls `listener` when `readOnly` is paired with a writable jar; returns a stop. */
+/** Calls `listener` when `readOnly` gets a writable sibling. Returns a stop. */
 export function onPaired(
 	readOnly: CookieJar,
 	listener: (writable: CookieJar) => void,
@@ -134,12 +143,14 @@ export function onPaired(
 	return () => listeners.delete(listener);
 }
 
-/** The writable jar over the same cookies as `jar`, if an adapter paired them. */
+/**
+ * The writable jar over the same cookies as `jar`, if an adapter paired them.
+ */
 export function writableSibling(jar: CookieJar): CookieJar | undefined {
 	return writableSiblings.get(jar);
 }
 
-/** Resolves once no refresh is under way on `jar`, counting those begun meanwhile. */
+/** Resolves once no refresh is under way on `jar`, even ones begun later. */
 export async function refreshesSettled(jar: CookieJar): Promise<void> {
 	const pending = refreshing.get(jar);
 	while (pending?.size) await Promise.allSettled(pending);
@@ -161,6 +172,9 @@ export function createShared() {
 	// same token fail with them rather than call the backend again.
 	const failures = new Map<string, { error: unknown; until: number }>();
 
+	// Maps keep insertion order, and each write deletes its key first, so the
+	// oldest entries come first. Pruning drops expired ones, and the oldest
+	// live ones while over `MAX_REUSED`, then stops at the first it keeps.
 	function prune(now: number) {
 		for (const entries of [saves, failures])
 			for (const [key, entry] of entries) {
@@ -189,12 +203,14 @@ export function createShared() {
 				newest = { text: entry.text, expiresAt: entry.expiresAt };
 				text = entry.text;
 				const next = savedIdentity(text);
+				// A profile update keeps the access token, so there's nothing newer
+				// to follow.
 				if (next?.accessToken === current.accessToken) break;
 				current = next;
 			}
 			return newest;
 		},
-		/** Records that refreshing the session saved as `previous` failed with `error`. */
+		/** Records that refreshing the session saved as `previous` failed. */
 		failed(previous: { id: string; accessToken: string }, error: unknown) {
 			const now = Date.now();
 			const key = keyOf(previous.id, previous.accessToken);
@@ -202,7 +218,9 @@ export function createShared() {
 			failures.set(key, { error, until: now + REUSE_MS });
 			prune(now);
 		},
-		/** The recent failure to refresh the session saved as `previous`, if any. */
+		/**
+		 * The recent failure to refresh the session saved as `previous`, if any.
+		 */
 		failure(previous: { id: string; accessToken: string }): unknown {
 			const entry = failures.get(keyOf(previous.id, previous.accessToken));
 			return entry && entry.until > Date.now() ? entry.error : undefined;
@@ -246,7 +264,7 @@ const LOCAL_FAILURES = new Set([
 	"INVALID_OPTIONS",
 ]);
 
-/** Whether a refresh failed at the backend, and would fail again if retried at once. */
+/** Whether a refresh failed at the backend, so an immediate retry would too. */
 function failedOnTheBackend(error: unknown): boolean {
 	return !(error instanceof AuthError && LOCAL_FAILURES.has(error.code));
 }
@@ -299,7 +317,9 @@ export function jarStorage(input: {
 		session = savedIdentity(next) ?? session;
 	}
 
-	/** Deletes the chunks from `count` on, which a shorter value leaves behind. */
+	/**
+	 * Deletes the chunks from `count` on, which a shorter value leaves behind.
+	 */
 	function trim(count: number) {
 		for (let index = count; index < chunks; index++)
 			jar.delete(chunkName(index), options);
@@ -372,6 +392,8 @@ export function jarStorage(input: {
 			const previous = savedIdentity(text);
 			write(await sealer.seal(value, cookie), meta.expiresAt);
 			remember(value);
+			// Only a save of the same session follows the old cookie. A new
+			// sign-in replaces it, and isn't for other requests to adopt.
 			if (previous && savedIdentity(value)?.id === previous.id)
 				shared.saved(previous, { text: value, expiresAt: meta.expiresAt });
 		},
@@ -383,13 +405,14 @@ export function jarStorage(input: {
 			// A read-only jar keeps the cookie, so other requests mustn't take the
 			// session as ended.
 			if (!jar.writable) return;
+			// No delete header when there's no cookie to remove.
 			if (jar.get(cookie) !== undefined || held !== null) clear();
 			if (previous) shared.saved(previous, { text: null, expiresAt: 0 });
 		},
 		lock(_name, signal, work) {
 			const run = async () => {
-				// The new tokens couldn't be saved, and the backend may have spent the
-				// refresh token the cookie holds.
+				// The new tokens couldn't be saved, and the backend may have spent
+				// the refresh token the cookie holds.
 				if (!jar.writable)
 					throw new AuthError(
 						"REFRESH_FAILED",

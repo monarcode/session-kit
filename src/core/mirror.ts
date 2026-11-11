@@ -320,8 +320,9 @@ function stateOf<U>(
  * `@monarcode/session-kit/server`.
  *
  * It starts from the session the page was rendered with, so there's no
- * loading state, and it never sees the refresh token. Create it once per page
- * load in the browser, not per request on the server.
+ * loading state, and it never sees the refresh token. Create one per page
+ * load in the browser, and one per request on the server, never at module
+ * level. `useMirrorAuth` does this for you.
  *
  * Let TypeScript infer its types from the options. With an explicit
  * `createMirrorAuth<User>(…)`, `signIn` drops out of the type. Throws
@@ -332,22 +333,20 @@ function stateOf<U>(
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
  *
  * type User = { id: number; firstName: string };
- * declare const session: Session<User> | null; // from the server render
+ * type Credentials = { username: string; password: string };
  * declare function getSessionFn(): Promise<Session<User> | null>;
- * declare function signInFn(input: {
- * 	data: { username: string; password: string };
- * }): Promise<Session<User>>;
+ * declare function signInFn(input: { data: Credentials }): Promise<Session<User>>;
  * declare function signOutFn(): Promise<void>;
  *
- * export const auth = createMirrorAuth({
- * 	name: "app",
- * 	session,
- * 	revalidate: () => getSessionFn(),
- * 	signIn: (data: { username: string; password: string }) => signInFn({ data }),
- * 	signOut: () => signOutFn(),
- * });
- *
- * await auth.signIn({ username: "emilys", password: "emilyspass" });
+ * // Called with the session the page was rendered with.
+ * export const createAppAuth = (session: Session<User> | null) =>
+ * 	createMirrorAuth({
+ * 		name: "app",
+ * 		session,
+ * 		revalidate: () => getSessionFn(),
+ * 		signIn: (data: Credentials) => signInFn({ data }),
+ * 		signOut: () => signOutFn(),
+ * 	});
  * ```
  *
  * @see {@link MirrorAuthOptions} for every option

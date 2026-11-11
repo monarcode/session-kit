@@ -3,7 +3,7 @@ import { mirrorOf, type MirrorAuth } from "../core/mirror.js";
 import type { Session } from "../core/types.js";
 
 /**
- * The session as the server render hands it to the browser, from
+ * The session the server render sends to the browser, from
  * {@link sessionHydration}'s `dehydrate`. It holds no tokens.
  *
  * @example
@@ -23,8 +23,8 @@ import type { Session } from "../core/types.js";
 export type DehydratedSession<U> = {
 	/**
 	 * Whether {@link loadSession} read the session on the server for this
-	 * page. When it didn't, as for a root route with `ssr: false` or a read
-	 * that failed, the browser reads the session itself.
+	 * page. When it didn't, such as for a root route with `ssr: false` or a
+	 * failed read, the browser reads the session itself.
 	 */
 	loaded: boolean;
 	/** The session the server read, or `null` when signed out. */
@@ -59,40 +59,30 @@ export type SessionHydration<U> = {
 
 /**
  * Router options that carry the session from the server render to the
- * browser: spread them into `createRouter`. On the server, `dehydrate` sends
- * the session {@link loadSession} read; in the browser, `hydrate` starts the
- * client from it before the first render, without running guards again or
- * telling other tabs. When the server didn't read the session, `hydrate`
- * leaves the client as it is, and `loadSession` reads it in the browser.
- * Throws `INVALID_OPTIONS` from `hydrate` for a client that
- * `createMirrorAuth` didn't make.
+ * browser. Spread them into `createRouter`.
+ *
+ * On the server, `dehydrate` sends the session {@link loadSession} read. In
+ * the browser, `hydrate` starts the client from it before the first render,
+ * without running guards again or telling other tabs. When the server didn't
+ * read the session, `hydrate` leaves the client as it is, and `loadSession`
+ * reads it in the browser.
+ *
+ * `hydrate` throws `INVALID_OPTIONS` for a client that isn't from
+ * `createMirrorAuth`.
  *
  * @example
  * ```ts
- * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
+ * import type { MirrorAuth } from "@monarcode/session-kit";
  * import { sessionHydration } from "@monarcode/session-kit/tanstack-start";
- * import { connectAuth } from "@monarcode/session-kit/tanstack-router";
  * import { createRootRouteWithContext, createRouter } from "@tanstack/react-router";
  *
- * type User = { id: number; firstName: string };
- * declare function getSessionFn(): Promise<Session<User> | null>;
- * declare function signOutFn(): Promise<void>;
+ * declare function createAppAuth(): MirrorAuth<{ id: number }>;
  *
+ * // Start calls it for each request on the server, and once in the browser.
  * export function getRouter() {
- * 	const auth = createMirrorAuth({
- * 		name: "app",
- * 		session: null,
- * 		revalidate: () => getSessionFn(),
- * 		signOut: () => signOutFn(),
- * 	});
+ * 	const auth = createAppAuth();
  * 	const routeTree = createRootRouteWithContext<{ auth: typeof auth }>()();
- * 	const router = createRouter({
- * 		routeTree,
- * 		context: { auth },
- * 		...sessionHydration(auth),
- * 	});
- * 	connectAuth(router);
- * 	return router;
+ * 	return createRouter({ routeTree, context: { auth }, ...sessionHydration(auth) });
  * }
  * ```
  *
@@ -123,12 +113,16 @@ export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
 }
 
 /**
- * Reads this request's session into the client, for the root route's
- * `beforeLoad`. On the server it calls the client's `revalidate`, so guards
- * and the render see the session from the cookie. In the browser it does
- * nothing when {@link sessionHydration}'s `hydrate` brought the session the
- * server read, and otherwise reads it until a read succeeds, as for a root
- * route that didn't render on the server. Rejects as `retry` does.
+ * Reads this request's session into the client. Call it in the root route's
+ * `beforeLoad`.
+ *
+ * On the server, it calls the client's `revalidate`, so guards and the page
+ * see the session from the cookie. In the browser, it does nothing when
+ * {@link sessionHydration} already brought the server's session. Otherwise,
+ * such as for a root route that didn't render on the server, it asks the
+ * server on each navigation until a read succeeds.
+ *
+ * Rejects as the client's `retry()` does when the read fails.
  *
  * @example
  * ```ts
@@ -147,6 +141,7 @@ export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
  * @since 0.1.0
  */
 export async function loadSession<U>(auth: MirrorAuth<U>): Promise<void> {
+	// On the server, always read: each request has its own cookie.
 	if (typeof document !== "undefined" && mirrorOf(auth)?.answered) return;
 	await auth.retry();
 }

@@ -21,17 +21,20 @@ function attributes({ domain, maxAge, ...rest }: CookieOptions) {
 const jars = new WeakMap<Request, CookieJar>();
 
 /**
- * The {@link CookieJar} of the request TanStack Start is handling, for
- * `serverAuth` from `@monarcode/session-kit/server`: in a server function,
- * request middleware, a server route, or `beforeLoad` and loaders while they
- * run on the server. Every call during one request returns the same jar.
- * Start applies its cookies to the response, including a redirect's, but not
- * once it has started streaming a page: a cookie set after that is lost, so
- * refresh before rendering with `serverAuth.refreshIfDue` in request middleware.
- * Throws `INVALID_OPTIONS` outside a request, such as in the browser.
+ * The {@link CookieJar} for the request TanStack Start is handling, to pass
+ * to `serverAuth` from `@monarcode/session-kit/server`. Use it in a server
+ * function, request middleware, a server route, or `beforeLoad` and loaders
+ * while they run on the server. Every call during one request returns the
+ * same jar.
  *
- * Import it only from server code, such as a server function's handler:
- * Start's compiler then leaves it out of the browser bundle.
+ * Start adds its cookies to the response, a redirect's included, but not
+ * once it has started streaming a page. A cookie set after that is lost, so
+ * refresh before rendering, in request middleware with
+ * `serverAuth.refreshIfDue`.
+ *
+ * Throws `INVALID_OPTIONS` outside a request, such as in the browser. Import
+ * it only from server code, such as a server function's handler, so Start's
+ * compiler leaves it out of the browser bundle.
  *
  * @example
  * ```ts
@@ -63,6 +66,7 @@ export function startJar(): CookieJar {
 	let jar = jars.get(request);
 	if (!jar) {
 		jar = {
+			// Start gives no sign once a page streams, so this can't turn false.
 			writable: true,
 			get: (name) => getCookie(name),
 			set: (name, value, options) =>
