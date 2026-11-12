@@ -6,9 +6,12 @@ import { defineDocs } from "fumadocs-mdx/macro";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
+import { onTwoslashError, rehypePageApps, twoslashOptions } from "./page-apps";
 import { codeThemes, docsRoute, LATEST, versionOfPath } from "./shared";
 
 const SHELLS = new Set(["sh", "bash", "shell", "zsh"]);
+// Tags a hover leaves out: the page around it is the example.
+const PAGE_TAGS = new Set(["example", "since"]);
 
 export const docs = defineDocs({
 	dir: "content/docs",
@@ -19,12 +22,33 @@ export const docs = defineDocs({
 			rehypeCodeOptions: {
 				...rehypeCodeDefaultOptions,
 				...codeThemes,
-				// Type hovers on blocks marked `twoslash`. They need no imports
-				// from other files: each block compiles on its own. No cache: it's
-				// keyed by the block, so it would hide a change to the types.
 				transformers: [
 					...(rehypeCodeDefaultOptions.transformers ?? []),
-					transformerTwoslash(),
+					// Type hovers on blocks marked `twoslash`, which every titled
+					// example is (see `rehypePageApps`). A type error in an example
+					// fails the build. No cache: it's keyed by the block, so it
+					// would hide a change to the types.
+					transformerTwoslash({ twoslashOptions, onTwoslashError }),
+					// A hover shows a name's type and its docs' first paragraph,
+					// which session-kit's docs keep standalone, with the tags that
+					// say how to use it, such as `@default` and `@see`. The rest of
+					// the docs, the export's own example and its version stay out:
+					// the page is the example, and every hover ships in the page.
+					// Runs before Twoslash renders its popups.
+					{
+						name: "hover-docs",
+						tokens() {
+							for (const node of this.meta.twoslash?.nodes ?? []) {
+								if (node.type !== "hover") continue;
+								if (node.docs)
+									node.docs = node.docs.split(/\n\s*\n/)[0];
+								if (node.tags)
+									node.tags = node.tags.filter(
+										([name]) => !PAGE_TAGS.has(name),
+									);
+							}
+						},
+					},
 					// Marks each line of a shell block that starts a command, so
 					// the docs' styles can give it a `$` prompt. Comments, blank
 					// lines and continuations after a `\` get none.
@@ -45,6 +69,8 @@ export const docs = defineDocs({
 					},
 				],
 			},
+			// Before `rehypeCode`, which highlights what it leaves.
+			rehypePlugins: (plugins) => [rehypePageApps, ...plugins],
 			remarkPlugins: [
 				[
 					remarkAutoTypeTable,

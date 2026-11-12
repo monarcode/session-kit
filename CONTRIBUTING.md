@@ -20,7 +20,8 @@ example:
   together as one small app. Most pages compile under NodeNext and Bundler
   resolution, the server-rendering guides under Bundler resolution, and the
   Expo guide under Bundler resolution without DOM types, as Metro resolves.
-  `scripts/check-docs.mjs` lists each page.
+  `scripts/docs-pages.mjs` lists each page, for `scripts/check-docs.mjs`
+  and for the site's type hovers.
 - **The reference.** The API reference pages are generated from the JSDoc
   by `pnpm run docs:reference`, and the check fails when they're out of
   date. Run it after changing a public export or its JSDoc.

@@ -8,6 +8,8 @@ import type { Element, ElementContent } from "hast";
 
 import { codeThemes } from "@/lib/shared";
 
+import { MARKERS } from "../../../scripts/docs-pages.mjs";
+
 /**
  * The landing page's code tour: one app, the TanStack Router setup, which
  * builds on Getting started's client. Each step shows an example from a docs
@@ -35,20 +37,21 @@ const TOUR = [
 	},
 ] as const;
 
-/** The code of the example titled `file` on a page of the current docs. */
+/**
+ * The code of the example titled `file` on a page of the current docs, found
+ * as `check-docs` finds it. Read from the site's folder: this runs bundled,
+ * where `docs-pages.mjs` can't locate the repository.
+ */
 async function readExample(page: string, file: string): Promise<string> {
 	const text = await readFile(
 		join("content/docs/(latest)", `${page}.mdx`),
 		"utf8",
 	);
-	const fence = new RegExp(
-		'^```(tsx?)[^\\n]*\\stitle="' +
-			file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
-			'"[^\\n]*\\n([\\s\\S]*?)\\n```$',
-		"m",
-	).exec(text);
-	if (!fence) throw new Error(`${page}.mdx has no example titled ${file}`);
-	return fence[2]!;
+	const example = [...text.matchAll(MARKERS.mdx)].find(
+		(match) => match[1] === file,
+	);
+	if (!example) throw new Error(`${page}.mdx has no example titled ${file}`);
+	return example[2]!;
 }
 
 /**

@@ -164,7 +164,8 @@ developers, not for us. Every comment ships: keep it short, plain and true.
 - The site's pages live in `site/content/docs/(latest)/`. A `ts` or `tsx`
   block with `title="path"` is an example, and each page's examples are
   type-checked as one small app by `scripts/check-docs.mjs`, together with
-  the JSDoc examples, in memory. Each page is listed in its `documents`, and
+  the JSDoc examples, in memory. Each page is listed in `documents` in
+  `scripts/docs-pages.mjs`, which the site also reads for type hovers, and
   a page that builds on Getting started lists the files it uses as `shared`.
   A new page with titled examples fails the check until it's listed.
 - A README example marked `<!-- from: site/content/docs/(latest)/page.mdx -->`

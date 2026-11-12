@@ -6,12 +6,13 @@ export const docsRoute = "/docs";
 
 /**
  * The code theme of docs pages and the landing page: Charbox, the maintainer's
- * Zed theme. The site is dark only, so both slots take it. Its comments keep
- * about 6:1 on the site's ink.
+ * Zed theme. Its comments keep about 6:1 on the site's ink. The site is dark
+ * only, so it's one theme: each token gets an inline colour, a third of the
+ * size of a light and a dark variable, which adds up across type hovers.
  */
 export const codeThemes = {
-	themes: { light: charbox, dark: charbox },
-	defaultColor: false,
+	themes: { dark: charbox },
+	defaultColor: "dark",
 } as const;
 
 export const gitConfig = {

@@ -425,7 +425,9 @@ world's vocabulary. Scoped by `.docs-source`.
   headings in view turn foreground, and a 2px lime rule runs beside them as
   you scroll: the docs' one lime element.
 - **Title and headings:** comments, as on the landing (see Typography).
-  Copy Markdown and Open are quiet square controls on a hairline.
+  The folder above a title is where the file lives: Geist Mono 12px in
+  comment grey, never lime. Copy Markdown and Open are quiet square controls
+  on a hairline.
 - **Code blocks:** set as the tour's open files. A titled block's path is a
   tab on a hairline rail (foreground, 2px foreground underline), the copy
   button at the rail's end, the code flat on ink and closed by a hairline.
@@ -433,6 +435,14 @@ world's vocabulary. Scoped by `.docs-source`.
   don't. Shell blocks take the install prompt's comment-grey `$`. Numbers
   and prompts are left out of copies and screen readers. On phones a block
   shows whole and scrolls only sideways.
+- **Type hovers:** every titled block's names show their types on hover.
+  While the pointer is in a block, each name takes a dim dotted rule; the
+  name under it, a foreground one. The popup is one square ink panel on a
+  hairline, at most 36rem wide (never wider than the screen less 2rem) and
+  30rem tall: the type flush at the top in the code's 13px, then the first
+  paragraph of its docs in quiet grey below a hairline. No copy button, no
+  box around the type, no shadow, and no `@example` or `@since`. Names stay
+  out of the tab order: there are hundreds a page.
 - **Package-manager tabs:** the landing's switch on a hairline rail.
 - **Tables and type tables:** rows between hairlines, a label-type header,
   no fill and no outer box. Prop names are foreground, not lime.
@@ -441,6 +451,9 @@ world's vocabulary. Scoped by `.docs-source`.
 - **Links and inline code:** links as on the landing. Inline code is Geist
   Mono on the lane-empty fill, square, no border.
 - **Prev/next:** two square rows between hairlines, titles in the mono.
+- **Not found:** the home layout with one comment-voice line, "// 404:
+  nothing at this path.", at the hero's scale, a quiet line pointing to
+  search, and the hero's pair of buttons: Read the docs (lime) and Home.
 
 ### Line Gutter (signature)
 

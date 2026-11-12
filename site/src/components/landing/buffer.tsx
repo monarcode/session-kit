@@ -4,6 +4,18 @@ import type { ReactNode } from "react";
 // It matches the navbar's width, so the text starts under the logo.
 export const COLUMN = "mx-auto w-full max-w-(--fd-layout-width) px-4";
 
+/** The page's comment-voice headline, as the hero and the 404 set it. */
+export const HEADLINE =
+	"text-[clamp(1.5rem,3.6vw,2.75rem)] leading-[1.12] tracking-[-0.04em]";
+
+/** The one lime action on a page, such as Get started. */
+export const PRIMARY_ACTION =
+	"flex h-12 items-center px-6 text-sm font-bold text-fd-primary-foreground bg-fd-primary decoration-2 underline-offset-4 hover:underline";
+
+/** A quiet action beside it, such as GitHub: a hairline box. */
+export const SECONDARY_ACTION =
+	"flex h-12 items-center border border-buffer-line px-5 text-sm transition-colors hover:bg-fd-accent";
+
 /**
  * A line number in the buffer's gutter. Screen readers skip it. A `live` line,
  * one a visitor can edit, is marked with a lime `>`.

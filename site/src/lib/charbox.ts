@@ -28,7 +28,8 @@ export const charbox: Theme = {
 	name: "charbox",
 	type: "dark",
 	colors: {
-		"editor.background": "#111111",
+		// Transparent: Shiki writes it inline, over the site's own ground.
+		"editor.background": "#00000000",
 		"editor.foreground": fg,
 	},
 	tokenColors: [
@@ -67,11 +68,12 @@ export const charbox: Theme = {
 			scope: ["variable.language"],
 			settings: { foreground: purple, fontStyle: "italic" },
 		},
-		// property, variable.member
+		// property, variable.member, and the fields of a type
 		{
 			scope: [
 				"variable.other.property",
 				"variable.other.object.property",
+				"variable.object.property",
 				"meta.object-literal.key",
 				"support.variable.property",
 				"support.type.property-name",

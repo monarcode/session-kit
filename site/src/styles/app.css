@@ -382,6 +382,15 @@
 	border-radius: 0;
 }
 
+/* Hover targets show only while the pointer is in the block, on one dim
+   dotted rule rather than one in each token's colour. */
+.docs-source .twoslash:hover .twoslash-hover {
+	border-color: var(--color-buffer-mark);
+}
+.docs-source .twoslash .twoslash-hover:hover {
+	border-color: var(--color-fd-foreground);
+}
+
 /* Prev and next: two hairline-ruled rows, not cards. */
 .docs-source .docs-pager > a {
 	border-radius: 0;
@@ -390,6 +399,62 @@
 }
 .docs-source .docs-pager > a > div:first-child {
 	font-family: var(--font-mono);
+}
+
+/* The folder above a page's title is where the file lives, in the mono and
+   comment grey: it isn't live, so it isn't lime. */
+.docs-source .docs-breadcrumb {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--color-buffer-dim);
+}
+.docs-source .docs-breadcrumb .text-fd-primary {
+	font-weight: 400;
+	color: inherit;
+}
+
+/* A type hover is one square panel: the type flush at the top in the code's
+   size, with no box or copy button of its own, and its docs below a hairline.
+   On a phone it fits the screen. */
+.fd-twoslash-popover {
+	max-width: min(36rem, calc(100vw - 2rem));
+	/* As tall as the room below the name allows, so a long type rarely
+	   scrolls its docs out of view. */
+	max-height: min(30rem, var(--available-height, 30rem));
+	padding: 0;
+	border-color: var(--color-buffer-line);
+	border-radius: 0;
+	background-color: var(--brand-ink);
+	box-shadow: none;
+}
+.fd-twoslash-popover figure.shiki {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background-color: transparent;
+}
+.fd-twoslash-popover figure.shiki > div:has(> button) {
+	display: none;
+}
+.fd-twoslash-popover figure.shiki > div {
+	padding-block: 0.625rem;
+	font-size: 0.8125rem;
+}
+.fd-twoslash-popover .line {
+	padding-inline: 0.875rem;
+}
+/* A one-line type is inline code, not a block. */
+.fd-twoslash-popover .twoslash-popup-code {
+	display: block;
+	padding: 0.625rem 0.875rem;
+}
+.fd-twoslash-popover .twoslash-popup-docs {
+	margin: 0;
+	max-width: none;
+	padding: 0.625rem 0.875rem 0.75rem;
+	border-top: 1px solid var(--color-buffer-line);
+	font-size: 0.8125rem;
+	color: var(--color-fd-muted-foreground);
 }
 
 /* Site-wide overlays, portaled out of both layouts: the search dialog and

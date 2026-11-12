@@ -93,7 +93,11 @@ function Content({
 	const MDX = page.body;
 
 	return (
-		<DocsPage toc={toc} footer={{ className: "docs-pager" }}>
+		<DocsPage
+			toc={toc}
+			breadcrumb={{ className: "docs-breadcrumb" }}
+			footer={{ className: "docs-pager" }}
+		>
 			{older && (
 				<Callout
 					type="warn"

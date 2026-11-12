@@ -396,7 +396,10 @@
 				".docs-source frame: ink sidebar, mono sidebar and TOC, lime TOC segment",
 				"Comment title and H2s, mono H3s, 36rem prose measure",
 				"Code as open files: rail tab, line gutter on titled blocks, $ on shell",
-				"Hairline tables, type tables, link-card rows and prev/next"
+				"Hairline tables, type tables, link-card rows and prev/next",
+				"Type hovers on every titled block: one square ink panel, type then docs below a hairline",
+				"Folder breadcrumb in comment-grey mono, never lime",
+				"Not found: comment-voice 404 line with the hero's button pair"
 			]
 		}
 	},

@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { gitConfig } from "@/lib/shared";
 import type { ConfigLine } from "@/lib/tour";
 
-import { COLUMN } from "./buffer";
+import { COLUMN, HEADLINE, PRIMARY_ACTION, SECONDARY_ACTION } from "./buffer";
 import { Install } from "./install";
 import { LiveConfig } from "./live-config";
 
@@ -20,7 +20,7 @@ export function Hero({
 }) {
 	return (
 		<section className={`${COLUMN} pt-8 pb-4 sm:pt-10`}>
-			<h1 className="text-[clamp(1.5rem,3.6vw,2.75rem)] leading-[1.12] tracking-[-0.04em]">
+			<h1 className={HEADLINE}>
 				<span className="block">
 					<span className="font-light text-fd-muted-foreground">
 						<span aria-hidden="true" className="text-buffer-dim">
@@ -63,13 +63,13 @@ export function Hero({
 					<Link
 						to="/docs/$"
 						params={{ _splat: "getting-started" }}
-						className="flex h-12 items-center px-6 text-sm font-bold text-fd-primary-foreground bg-fd-primary decoration-2 underline-offset-4 hover:underline"
+						className={PRIMARY_ACTION}
 					>
 						Get started
 					</Link>
 					<a
 						href={`https://github.com/${gitConfig.user}/${gitConfig.repo}`}
-						className="flex h-12 items-center border border-buffer-line px-5 text-sm transition-colors hover:bg-fd-accent"
+						className={SECONDARY_ACTION}
 					>
 						GitHub
 					</a>
