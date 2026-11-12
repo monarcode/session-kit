@@ -9,16 +9,16 @@ web
 ## Users
 
 - **Developers wiring it up.** React developers whose own backend issues
-  access and refresh tokens. They are setting session-kit up with their
+  access and refresh tokens. They are setting Session kit up with their
   router or framework (TanStack Router or Start, React Router, Next.js, Expo
   Router, or plain React), reading a setup guide and the reference with their
   editor open.
-- **Developers evaluating it.** Developers deciding between session-kit,
+- **Developers evaluating it.** Developers deciding between Session kit,
   writing the session code themselves, or an auth service such as Auth.js,
   Better Auth or Clerk. They need to see quickly what it does, what it
   doesn't, and whether their setup is supported.
 - **AI coding assistants.** Agents that read `llms.txt`, `llms-full.txt` and
-  each page's Markdown route to wire session-kit into an app.
+  each page's Markdown route to wire Session kit into an app.
 
 ## Product Purpose
 
@@ -32,14 +32,14 @@ The site owns the guides: the README keeps only an introduction, installation
 and a short quick start, and links here. Success: a developer goes from
 install to a signed-in app with guarded routes by following one setup guide,
 and an evaluator can tell within the first screen or two whether
-session-kit fits their app.
+Session kit fits their app.
 
 ## Positioning
 
-session-kit is the session layer for apps that already have a backend. It
+Session kit is the session layer for apps that already have a backend. It
 never signs users in: no sign-in form, no OAuth flow, no user database. It
 starts where the backend's sign-in response ends. Auth services manage their
-own sessions; session-kit manages the session around tokens someone else
+own sessions; Session kit manages the session around tokens someone else
 issued.
 
 Every code example on the site is type-checked against the published package
@@ -76,8 +76,9 @@ those same checked examples, so the code shown is code that compiles.
   rendering), React Router (declarative, data, framework with and without
   SSR), Next.js App Router, Expo Router (iOS and Android), plain React,
   Effect and effetch. Expo web is not planned.
-- Terminology: the product is written **session-kit** in prose; the package is
-  `@monarcode/session-kit`. Use the reader's words ("signed in", "the saved
+- Terminology: the product is written **Session kit** in prose; the package is
+  `@monarcode/session-kit`, and `session-kit` stays wherever it is an
+  identifier (the npm name, URLs, paths). Use the reader's words ("signed in", "the saved
   session", "another tab", "the access token expired"), never engine names
   such as epoch, revision or flight.
 - Undecided: the site's final URL. `https://session-kit.pages.dev` is assumed
@@ -85,7 +86,7 @@ those same checked examples, so the code shown is code that compiles.
 
 ## Brand Commitments
 
-- **Pitch:** "Your backend signs users in. session-kit handles everything
+- **Pitch:** "Your backend signs users in. Session kit handles everything
   after."
 - **Wordmark:** "Session Kit" with the brace-and-dot mark,
   `assets/Session-kit-logo.svg`. On the site, the name takes the text colour
@@ -119,7 +120,7 @@ production readiness before `0.1.0`.
 
 ## Product Principles
 
-1. **Honest scope.** Say up front that session-kit never signs users in, and
+1. **Honest scope.** Say up front that Session kit never signs users in, and
    point to auth services for those who need that.
 2. **Shown code compiles.** Never put code on the site that `check-docs`
    doesn't check.

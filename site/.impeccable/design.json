@@ -384,14 +384,20 @@
 				"Dark-only Fumadocs retint (.dark)",
 				"Brand colours --brand-lime and --brand-ink",
 				"Geist and Geist Mono imports, set as --font-sans and --font-mono",
-				"Selection, caret and scrollbar colours"
+				"Selection, caret and scrollbar colours",
+				"Square search dialog and popovers, unblurred overlay"
 			],
 			"landingOnly": [
 				".live-source face (Geist Mono as the base face)",
 				"Line gutter, comment headings, lanes, live config, install prompt",
 				"Solid ink navbar"
 			],
-			"pending": "Docs pages take this world's shapes later; their prose already reads in Geist."
+			"docsOnly": [
+				".docs-source frame: ink sidebar, mono sidebar and TOC, lime TOC segment",
+				"Comment title and H2s, mono H3s, 36rem prose measure",
+				"Code as open files: rail tab, line gutter on titled blocks, $ on shell",
+				"Hairline tables, type tables, link-card rows and prev/next"
+			]
 		}
 	},
 	"components": [
@@ -472,6 +478,14 @@
 			"description": "What a lit moment in the lanes was, opening below the lowest lane it lit: shown during the playhead's hold and on hover.",
 			"html": "<div class=\"ds-tip\"><p class=\"ds-tip-time\">09:14</p><p><span>refresh</span><span>New tokens, a minute before access expired.</span></p><p><span>storage</span><span>The new tokens are saved.</span></p></div>",
 			"css": ".ds-tip { position: relative; z-index: 10; font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); width: min(27rem, 100%); padding: 8px 12px; font-size: 12px; line-height: 1.625; background: var(--color-fd-popover, #1b1c23); border: 1px solid var(--color-buffer-line, #262833); border-radius: 0; } .ds-tip p { margin: 0; display: flex; gap: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-tip span:first-child { width: 12ch; flex-shrink: 0; color: var(--color-buffer-dim, #7f828e); } .ds-tip-time { color: var(--color-fd-foreground, #e8e9ee); font-variant-numeric: tabular-nums; } @media (prefers-reduced-motion: no-preference) { .ds-tip { position: relative; z-index: 10; animation: ds-tip-in 160ms ease-out; } } @keyframes ds-tip-in { from { opacity: 0; transform: translateY(2px); } }"
+		},
+		{
+			"name": "Docs Code Block",
+			"kind": "code",
+			"refersTo": "docs-frame",
+			"description": "A titled code block in the docs: the path as a tab on a hairline rail, the code flat on ink with a comment-grey line gutter, closed by a hairline.",
+			"html": "<figure class=\"ds-code\"><div class=\"ds-code-rail\"><span>src/auth.ts</span></div><pre><code><span class=\"l\"><span class=\"k\">export const</span> auth = createAuth({</span><span class=\"l\">  name: <span class=\"s\">\"my-app\"</span>,</span><span class=\"l\">});</span></code></pre></figure>",
+			"css": ".ds-code { margin: 0; border-bottom: 1px solid var(--color-buffer-line, #262833); font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); } .ds-code-rail { display: flex; height: 38px; border-bottom: 1px solid var(--color-buffer-line, #262833); } .ds-code-rail span { display: flex; align-items: center; font-size: 12px; color: var(--color-fd-foreground, #e8e9ee); box-shadow: inset 0 -2px 0 var(--color-fd-foreground, #e8e9ee); } .ds-code pre { margin: 0; padding: 14px 0; font-size: 13px; line-height: 1.7; color: #e6edf3; } .ds-code code { display: flex; flex-direction: column; counter-reset: line; } .ds-code .l::before { counter-increment: line; content: counter(line, decimal-leading-zero); display: inline-block; width: 2ch; margin-inline-end: 2.5ch; text-align: end; color: var(--color-buffer-dim, #7f828e); } .ds-code .k { color: #ff7b72; } .ds-code .s { color: #a5d6ff; }"
 		}
 	],
 	"narrative": {

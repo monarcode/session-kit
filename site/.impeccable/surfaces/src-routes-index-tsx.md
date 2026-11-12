@@ -10,10 +10,10 @@ related_targets: ["src/components/landing"]
 Scope: the docs site's landing page, a Persuade surface. The rest of the site
 takes the same world in a later step.
 
-- Audience: React developers deciding in a minute whether session-kit fits
+- Audience: React developers deciding in a minute whether Session kit fits
   their app; developers wiring it up who return for the install line and the
   guides; AI coding assistants reading the page as text.
-- Job: make the offer plain (your backend signs users in, session-kit runs
+- Job: make the offer plain (your backend signs users in, Session kit runs
   the session after), prove it, and hand over the install line.
 - Action: install with the visitor's package manager, or open Get started.
 - Proof: the real `createAuth` config from Getting started, the hour it
@@ -24,9 +24,10 @@ takes the same world in a later step.
   shows a still hour; motion pauses off screen; no text below 11px.
 - Memorable moment: the `refresh` line is commented out, and on the next
   cycle the session ends at 09:15.
-- Unresolved: the docs pages' styling and their prose face (a proportional
-  companion to the mono) come in the next step. Two alternate directions
-  are kept in the maintainer's notes in case this one is swapped.
+- Settled since: the prose face is Geist, and the docs pages take this
+  world in their own brief (`src-routes-docs-tsx.md`). Two alternate
+  directions are kept in the maintainer's notes in case this one is
+  swapped.
 
 ## Direction contract
 
@@ -36,13 +37,13 @@ a visitor can toggle its `refresh` line. It refuses the category default: a
 centred headline over a code window and a grid of cards.
 
 OWN-WORLD: Ink `#16171D` is the buffer. Lime marks only what is live: the
-playhead, lit cells, a queued edit, the primary action. One face, Martian
-Mono: narrow widths for display, normal for text. A line-number gutter,
+playhead, lit cells, a queued edit, the primary action. One family: Geist
+Mono for the buffer, Geist for running prose. A line-number gutter,
 headings as comments with a dim `//`, hairline rules, the docs' code
 colours. No cards, shadows or gradients; controls are set in the buffer's
 type, and tabs are file names.
 
-STORY: A developer recognises their own config, watches session-kit run an
+STORY: A developer recognises their own config, watches Session kit run an
 hour (refresh, storage, another tab) without being told, sees by subtraction
 what `refresh` buys, then copies the install line or opens Get started.
 Below: the checked tour, setups as entry points, what you get, and what it

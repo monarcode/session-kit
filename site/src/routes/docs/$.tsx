@@ -93,9 +93,12 @@ function Content({
 	const MDX = page.body;
 
 	return (
-		<DocsPage toc={toc}>
+		<DocsPage toc={toc} footer={{ className: "docs-pager" }}>
 			{older && (
-				<Callout type="warn" className="mt-0">
+				<Callout
+					type="warn"
+					className="mt-0 rounded-none border-buffer-line bg-transparent"
+				>
 					These docs are for Session kit {older.version}. The latest is{" "}
 					{latest.title}:{" "}
 					<Link to={older.latestUrl} className="font-medium underline">
@@ -104,9 +107,17 @@ function Content({
 					.
 				</Callout>
 			)}
-			<DocsTitle>{page.title}</DocsTitle>
-			<DocsDescription>{page.description}</DocsDescription>
-			<div className="-mt-4 flex flex-row items-center gap-2 border-b pb-6">
+			{/* The title is a comment, like the landing's headings. */}
+			<DocsTitle className="font-mono text-[1.75rem] leading-[1.15] font-semibold tracking-[-0.04em] text-balance sm:text-4xl">
+				<span aria-hidden="true" className="font-light text-buffer-dim">
+					{"// "}
+				</span>
+				{page.title}
+			</DocsTitle>
+			<DocsDescription className="mb-6 max-w-[62ch] text-base text-pretty sm:text-lg">
+				{page.description}
+			</DocsDescription>
+			<div className="docs-actions -mt-2 flex flex-row items-center gap-2 border-b border-buffer-line pb-6">
 				<MarkdownCopyButton markdownUrl={markdownUrl} />
 				<ViewOptionsPopover
 					markdownUrl={markdownUrl}
@@ -126,7 +137,12 @@ function Page() {
 	);
 
 	return (
-		<DocsLayout {...baseOptions()} tree={pageTree}>
+		<DocsLayout
+			{...baseOptions()}
+			tree={pageTree}
+			// Scopes the docs' styles in app.css.
+			containerProps={{ className: "docs-source" }}
+		>
 			<Link to={markdownUrl} hidden />
 			<Suspense>
 				<Content path={path} markdownUrl={markdownUrl} older={older} />

@@ -8,6 +8,8 @@ import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
 import { codeThemes, docsRoute, LATEST, versionOfPath } from "./shared";
 
+const SHELLS = new Set(["sh", "bash", "shell", "zsh"]);
+
 export const docs = defineDocs({
 	dir: "content/docs",
 	docs: {
@@ -23,6 +25,24 @@ export const docs = defineDocs({
 				transformers: [
 					...(rehypeCodeDefaultOptions.transformers ?? []),
 					transformerTwoslash(),
+					// Marks each line of a shell block that starts a command, so
+					// the docs' styles can give it a `$` prompt. Comments, blank
+					// lines and continuations after a `\` get none.
+					{
+						name: "shell-prompt",
+						line(node, line) {
+							if (!SHELLS.has(this.options.lang)) return;
+							const lines = this.source.split("\n");
+							const text = lines[line - 1]?.trim() ?? "";
+							const previous = lines[line - 2]?.trimEnd() ?? "";
+							if (
+								text &&
+								!text.startsWith("#") &&
+								!previous.endsWith("\\")
+							)
+								node.properties["data-command"] = "";
+						},
+					},
 				],
 			},
 			remarkPlugins: [

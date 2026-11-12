@@ -154,14 +154,14 @@ action. Nothing is carded, lifted or blurred. Controls are set in the
 buffer's type; tabs are file names; lists are rows between hairlines. The
 density is a code editor's: tight lines, generous section breaks.
 
-Scope today. The dark retint of Fumadocs, the brand colours, the fonts and
-the selection and caret colours apply site-wide (`app.css`, under `@theme`,
-`.dark` and `html`): Geist is the site's sans and Geist Mono its mono, so the
-docs pages already read in Geist with code in Geist Mono. The buffer setting
-(mono as the base face), the gutter, comment headings, lanes and everything
-in Components below are landing-only, scoped by the `.live-source` class on
-the landing's layout. The docs pages keep Fumadocs' own shapes for now and
-take this world in a later step.
+Scope. The dark retint of Fumadocs, the brand colours, the fonts, the
+selection and caret colours, and the search dialog and popovers apply
+site-wide (`app.css`, under `@theme`, `.dark`, `html` and the overlay
+rules). The landing is scoped by `.live-source` on its layout: the mono as
+the base face, the lanes, the live config and the install prompt. The docs
+pages are scoped by `.docs-source` on the docs layout: the same world owns
+their frame (sidebar, TOC, title, headings, code, tables), and the reading
+column stays Geist on ink. See Docs Frame under Components.
 
 **Key Characteristics:**
 
@@ -183,8 +183,9 @@ signal. Everything else is a cool blue-grey ramp drawn from the ink.
   and never as a tint, fade or overlay. It marks played lane cells, the
   playhead, the `>` marker hanging left of a live line's number, the queued
   line's 2px inset bar, the edit cursor, the "applies next cycle" chip, the
-  "signed out" note, the selection highlight, the caret, Fumadocs' focus rings, and
-  the one primary action, Get started.
+  "signed out" note, the selection highlight, the caret, Fumadocs' focus
+  rings, the one primary action, Get started, and on docs pages the TOC's
+  active segment, the reading position's playhead.
 
 ### Neutral
 
@@ -266,6 +267,12 @@ face is the mono.
   descriptions behind a dim `//`, in the mono. Feature text stops at 72ch.
 - **Lead** (Geist, 400, 1rem / 1.625; 1.125rem from 640px): the plain prose
   under a section head, in quiet grey, stopping at 62ch.
+- **Docs** (Geist Mono 600 for the frame, Geist 400 for the column): the
+  page title at 1.75rem (2.25rem from 640px, -0.04em) behind a light
+  comment-grey `//`; H2 at 1.375rem behind the same `//`; H3, mostly export
+  names, at 1.0625rem without it. Body text is Geist 16px / 1.75, and
+  paragraphs and lists stop at 36rem (about 75 characters). Sidebar and TOC
+  entries are Geist Mono at 13px.
 - **Label** (400, 0.75rem): line numbers, lane names, the time axis, the
   status line, switches, chips and footer links. Numbers are tabular. No
   text is set below 11px.
@@ -382,6 +389,38 @@ Set in the buffer's type, square, 48px tall.
 - **Navbar:** Fumadocs' home navbar, with the maker's mark, Docs and
   Reference. Solid ink on the landing, no backdrop blur.
 
+### Docs Frame
+
+Fumadocs' docs shell, kept as readers know it (sidebar tree, "On this
+page", the phone drawer and TOC bar, prev/next, search), rebuilt in this
+world's vocabulary. Scoped by `.docs-source`.
+
+- **Ground:** one ink plane. The sidebar is not a panel: no fill, a
+  hairline on its edge. The phone header and TOC bar are solid ink.
+- **Sidebar:** Geist Mono at 13px. The current page is selection: foreground
+  text with a 2px foreground rule on its left, no fill. Search, the version
+  switch and the GitHub link are square, hairline, ink.
+- **TOC:** Geist Mono at 13px under a comment-grey "On this page". The
+  headings in view turn foreground, and a 2px lime rule runs beside them as
+  you scroll: the docs' one lime element.
+- **Title and headings:** comments, as on the landing (see Typography).
+  Copy Markdown and Open are quiet square controls on a hairline.
+- **Code blocks:** set as the tour's open files. A titled block's path is a
+  tab on a hairline rail (foreground, 2px foreground underline), the copy
+  button at the rail's end, the code flat on ink and closed by a hairline.
+  Titled blocks are files, so they take the line gutter; untitled snippets
+  don't. Shell blocks take the install prompt's comment-grey `$`. Numbers
+  and prompts are left out of copies and screen readers. On phones a block
+  shows whole and scrolls only sideways.
+- **Package-manager tabs:** the landing's switch on a hairline rail.
+- **Tables and type tables:** rows between hairlines, a label-type header,
+  no fill and no outer box. Prop names are foreground, not lime.
+- **Link cards:** rows between hairlines, like the landing's setups list:
+  the name in Geist Mono 600, the description in quiet grey.
+- **Links and inline code:** links as on the landing. Inline code is Geist
+  Mono on the lane-empty fill, square, no border.
+- **Prev/next:** two square rows between hairlines, titles in the mono.
+
 ### Line Gutter (signature)
 
 Two-digit numbers in comment grey and label size, tabular, `aria-hidden` and
@@ -469,7 +508,7 @@ during the playhead's hold on that moment, and on hover over any moment cell
 
 - **Don't** tint, fade or blur lime, or place translucent chrome over it.
 - **Don't** use lime for selected tabs, toggles or link hovers.
-- **Don't** add cards, drop shadows, gradients or rounded corners to landing elements.
+- **Don't** add cards, drop shadows, gradients or rounded corners, on the landing or in the docs' frame.
 - **Don't** introduce a typeface outside the Geist family.
 - **Don't** add a light mode or a theme switch; the site is dark only.
 - **Don't** apply a queued edit mid-hour while the hour is playing.
