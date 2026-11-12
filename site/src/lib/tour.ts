@@ -30,6 +30,7 @@ const TOUR = [
 		page: "setups/tanstack-router",
 		file: "src/routes/_authenticated.tsx",
 		href: "/docs/setups/tanstack-router",
+		note: "Shown with TanStack Router. Each setup's guide has its own guard.",
 	},
 ] as const;
 
