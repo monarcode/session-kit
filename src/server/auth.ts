@@ -337,7 +337,7 @@ type ServerAuthBase<U, I> = {
 };
 
 /**
- * The server side of session-kit, from {@link createServerAuth}. It keeps the
+ * The server side of Session kit, from {@link createServerAuth}. It keeps the
  * session in an encrypted cookie. Each method takes the request's
  * {@link CookieJar}, and `forRequest(jar)` gives one request's session shaped
  * like a client ({@link RequestAuth}).
@@ -392,7 +392,7 @@ export type ServerAuth<U, I> = ServerAuthBase<U, I> &
 const DEFAULT_WITHIN = 60;
 
 /**
- * Creates the server side of session-kit ({@link ServerAuth}). It keeps both
+ * Creates the server side of Session kit ({@link ServerAuth}). It keeps both
  * tokens and the user in an encrypted, `httpOnly` cookie, so page scripts
  * never see the refresh token.
  *

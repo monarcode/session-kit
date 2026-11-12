@@ -2,6 +2,51 @@
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* One family across the site: Geist for prose, Geist Mono for code. The
+   landing page is a code buffer in the mono, with a dim grey for comments and
+   line numbers (4.6:1 on ink) and hairline rules. */
+@theme {
+	--font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono:
+		"Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--color-buffer-dim: #7f828e;
+	--color-buffer-line: #262833;
+	--color-buffer-cell: #1f2129;
+	--color-buffer-mark: #4d5160;
+	/* The syntax theme's string blue: your own code, such as the entry points
+	   and your app's sign-in call in the lanes. */
+	--color-buffer-blue: #a5d6ff;
+	/* The syntax theme's keyword red: what ends the session in the lanes. */
+	--color-buffer-red: #ff7b72;
+}
+
+/* The cursor on a queued edit. */
+@keyframes buffer-blink {
+	0%,
+	49% {
+		opacity: 1;
+	}
+	50%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* A lane tooltip settling into place. */
+@keyframes buffer-tip-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
+	}
+}
+
+/* The landing page is set in the mono; its prose opts back into the sans. */
+.live-source {
+	font-family: var(--font-mono);
+}
 
 /* The site is dark only, built on the brand's two colours: the background
    #16171d and the lime #d5f70d. Fumadocs' dark tokens are retinted to the
@@ -33,6 +78,13 @@
 	--color-fd-muted: #1d1e25;
 	--color-fd-secondary: #22232b;
 	--color-fd-muted-foreground: #9a9ca8;
+}
+
+/* The landing's navbar is solid ink: a blurred lime button behind it would
+   read as a tint of the brand colour. */
+.live-source #nd-nav > nav {
+	background-color: var(--brand-ink);
+	backdrop-filter: none;
 }
 
 html {

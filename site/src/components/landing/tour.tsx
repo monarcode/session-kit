@@ -9,72 +9,81 @@ import {
 } from "fumadocs-ui/components/tabs";
 import type { Root } from "hast";
 
+import { COLUMN, SectionHead } from "./buffer";
+
 export type TourStep = {
 	label: string;
 	file: string;
 	href: string;
-	/** A line under the code, such as which router an example uses. */
-	note?: string | undefined;
 	code: Root;
 };
 
 export function Tour({ steps }: { steps: TourStep[] }) {
 	return (
-		<section className="mx-auto w-full max-w-5xl px-4 py-16">
-			<h2 className="text-2xl font-semibold tracking-tight">
-				The whole idea in three files
-			</h2>
-			<p className="mt-2 max-w-2xl text-fd-muted-foreground">
-				A client that knows your backend, a component that reads the
-				session, and a route only signed-in users reach. Every snippet is
-				type-checked against the published package.
-			</p>
-			<Tabs className="mt-6" defaultValue={steps[0]?.label}>
-				{/* Phones: three equal columns whose labels may wrap, so no step
-				    hides off the edge of a scrolling strip. */}
-				<TabsList className="grid grid-cols-3 gap-0 px-0 sm:flex sm:gap-3.5 sm:px-4">
+		<section className={`${COLUMN} pt-20 sm:pt-28`}>
+			<SectionHead title="The whole idea in three files">
+				A client that knows your backend, a route only signed-in users
+				reach, and a page that reads the session. One TanStack Router app,
+				type-checked against the published package. Each setup's guide has
+				its own version.
+			</SectionHead>
+			{/* One surface, the code block: the tabs sit on the page, not on a card. */}
+			<Tabs
+				className="mt-8 overflow-visible rounded-none border-0 bg-transparent"
+				defaultValue={steps[0]?.label}
+			>
+				{/* The tabs are the buffer's open files. Phones: three equal columns
+				    whose names may wrap, so no file hides off the edge of a
+				    scrolling strip. */}
+				<TabsList className="grid grid-cols-3 gap-0 border-b border-buffer-line px-0 sm:flex sm:gap-6">
 					{steps.map((step) => (
 						<TabsTrigger
 							key={step.label}
 							value={step.label}
-							className="justify-center px-2 text-center whitespace-normal text-balance sm:px-0 sm:whitespace-nowrap"
+							className="justify-center px-2 text-center text-xs whitespace-normal [overflow-wrap:anywhere] data-[active]:border-fd-foreground data-[active]:text-fd-foreground sm:px-0 sm:text-sm sm:whitespace-nowrap"
 						>
-							{step.label}
+							{step.file}
 						</TabsTrigger>
 					))}
 				</TabsList>
 				{steps.map((step) => (
-					<TabsContent key={step.label} value={step.label}>
+					<TabsContent
+						key={step.label}
+						value={step.label}
+						className="rounded-none bg-transparent p-0 pt-5"
+					>
+						<p className="mb-3 text-sm text-fd-muted-foreground">
+							<span aria-hidden="true" className="text-buffer-dim">
+								{"// "}
+							</span>
+							{step.label}
+						</p>
 						{toJsx(step.code, {
 							components: {
 								pre: (props) => (
 									<CodeBlock
 										{...props}
-										title={step.file}
-										// Phones wrap long lines with a hanging indent
-										// rather than hide their ends off to the right,
-										// and show the whole file: a capped box would
-										// trap the page's scroll inside it.
-										className="my-0 sm:max-h-[28rem] max-sm:[&_[role=region]]:max-h-none max-sm:[&_.line]:ps-[calc(1rem+2ch)] max-sm:[&_.line]:-indent-[2ch] max-sm:[&_pre]:w-full max-sm:[&_pre]:whitespace-pre-wrap max-sm:[&_pre]:break-words"
+										// Flat on the page, with no title bar: the tab
+										// already names the file. Phones wrap long lines
+										// with a hanging indent rather than hide their
+										// ends off to the right.
+										className="my-0 rounded-none border-buffer-line bg-transparent max-sm:[&_.line]:ps-[calc(1rem+2ch)] max-sm:[&_.line]:-indent-[2ch] max-sm:[&_pre]:w-full max-sm:[&_pre]:whitespace-pre-wrap max-sm:[&_pre]:break-words"
+										// Every file shows whole: the longest fits under
+										// Fumadocs' own cap, and on phones a capped box
+										// would trap the page's scroll.
+										viewportProps={{ className: "max-sm:max-h-none" }}
 									>
 										<Pre>{props.children}</Pre>
 									</CodeBlock>
 								),
 							},
 						})}
-						<div className="mt-3 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-sm">
-							<Link
-								to={step.href}
-								className="font-medium text-fd-primary hover:underline"
-							>
-								Read the walkthrough →
-							</Link>
-							{step.note && (
-								<span className="text-fd-muted-foreground">
-									{step.note}
-								</span>
-							)}
-						</div>
+						<Link
+							to={step.href}
+							className="mt-3 inline-block text-sm underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
+						>
+							Read the walkthrough
+						</Link>
 					</TabsContent>
 				))}
 			</Tabs>

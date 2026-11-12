@@ -38,7 +38,7 @@ export const Route = createFileRoute("/docs/$")({
 	head: ({ loaderData }) => ({
 		meta: loaderData
 			? [
-					{ title: `${loaderData.title} | session-kit` },
+					{ title: `${loaderData.title} | Session kit` },
 					{ name: "description", content: loaderData.description },
 					// Older lines stay out of search engines, which send readers
 					// to the current docs instead.
@@ -96,7 +96,7 @@ function Content({
 		<DocsPage toc={toc}>
 			{older && (
 				<Callout type="warn" className="mt-0">
-					These docs are for session-kit {older.version}. The latest is{" "}
+					These docs are for Session kit {older.version}. The latest is{" "}
 					{latest.title}:{" "}
 					<Link to={older.latestUrl} className="font-medium underline">
 						read this page there

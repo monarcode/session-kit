@@ -10,7 +10,7 @@ export function Mark(props: ComponentProps<"svg">) {
 			viewBox="70 0 249 447"
 			fill="none"
 			role="img"
-			aria-label="session-kit"
+			aria-label="Session kit"
 			{...props}
 		>
 			<path
@@ -26,7 +26,7 @@ export function Mark(props: ComponentProps<"svg">) {
 }
 
 /**
- * The session-kit wordmark, from `assets/Session-kit-logo.svg`. The brace
+ * The Session kit wordmark, from `assets/Session-kit-logo.svg`. The brace
  * and dot stay lime; the name takes the text colour, so it reads in light
  * and dark mode.
  */
@@ -36,7 +36,7 @@ export function Logo(props: ComponentProps<"svg">) {
 			viewBox="70 54 3259 448"
 			fill="none"
 			role="img"
-			aria-label="session-kit"
+			aria-label="Session kit"
 			{...props}
 		>
 			<path

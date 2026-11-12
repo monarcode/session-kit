@@ -8,7 +8,7 @@ export const Route = createFileRoute("/llms.txt")({
 			GET: () =>
 				new Response(
 					[
-						"# session-kit",
+						"# Session kit",
 						"",
 						"> Schema-driven auth state and sessions for React.",
 						"",

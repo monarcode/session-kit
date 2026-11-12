@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
+import { COLUMN, SectionHead } from "./buffer";
+
 const FEATURES = [
 	[
 		"Schema-driven users",
@@ -29,34 +31,49 @@ const FEATURES = [
 
 export function Features() {
 	return (
-		<section className="mx-auto w-full max-w-5xl px-4 py-16">
-			<h2 className="text-2xl font-semibold tracking-tight">What you get</h2>
-			<div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+		<section className={`${COLUMN} pt-20 sm:pt-28`}>
+			<SectionHead title="What you get" />
+			<dl className="mt-8 border-t border-buffer-line">
 				{FEATURES.map(([title, text]) => (
-					<div key={title}>
-						<h3 className="font-medium">{title}</h3>
-						<p className="mt-1 text-sm text-pretty text-fd-muted-foreground">
+					<div
+						key={title}
+						className="grid gap-x-6 gap-y-1 border-b border-buffer-line py-4 sm:grid-cols-[16rem_1fr] sm:px-2"
+					>
+						<dt className="font-semibold">{title}</dt>
+						<dd className="max-w-[72ch] text-sm leading-relaxed text-pretty text-fd-muted-foreground">
+							<span aria-hidden="true" className="text-buffer-dim">
+								{"// "}
+							</span>
 							{text}
-						</p>
+						</dd>
 					</div>
 				))}
-			</div>
-			<div className="mt-12 rounded-xl border border-fd-border bg-fd-card p-6">
-				<h3 className="font-medium">What it doesn't do</h3>
-				<p className="mt-1 text-sm text-pretty text-fd-muted-foreground">
-					session-kit never signs users in. It has no sign-in form, OAuth
+			</dl>
+			{/* Set as a block comment: a note on the code above, not a callout. */}
+			<aside className="mt-12 max-w-[72ch] text-sm leading-relaxed text-fd-muted-foreground">
+				<p aria-hidden="true" className="text-buffer-dim">
+					/*
+				</p>
+				<h3 className="ps-[3ch] font-semibold text-fd-foreground">
+					What it doesn't do
+				</h3>
+				<p className="mt-1 ps-[3ch] text-pretty">
+					Session kit never signs users in. It has no sign-in form, OAuth
 					flow or user database: it starts where your backend's sign-in
 					response ends.{" "}
 					<Link
 						to="/docs/$"
 						params={{ _splat: "" }}
 						hash="what-it-doesnt-do"
-						className="font-medium text-fd-primary hover:underline"
+						className="text-fd-foreground underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
 					>
 						Is it for you?
 					</Link>
 				</p>
-			</div>
+				<p aria-hidden="true" className="ps-[1ch] text-buffer-dim">
+					*/
+				</p>
+			</aside>
 		</section>
 	);
 }

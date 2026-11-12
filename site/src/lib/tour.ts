@@ -4,13 +4,15 @@ import { join } from "node:path";
 import { createServerFn } from "@tanstack/react-start";
 import { staticFunctionMiddleware } from "@tanstack/start-static-server-functions";
 import { highlightHast } from "fumadocs-core/highlight";
+import type { Element, ElementContent } from "hast";
 
 import { codeThemes } from "@/lib/shared";
 
 /**
- * The landing page's code tour. Each step shows an example from a docs page,
- * read from the page when the site is built, so it's the code `check-docs`
- * compiles and can't drift from the guides.
+ * The landing page's code tour: one app, the TanStack Router setup, which
+ * builds on Getting started's client. Each step shows an example from a docs
+ * page, read from the page when the site is built, so it's the code
+ * `check-docs` compiles and can't drift from the guides.
  */
 const TOUR = [
 	{
@@ -20,17 +22,16 @@ const TOUR = [
 		href: "/docs/getting-started#2-create-the-client",
 	},
 	{
-		label: "Read the session",
-		page: "getting-started",
-		file: "src/app.tsx",
-		href: "/docs/getting-started#4-read-the-session-in-react",
-	},
-	{
-		label: "Guard a route",
+		label: "Guard private routes",
 		page: "setups/tanstack-router",
 		file: "src/routes/_authenticated.tsx",
-		href: "/docs/setups/tanstack-router",
-		note: "Shown with TanStack Router. Each setup's guide has its own guard.",
+		href: "/docs/setups/tanstack-router#4-guard-private-routes",
+	},
+	{
+		label: "Read the session in a guarded page",
+		page: "setups/tanstack-router",
+		file: "src/routes/_authenticated/index.tsx",
+		href: "/docs/setups/tanstack-router#4-guard-private-routes",
 	},
 ] as const;
 
@@ -50,15 +51,76 @@ async function readExample(page: string, file: string): Promise<string> {
 	return fence[2]!;
 }
 
-export const loadTour = createServerFn({ method: "GET" })
+/**
+ * The hero's excerpt of Getting started's `src/auth.ts`: the package import
+ * and the `createAuth` call, without the option comments except the one on
+ * `refresh`, which the hero lets a visitor comment out.
+ */
+function configExcerpt(code: string): string {
+	const lines = code.split("\n");
+	const start = lines.findIndex((line) => line.includes("= createAuth({"));
+	const end = lines.findIndex((line, i) => i > start && line === "});");
+	const imported = lines.find((line) =>
+		line.endsWith('from "@monarcode/session-kit";'),
+	);
+	if (start < 0 || end < 0 || !imported) {
+		throw new Error("src/auth.ts no longer has the createAuth call");
+	}
+	const body = lines
+		.slice(start, end + 1)
+		.filter(
+			(line, i, all) =>
+				!line.trimStart().startsWith("//") ||
+				all[i + 1]?.trimStart().startsWith("refresh:"),
+		);
+	return [imported, "", ...body].join("\n");
+}
+
+/** The line elements of a highlighted block, without the newlines between. */
+function lineElements(root: Awaited<ReturnType<typeof highlightHast>>) {
+	const pre = root.children.find(
+		(node): node is Element => node.type === "element",
+	);
+	const code = pre?.children.find(
+		(node): node is Element => node.type === "element",
+	);
+	return (code?.children ?? []).filter(
+		(node): node is Element => node.type === "element",
+	);
+}
+
+function textOf(node: ElementContent): string {
+	if (node.type === "text") return node.value;
+	if (node.type === "element") return node.children.map(textOf).join("");
+	return "";
+}
+
+export type ConfigLine = { text: string; code: Element };
+
+export const loadLanding = createServerFn({ method: "GET" })
 	.middleware([staticFunctionMiddleware])
-	.handler(() =>
-		Promise.all(
+	.handler(async () => {
+		const steps = await Promise.all(
 			TOUR.map(async (step) => {
 				const code = await readExample(step.page, step.file);
 				const lang = step.file.endsWith(".tsx") ? "tsx" : "ts";
 				const hast = await highlightHast(code, { lang, ...codeThemes });
 				return { ...step, code: hast };
 			}),
-		),
-	);
+		);
+		const auth = await readExample("getting-started", "src/auth.ts");
+		const highlighted = await highlightHast(configExcerpt(auth), {
+			lang: "ts",
+			...codeThemes,
+		});
+		const config: ConfigLine[] = lineElements(highlighted).map((code) => ({
+			text: textOf(code),
+			code,
+		}));
+		if (
+			!config.some((line) => line.text.trimStart().startsWith("refresh:"))
+		) {
+			throw new Error("The config excerpt has no refresh line");
+		}
+		return { steps, config };
+	});

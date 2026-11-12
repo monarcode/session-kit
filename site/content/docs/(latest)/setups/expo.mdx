@@ -417,7 +417,7 @@ the URL, and an app restart forgets it.
 
 ## Debugging
 
-Turn on the client's `debug` option to see what session-kit does in Metro's
+Turn on the client's `debug` option to see what Session kit does in Metro's
 logs: restores, refreshes and why they ran, timers, storage operations, state
 changes, and why a session ended.
 
@@ -450,7 +450,7 @@ Expo side.
 
 Keep a random key in a SecureStore item that needs biometrics to read, and
 seal the tokens with AES-GCM. This example uses `@noble/ciphers` and
-`expo-crypto`, your app's dependencies, not session-kit's:
+`expo-crypto`, your app's dependencies, not Session kit's:
 
 ```ts title="src/session-key.ts"
 import { Platform } from "react-native";
@@ -683,7 +683,7 @@ re-checks nothing on a return to the foreground, and requests through
   biometric prompt: a session that refreshes on its own can't ask for a face
   or fingerprint on every read and write. Keep a key behind the prompt
   instead, and seal the session with it: see [Locking](#locking).
-- **Network status.** session-kit doesn't watch connectivity. When your app
+- **Network status.** Session kit doesn't watch connectivity. When your app
   learns the device is back online, for example from
   `@react-native-community/netinfo`, call `auth.retry()`, or the `retry` that
   `unavailable` receives.

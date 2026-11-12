@@ -41,7 +41,7 @@ pnpm add @monarcode/effetch-query @effect/atom-react
 
 This is the backend from [Getting started](/docs/getting-started#1-talk-to-your-backend),
 written with Effect: an Effect Schema describes the user, and the refresh is an
-effetch call. Nothing in this file creates a session-kit client, so the
+effetch call. Nothing in this file creates a Session kit client, so the
 [server](#on-the-server) can import it too.
 
 ```ts title="src/backend.ts"
@@ -61,7 +61,7 @@ export const SessionUser = Schema.Struct({
   firstName: Schema.String,
 });
 
-/** The user, as session-kit's `user` option takes it. */
+/** The user, as Session kit's `user` option takes it. */
 export const userSchema = Schema.toStandardSchemaV1(SessionUser);
 
 export const SessionTokens = Schema.Struct({

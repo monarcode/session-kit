@@ -53,7 +53,7 @@ export type AuthErrorCode =
 	/** `locking.open` failed, so the session stays locked. */
 	| "UNLOCK_FAILED"
 	/**
-	 * An option or argument session-kit can't use, or a method called without
+	 * An option or argument Session kit can't use, or a method called without
 	 * the option it needs.
 	 */
 	| "INVALID_OPTIONS";
@@ -84,7 +84,7 @@ export type AuthErrorOptions = ErrorOptions & {
 };
 
 /**
- * The error session-kit throws, rejects with, or shows in `state.error`.
+ * The error Session kit throws, rejects with, or shows in `state.error`.
  *
  * `code` says what went wrong ({@link AuthErrorCode}). `cause` holds what
  * failed underneath, such as your refresh callback's error, and `issues`

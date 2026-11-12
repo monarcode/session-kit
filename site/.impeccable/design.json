@@ -1,0 +1,538 @@
+{
+	"schemaVersion": 2,
+	"generatedAt": "2026-11-12T00:00:00Z",
+	"title": "Design System: Session kit docs",
+	"extensions": {
+		"colorMeta": {
+			"lime": {
+				"role": "primary",
+				"displayName": "Signal Lime",
+				"canonical": "#D5F70D",
+				"tonalRamp": [
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D",
+					"#D5F70D"
+				],
+				"note": "No ramp by rule: lime is used at its exact value only, never tinted."
+			},
+			"ink": {
+				"role": "neutral",
+				"displayName": "Buffer Ink",
+				"canonical": "#16171D",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "Brand background; --brand-ink, --color-fd-background. Site-wide."
+			},
+			"foreground": {
+				"role": "neutral",
+				"displayName": "Paper White",
+				"canonical": "#e8e9ee",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-foreground. Site-wide."
+			},
+			"muted-foreground": {
+				"role": "neutral",
+				"displayName": "Quiet Grey",
+				"canonical": "#9a9ca8",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-muted-foreground. Site-wide."
+			},
+			"comment-dim": {
+				"role": "neutral",
+				"displayName": "Comment Grey",
+				"canonical": "#7f828e",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-buffer-dim. 4.6:1 on ink."
+			},
+			"hairline": {
+				"role": "neutral",
+				"displayName": "Hairline",
+				"canonical": "#262833",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-buffer-line."
+			},
+			"border-veil": {
+				"role": "neutral",
+				"displayName": "Border Veil",
+				"canonical": "hsla(230, 12%, 60%, 0.16)",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-border. Site-wide."
+			},
+			"accent-veil": {
+				"role": "neutral",
+				"displayName": "Accent Veil",
+				"canonical": "hsla(230, 12%, 50%, 0.22)",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-accent; hover fill. Site-wide."
+			},
+			"surface-muted": {
+				"role": "neutral",
+				"displayName": "Muted Surface",
+				"canonical": "#1d1e25",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-muted. Site-wide."
+			},
+			"surface-popover": {
+				"role": "neutral",
+				"displayName": "Popover Surface",
+				"canonical": "#1b1c23",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-popover. Site-wide."
+			},
+			"surface-card": {
+				"role": "neutral",
+				"displayName": "Card Surface",
+				"canonical": "#1c1d24",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-card. Site-wide."
+			},
+			"surface-secondary": {
+				"role": "neutral",
+				"displayName": "Secondary Surface",
+				"canonical": "#22232b",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-fd-secondary. Site-wide."
+			},
+			"lane-empty": {
+				"role": "neutral",
+				"displayName": "Empty Minute",
+				"canonical": "#1f2129",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-buffer-cell."
+			},
+			"lane-unplayed": {
+				"role": "neutral",
+				"displayName": "Unplayed Bar",
+				"canonical": "#2b2d37",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "Inline value in live-config.tsx."
+			},
+			"lane-mark": {
+				"role": "neutral",
+				"displayName": "Moment Ahead",
+				"canonical": "#4d5160",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "--color-buffer-mark."
+			},
+			"lane-played": {
+				"role": "neutral",
+				"displayName": "Moment Passed",
+				"canonical": "#c9cbd4",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "Inline value in live-config.tsx."
+			},
+			"scrollbar-thumb": {
+				"role": "neutral",
+				"displayName": "Scrollbar Thumb",
+				"canonical": "#3a3c48",
+				"tonalRamp": [
+					"#16171d",
+					"#1f2129",
+					"#262833",
+					"#3a3c48",
+					"#4d5160",
+					"#7f828e",
+					"#9a9ca8",
+					"#e8e9ee"
+				],
+				"note": "Inline value on html. Site-wide."
+			},
+			"code-string": {
+				"role": "tertiary",
+				"displayName": "Code String Blue",
+				"canonical": "#a5d6ff",
+				"tonalRamp": [
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff",
+					"#a5d6ff"
+				],
+				"note": "The syntax theme's string blue, as the --color-buffer-blue token: your own code. Entry-point specifiers in the setups list, and your app's sign-in call to its backend in the lanes, before Session kit takes over at 09:00."
+			},
+			"buffer-red": {
+				"role": "tertiary",
+				"displayName": "Keyword Red",
+				"canonical": "#ff7b72",
+				"note": "The syntax theme's keyword red, as the --color-buffer-red token: what ends the session in the lanes (a rejected refresh, the cleared storage, the route guard's redirect)."
+			}
+		},
+		"typographyMeta": {
+			"display-quiet": {
+				"displayName": "Display, quiet line",
+				"purpose": "H1 line 01: light, quiet grey."
+			},
+			"display": {
+				"displayName": "Display, loud line",
+				"purpose": "H1 line 02: bold, foreground."
+			},
+			"headline": {
+				"displayName": "Headline",
+				"purpose": "Section heads as comments; 1.5rem below 640px."
+			},
+			"code": {
+				"displayName": "Code",
+				"purpose": "The hero's config lines; 13px / 1.8 below 640px."
+			},
+			"title": {
+				"displayName": "Title",
+				"purpose": "Name column of list rows and the aside heading."
+			},
+			"body": {
+				"displayName": "Body",
+				"purpose": "Leads and descriptions behind a dim //; 1rem for leads from 640px."
+			},
+			"label": {
+				"displayName": "Label",
+				"purpose": "Line numbers, lanes, axis, status line, switches, chips, footer."
+			}
+		},
+		"shadows": [
+			{
+				"name": "pressed-underline",
+				"value": "inset 0 -2px 0 var(--color-fd-foreground)",
+				"purpose": "Drawn rule under the pressed package manager. Not elevation."
+			},
+			{
+				"name": "queued-bar",
+				"value": "inset 2px 0 0 var(--brand-lime)",
+				"purpose": "Lime bar on the left of a line whose edit is queued. Not elevation."
+			}
+		],
+		"motion": [
+			{
+				"name": "buffer-blink",
+				"value": "buffer-blink 1s linear infinite (stepped: visible 0-49%, hidden 50-100%)",
+				"purpose": "The edit cursor on a queued line; motion-safe only."
+			},
+			{
+				"name": "lane-cell",
+				"value": "background-color 200ms",
+				"purpose": "Cells settling as the playhead passes."
+			},
+			{
+				"name": "hour-minute",
+				"value": "140ms",
+				"purpose": "Real time per minute of the 62-minute illustrative hour."
+			},
+			{
+				"name": "hour-rest",
+				"value": "8 minutes (1120ms)",
+				"purpose": "Rest between cycles; queued edits land at this boundary."
+			},
+			{
+				"name": "copied-reset",
+				"value": "1600ms",
+				"purpose": "How long the copy button reads 'copied'."
+			},
+			{
+				"name": "reduced-motion",
+				"value": "prefers-reduced-motion: reduce",
+				"purpose": "Show the complete hour, still; hide the playhead; hold the cursor. Off-screen also pauses."
+			}
+		],
+		"breakpoints": [
+			{
+				"name": "sm",
+				"value": "640px"
+			}
+		],
+		"scope": {
+			"siteWide": [
+				"Dark-only Fumadocs retint (.dark)",
+				"Brand colours --brand-lime and --brand-ink",
+				"Geist and Geist Mono imports, set as --font-sans and --font-mono",
+				"Selection, caret and scrollbar colours"
+			],
+			"landingOnly": [
+				".live-source face (Geist Mono as the base face)",
+				"Line gutter, comment headings, lanes, live config, install prompt",
+				"Solid ink navbar"
+			],
+			"pending": "Docs pages take this world's shapes later; their prose already reads in Geist."
+		}
+	},
+	"components": [
+		{
+			"name": "Primary Button",
+			"kind": "button",
+			"refersTo": "button-primary",
+			"description": "Get started: the one lime action on the page.",
+			"html": "<a class=\"ds-btn-primary\" href=\"#\">Get started</a>",
+			"css": ".ds-btn-primary { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: inline-flex; align-items: center; height: 48px; padding: 0 24px; background: var(--brand-lime, #d5f70d); color: var(--brand-ink, #16171d); font-size: 14px; font-weight: 700; text-decoration: none; border-radius: 0; text-decoration-thickness: 2px; text-underline-offset: 4px; } .ds-btn-primary:hover { text-decoration-line: underline; } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-fd-foreground, #e8e9ee); outline-offset: 2px; }"
+		},
+		{
+			"name": "Secondary Button",
+			"kind": "button",
+			"refersTo": "button-secondary",
+			"description": "GitHub: hairline outline, veil fill on hover.",
+			"html": "<a class=\"ds-btn-secondary\" href=\"#\">GitHub</a>",
+			"css": ".ds-btn-secondary { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: inline-flex; align-items: center; height: 48px; padding: 0 20px; background: var(--brand-ink, #16171d); color: var(--color-fd-foreground, #e8e9ee); border: 1px solid var(--color-buffer-line, #262833); font-size: 14px; text-decoration: none; border-radius: 0; transition: background-color 150ms; } .ds-btn-secondary:hover { background: var(--color-fd-accent, hsla(230, 12%, 50%, 0.22)); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--color-fd-foreground, #e8e9ee); outline-offset: 2px; }"
+		},
+		{
+			"name": "Install Prompt",
+			"kind": "input",
+			"refersTo": "install-field",
+			"description": "Package-manager switch over a read-only command line with copy.",
+			"html": "<div class=\"ds-install\"><div class=\"ds-install-switch\" role=\"group\" aria-label=\"Package manager\"><button aria-pressed=\"true\">npm</button><button aria-pressed=\"false\">pnpm</button><button aria-pressed=\"false\">yarn</button><button aria-pressed=\"false\">bun</button></div><div class=\"ds-install-field\"><span class=\"ds-install-prompt\" aria-hidden=\"true\">$</span><code>npm install @monarcode/session-kit</code><button class=\"ds-install-copy\">copy</button></div></div>",
+			"css": ".ds-install { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); background: var(--brand-ink, #16171d); color: var(--color-fd-foreground, #e8e9ee); max-width: 28rem; } .ds-install-switch { display: flex; gap: 16px; font-size: 12px; } .ds-install-switch button { font: inherit; background: none; border: 0; padding: 4px 0; color: var(--color-buffer-dim, #7f828e); cursor: pointer; transition: color 150ms; } .ds-install-switch button:hover, .ds-install-switch button[aria-pressed=true] { color: var(--color-fd-foreground, #e8e9ee); } .ds-install-switch button[aria-pressed=true] { box-shadow: inset 0 -2px 0 var(--color-fd-foreground, #e8e9ee); } .ds-install-field { margin-top: 8px; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 6px 6px 16px; border: 1px solid var(--color-buffer-line, #262833); font-size: 14px; } .ds-install-prompt { color: var(--color-buffer-dim, #7f828e); } .ds-install-field code { flex: 1; font: inherit; } .ds-install-copy { font: inherit; font-size: 12px; height: 36px; padding: 0 12px; background: none; border: 0; color: var(--color-fd-muted-foreground, #9a9ca8); cursor: pointer; transition: background-color 150ms, color 150ms; } .ds-install-copy:hover { background: var(--color-fd-accent, hsla(230, 12%, 50%, 0.22)); color: var(--color-fd-foreground, #e8e9ee); }"
+		},
+		{
+			"name": "File Tabs",
+			"kind": "nav",
+			"refersTo": "switch-tab",
+			"description": "Tour tabs as file names on a hairline rail; active is foreground, never lime.",
+			"html": "<div class=\"ds-tabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\">auth.ts</button><button role=\"tab\" aria-selected=\"false\">account.tsx</button><button role=\"tab\" aria-selected=\"false\">routes/dashboard.tsx</button></div>",
+			"css": ".ds-tabs { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: flex; gap: 24px; border-bottom: 1px solid var(--color-buffer-line, #262833); background: var(--brand-ink, #16171d); } .ds-tabs button { font: inherit; font-size: 14px; background: none; border: 0; border-bottom: 1px solid transparent; padding: 8px 0; color: var(--color-fd-muted-foreground, #9a9ca8); cursor: pointer; transition: color 150ms; } .ds-tabs button:hover { color: var(--color-fd-foreground, #e8e9ee); } .ds-tabs button[aria-selected=true] { color: var(--color-fd-foreground, #e8e9ee); border-bottom-color: var(--color-fd-foreground, #e8e9ee); }"
+		},
+		{
+			"name": "Queued Chip",
+			"kind": "chip",
+			"refersTo": "chip-queued",
+			"description": "Shown only while an edit waits for the next cycle.",
+			"html": "<span class=\"ds-chip-idle\">click to comment out</span> <span class=\"ds-chip-queued\">applies next cycle</span>",
+			"css": ".ds-chip-idle, .ds-chip-queued { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); font-size: 12px; padding: 0 8px; border-radius: 0; } .ds-chip-idle { color: var(--color-buffer-dim, #7f828e); } .ds-chip-queued { background: var(--brand-lime, #d5f70d); color: var(--brand-ink, #16171d); }"
+		},
+		{
+			"name": "Live Config Line",
+			"kind": "custom",
+			"refersTo": "gutter-number",
+			"description": "Gutter number with a hanging lime > marker; queued state shows the inset bar and blinking cursor.",
+			"html": "<div class=\"ds-line\"><span class=\"ds-gutter\" aria-hidden=\"true\"><span class=\"ds-live\">&gt;</span>12</span><button class=\"ds-line-btn is-queued\"><code>  refresh: refreshToken<span class=\"ds-cursor\" aria-hidden=\"true\"></span></code></button></div>",
+			"css": ".ds-line { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: flex; align-items: baseline; font-size: 15px; line-height: 1.7; color: var(--color-fd-foreground, #e8e9ee); background: var(--brand-ink, #16171d); padding-left: 16px; } .ds-gutter { position: relative; width: 48px; flex-shrink: 0; font-size: 12px; color: var(--color-buffer-dim, #7f828e); font-variant-numeric: tabular-nums; user-select: none; } .ds-live { position: absolute; right: 100%; padding-right: 1px; color: var(--brand-lime, #d5f70d); } .ds-line-btn { font: inherit; color: inherit; text-align: start; flex: 1; margin-left: -8px; padding-left: 8px; background: none; border: 0; cursor: pointer; transition: background-color 150ms; } .ds-line-btn:hover, .ds-line-btn.is-queued { background: color-mix(in srgb, var(--color-fd-accent, hsla(230, 12%, 50%, 0.22)) 40%, transparent); } .ds-line-btn.is-queued { box-shadow: inset 2px 0 0 var(--brand-lime, #d5f70d); } .ds-line-btn code { font: inherit; white-space: pre; } .ds-cursor { display: inline-block; margin-left: 4px; width: 0.6ch; height: 1.05em; vertical-align: -0.15em; background: var(--brand-lime, #d5f70d); } @media (prefers-reduced-motion: no-preference) { .ds-cursor { animation: ds-blink 1s linear infinite; } } @keyframes ds-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }"
+		},
+		{
+			"name": "Session Lane",
+			"kind": "custom",
+			"refersTo": "lane-cell",
+			"description": "A lane of minute cells: played bar cells lime, a passed moment grey, a moment ahead darker.",
+			"html": "<div class=\"ds-lane\"><span class=\"ds-lane-name\">refresh</span><div class=\"ds-cells\"><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-past\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-now\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-ahead\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span></div></div><div class=\"ds-lane\"><span class=\"ds-lane-name\">signed in</span><div class=\"ds-cells\"><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span></div></div>",
+			"css": ".ds-lane { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: grid; grid-template-columns: 8rem 1fr; gap: 12px; align-items: center; padding: 4px 0; background: var(--brand-ink, #16171d); } .ds-lane-name { font-size: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 20px; } .ds-c, .ds-b { border-radius: 1px; transition: background-color 200ms; background: var(--color-buffer-cell, #1f2129); } .ds-b { height: 8px; align-self: center; } .ds-b-on { background: var(--brand-lime, #d5f70d); } .ds-b-off { background: #2b2d37; } .ds-hit-now { background: var(--brand-lime, #d5f70d); } .ds-hit-past { background: #c9cbd4; } .ds-hit-ahead { background: var(--color-buffer-mark, #4d5160); } .ds-call { height: 8px; align-self: center; border-radius: 1px; background: var(--color-buffer-blue, #a5d6ff); } .ds-end { border-radius: 1px; background: var(--color-buffer-red, #ff7b72); }"
+		},
+		{
+			"name": "Comment Section Head",
+			"kind": "custom",
+			"description": "Section headline as a comment, narrow width, with a lead line.",
+			"html": "<header class=\"ds-head\"><h2><span aria-hidden=\"true\">// </span>What you get</h2><p><span aria-hidden=\"true\">// </span>Every snippet is type-checked against the published package.</p></header>",
+			"css": ".ds-head { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); background: var(--brand-ink, #16171d); color: var(--color-fd-foreground, #e8e9ee); } .ds-head h2 { margin: 0; font-size: 1.875rem; line-height: 1.2; font-weight: 600; letter-spacing: -0.025em; } .ds-head span { color: var(--color-buffer-dim, #7f828e); font-weight: 300; } .ds-head p { font-family: var(--font-sans, 'Geist Variable', ui-sans-serif, sans-serif); margin: 12px 0 0; max-width: 62ch; font-size: 18px; line-height: 1.625; color: var(--color-fd-muted-foreground, #9a9ca8); }"
+		},
+		{
+			"name": "Inline Link",
+			"kind": "custom",
+			"description": "Foreground text, comment-grey underline; hover changes only the underline colour.",
+			"html": "<p class=\"ds-p\">It starts where your backend's sign-in ends. <a class=\"ds-link\" href=\"#\">Is it for you?</a></p>",
+			"css": ".ds-p { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); font-size: 14px; line-height: 1.625; color: var(--color-fd-muted-foreground, #9a9ca8); background: var(--brand-ink, #16171d); } .ds-link { color: var(--color-fd-foreground, #e8e9ee); text-decoration: underline; text-decoration-color: var(--color-buffer-dim, #7f828e); text-underline-offset: 4px; transition: text-decoration-color 150ms; } .ds-link:hover { text-decoration-color: var(--color-fd-foreground, #e8e9ee); }"
+		},
+		{
+			"name": "Lane Tooltip",
+			"kind": "tooltip",
+			"refersTo": "lane-tooltip",
+			"description": "What a lit moment in the lanes was, opening below the lowest lane it lit: shown during the playhead's hold and on hover.",
+			"html": "<div class=\"ds-tip\"><p class=\"ds-tip-time\">09:14</p><p><span>refresh</span><span>New tokens, a minute before access expired.</span></p><p><span>storage</span><span>The new tokens are saved.</span></p></div>",
+			"css": ".ds-tip { position: relative; z-index: 10; font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); width: min(27rem, 100%); padding: 8px 12px; font-size: 12px; line-height: 1.625; background: var(--color-fd-popover, #1b1c23); border: 1px solid var(--color-buffer-line, #262833); border-radius: 0; } .ds-tip p { margin: 0; display: flex; gap: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-tip span:first-child { width: 12ch; flex-shrink: 0; color: var(--color-buffer-dim, #7f828e); } .ds-tip-time { color: var(--color-fd-foreground, #e8e9ee); font-variant-numeric: tabular-nums; } @media (prefers-reduced-motion: no-preference) { .ds-tip { position: relative; z-index: 10; animation: ds-tip-in 160ms ease-out; } } @keyframes ds-tip-in { from { opacity: 0; transform: translateY(2px); } }"
+		}
+	],
+	"narrative": {
+		"northStar": "Live Source",
+		"overview": "**Creative North Star: \"Live Source\"**\n\nThe page is a code buffer at stage scale. The buffer is set in Geist Mono, numbered down a line-number gutter, and divided by hairline rules; only the plain-prose leads under section heads switch to Geist, the family's sans. Headings are comments, with a dim `//` in front. Copy is comments. The hero is the buffer's first thirteen lines: the pitch, a lead comment, the install prompt, then the real `createAuth` config from Getting started, whose `refresh` line is live. Under it, one illustrative hour plays as four lanes of 62 cells (signed in, refresh, storage, other tabs).\n\nThe surface is ink, flat, dark only. Lime is the one colour with a voice, and it speaks only for what is live or playing, plus the single primary action. Nothing is carded, lifted or blurred. Controls are set in the buffer's type; tabs are file names; lists are rows between hairlines. The density is a code editor's: tight lines, generous section breaks.\n\nScope today. The dark retint of Fumadocs, the brand colours, the font import and the selection and caret colours apply site-wide (`app.css`, under `.dark` and `html`). The buffer face, the gutter, comment headings, lanes and everything in Components below are landing-only, scoped by the `.live-source` class on the landing's layout. The docs pages still use Fumadocs' own type and shapes; they take this world in a later step, with a proportional companion face for prose that is not chosen yet.",
+		"keyCharacteristics": [
+			"One family: Geist Mono for the buffer, Geist (sans) for prose leads and the docs.",
+			"Line numbers only on code; prose, numbers and lane names share one left edge.",
+			"Comments as copy: `//` lead-ins and a `/* … */` block for asides.",
+			"Hairline rules instead of boxes; square corners throughout.",
+			"Lime only for live state and the one primary action; foreground for selection.",
+			"Motion that plays an hour, pauses off screen, and stands still under reduced motion."
+		],
+		"rules": [
+			{
+				"name": "The Live Lime Rule",
+				"body": "Lime marks only what is live or playing, and the one primary action. Selected tabs, pressed switches and hovered links never turn lime: they turn foreground.",
+				"section": "colors"
+			},
+			{
+				"name": "The Exact Lime Rule",
+				"body": "Lime is used at its full value or not at all. No opacity, no tint, no lime behind a blur. That is why the landing navbar is solid ink.",
+				"section": "colors"
+			},
+			{
+				"name": "The Readable Pairing Rule",
+				"body": "Every text pairing on ink keeps at least 4.5:1. Comment grey is the floor for text; the lane greys are for cells, not words.",
+				"section": "colors"
+			},
+			{
+				"name": "The One Family Rule",
+				"body": "The site uses Geist and Geist Mono and nothing else. On the landing the mono is the voice; the sans is for running prose only. Hierarchy comes from weight, size and the quiet/loud colour pair."
+			},
+			{
+				"name": "The Comment Voice Rule",
+				"body": "Headings and copy are written as comments: a comment-grey `//` (hidden from screen readers) in front of a sentence-case line. Asides use a `/* … */` block. No uppercase labels.",
+				"section": "typography"
+			},
+			{
+				"name": "The Flat Buffer Rule",
+				"body": "Nothing on the page lifts off the ink. A surface that needs separating gets a hairline; a state that needs showing gets a veil, a foreground underline or, if it is live, lime.",
+				"section": "elevation"
+			}
+		],
+		"dos": [
+			"Do set the landing in Geist Mono, and only running prose (section leads, docs text) in Geist.",
+			"Do write headings and copy as comments, with a comment-grey `//` hidden from screen readers.",
+			"Do number only code; set prose at the column edge, level with the line numbers.",
+			"Do separate content with 1px hairlines and full-width rows, not boxes.",
+			"Do use lime at its exact value, only for live or playing state and the one primary action.",
+			"Do show selection (active tab, pressed switch) in foreground with a 2px foreground underline.",
+			"Do keep every text pairing at 4.5:1 or better and every label at 11px or larger.",
+			"Do give every animation a still, complete state for reduced motion, and stop it off screen."
+		],
+		"donts": [
+			"Don't tint, fade or blur lime, or place translucent chrome over it.",
+			"Don't use lime for selected tabs, toggles or link hovers.",
+			"Don't add cards, drop shadows, gradients or rounded corners to landing elements.",
+			"Don't introduce a typeface outside the Geist family.",
+			"Don't add a light mode or a theme switch; the site is dark only.",
+			"Don't apply a queued edit mid-hour while the hour is playing."
+		]
+	}
+}

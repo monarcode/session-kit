@@ -13,7 +13,7 @@ Guide: [Server sessions](/docs/server-rendering/server-sessions).
 
 ### createServerAuth
 
-Creates the server side of session-kit ([`ServerAuth`](#serverauth)). It keeps both tokens and the user in an encrypted, `httpOnly` cookie, so page scripts never see the refresh token.
+Creates the server side of Session kit ([`ServerAuth`](#serverauth)). It keeps both tokens and the user in an encrypted, `httpOnly` cookie, so page scripts never see the refresh token.
 
 ## Types
 
@@ -51,7 +51,7 @@ One request's session, shaped like a client. Get it from `serverAuth.forRequest(
 
 ### ServerAuth
 
-The server side of session-kit, from [`createServerAuth`](#createserverauth). It keeps the session in an encrypted cookie. Each method takes the request's [`CookieJar`](#cookiejar), and `forRequest(jar)` gives one request's session shaped like a client ([`RequestAuth`](#requestauth)).
+The server side of Session kit, from [`createServerAuth`](#createserverauth). It keeps the session in an encrypted cookie. Each method takes the request's [`CookieJar`](#cookiejar), and `forRequest(jar)` gives one request's session shaped like a client ([`RequestAuth`](#requestauth)).
 
 ### ServerAuthOptions
 

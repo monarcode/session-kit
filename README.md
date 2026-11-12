@@ -15,9 +15,9 @@
 [![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://session-kit.pages.dev/docs/setups/expo)
 [![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](https://session-kit.pages.dev/docs/effect)
 
-**Your backend signs users in. session-kit handles everything after.**
+**Your backend signs users in. Session kit handles everything after.**
 
-session-kit is the session layer for React apps that have their own backend.
+Session kit is the session layer for React apps that have their own backend.
 Hand it the tokens your sign-in endpoint returns, and it saves the session,
 restores it on reload, refreshes tokens before they expire, keeps every tab in
 step, and guards your routes.
@@ -55,7 +55,7 @@ supported versions.
 
 ## Quick start
 
-session-kit never calls your backend. Write the requests you'd write anyway:
+Session kit never calls your backend. Write the requests you'd write anyway:
 one that signs in, and one that exchanges a refresh token for new tokens.
 
 <!-- from: site/content/docs/(latest)/getting-started.mdx -->

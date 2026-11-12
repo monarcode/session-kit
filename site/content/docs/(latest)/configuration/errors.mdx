@@ -1,9 +1,9 @@
 ---
 title: Errors
-description: The AuthError codes session-kit fails with, how to show them to users, and the storage failures that need your decision.
+description: The AuthError codes Session kit fails with, how to show them to users, and the storage failures that need your decision.
 ---
 
-Every error from session-kit's own logic is an `AuthError`, whether thrown,
+Every error from Session kit's own logic is an `AuthError`, whether thrown,
 rejected with, or published in `state.error`. Match on its `code`, not its
 message:
 
@@ -18,7 +18,7 @@ message:
 | `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves. |
 | `LOCKED`                 | The session is locked: `unlock()` it first.                                           |
 | `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                   |
-| `INVALID_OPTIONS`        | Misuse: an option or argument session-kit can't use.                                  |
+| `INVALID_OPTIONS`        | Misuse: an option or argument Session kit can't use.                                  |
 
 [Error codes](/docs/reference/error-codes) describes each code in full.
 

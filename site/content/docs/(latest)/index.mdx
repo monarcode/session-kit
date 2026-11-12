@@ -1,9 +1,9 @@
 ---
 title: Introduction
-description: session-kit keeps your app signed in with your backend's tokens, through reloads, expired tokens, other tabs, and outages.
+description: Session kit keeps your app signed in with your backend's tokens, through reloads, expired tokens, other tabs, and outages.
 ---
 
-## Why session-kit
+## Why Session kit
 
 Signing in is the easy part. Your backend checks a password and answers with
 an access token and a refresh token, and for a moment the app is done.
@@ -15,12 +15,12 @@ other. The backend goes down for a minute, just as a refresh was due.
 Every app with its own backend has to get these moments right. It usually
 takes a few hundred lines spread across an auth context, a fetch wrapper, and
 the route guards, and one or two cases stay missing until a user finds them.
-session-kit is that code, written once and tested with the routers and
+Session kit is that code, written once and tested with the routers and
 frameworks it supports.
 
 ### What it does
 
-| When…                                             | session-kit…                                                                                                           |
+| When…                                             | Session kit…                                                                                                           |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage`, before the first paint. |
 | The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                         |
@@ -34,18 +34,18 @@ frameworks it supports.
 
 ### What it doesn't do
 
-session-kit doesn't sign users in. It has no sign-in form, no OAuth flow, and
+Session kit doesn't sign users in. It has no sign-in form, no OAuth flow, and
 no user database: it starts where your backend's sign-in response ends. If you
 need those too, use an auth service or framework such as Auth.js, Better Auth,
 or Clerk, which manage their own sessions.
 
 ## How it works
 
-session-kit sits between your backend and your components. Tokens travel on
+Session kit sits between your backend and your components. Tokens travel on
 the left, and only state reaches the right:
 
 ```text
-    Your backend             session-kit             Your components
+    Your backend             Session kit             Your components
  ┌───────────────┐      ┌───────────────────┐      ┌──────────────────┐
  │ POST /login   │ ───▶ │ signIn()          │ ───▶ │ useAuth()        │
  │ POST /refresh │ ◀──▶ │ refresh, on time  │      │ route guards     │
