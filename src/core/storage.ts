@@ -60,14 +60,12 @@ export type AuthStorage = {
 	/**
 	 * Calls `onChange` when another tab changes `key`, and returns a function
 	 * that stops listening. Leave it out when nothing else shares the store.
-	 * Default: none.
 	 */
 	subscribe?: ((key: string, onChange: () => void) => () => void) | undefined;
 	/**
 	 * Runs `work` while holding the lock `name` in every tab that shares the
 	 * store, so only one tab refreshes at a time. Aborting `signal` stops
 	 * waiting for the lock. Leave it out when nothing else shares the store.
-	 * Default: none.
 	 */
 	lock?:
 		| (<T>(
@@ -83,7 +81,7 @@ export type AuthStorage = {
 	 * Each `createAuth` with `debug` on calls it with the key it saves under
 	 * and a `report` function for that key. One adapter can serve several
 	 * auths, so keep a `report` per key. `sensitive` says whether saved values
-	 * may appear in `data`. Default: none.
+	 * may appear in `data`.
 	 */
 	debug?:
 		| ((
@@ -114,7 +112,8 @@ export type WebStorageOptions = {
 	 *
 	 * Avoid `"session"` with rotating refresh tokens. A duplicated tab starts
 	 * with the same refresh token, and the first to use it signs the other
-	 * out. Default: `"local"`.
+	 * out.
+	 * @default "local"
 	 */
 	area?: "local" | "session" | undefined;
 };

@@ -74,7 +74,8 @@ export type NextJarOptions = {
 	/**
 	 * Whether the jar can set cookies. Pass `true` in a Server Function (an
 	 * action) or a Route Handler. Server Components can't set cookies, so
-	 * there the jar is read-only and never refreshes. Default: `false`.
+	 * there the jar is read-only and never refreshes.
+	 * @default false
 	 */
 	writable?: boolean | undefined;
 };

@@ -41,7 +41,6 @@ export type RequireSessionOptions = {
 	/**
 	 * The router's `basename`, if it has one. Loaders see URLs that include
 	 * it, but redirects add it again, so `redirectTo` must leave it out.
-	 * Default: none.
 	 */
 	basename?: string | undefined;
 };
@@ -148,7 +147,8 @@ export type RedirectIfSignedInOptions = {
 	redirectTo: unknown;
 	/**
 	 * Your sign-in page's path, or several. `redirectTo` never sends the user
-	 * back to one. Default: `"/login"`.
+	 * back to one.
+	 * @default "/login"
 	 */
 	loginPath?: string | readonly string[] | undefined;
 };

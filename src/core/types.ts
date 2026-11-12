@@ -105,19 +105,19 @@ export type Tokens = {
 	/**
 	 * The token your refresh callback exchanges for new tokens. Without one,
 	 * the user is signed out when the access token expires or is rejected. A
-	 * refresh that returns none keeps the current one. Default: none.
+	 * refresh that returns none keeps the current one.
 	 */
 	refreshToken?: string | undefined;
 	/**
 	 * How long the access token lasts, in **seconds**, like OAuth's
 	 * `expires_in` (`900` is 15 minutes). It's counted from when auth receives
-	 * the token, so a wrong device clock doesn't matter. Default: none.
+	 * the token, so a wrong device clock doesn't matter.
 	 */
 	expiresIn?: number | undefined;
 	/**
 	 * When the access token expires, as Unix time in **milliseconds**, such as
 	 * `Date.parse("2026-10-02T12:15:00Z")`. It's compared with the device's
-	 * clock, so use it only when your backend gives no lifetime. Default: none.
+	 * clock, so use it only when your backend gives no lifetime.
 	 */
 	expiresAt?: number | undefined;
 };
@@ -706,12 +706,12 @@ export type AuthOptions<Src extends UserSource> = {
 	/**
 	 * Exchanges a refresh token for new tokens ({@link RefreshFn}). Without it,
 	 * the user is signed out when the access token expires or your API rejects
-	 * it. Default: none.
+	 * it.
 	 */
 	refresh?: RefreshFn<NoInfer<UserInput<Src>>> | undefined;
 	/**
 	 * Asks your backend to revoke the tokens after `signOut()`
-	 * ({@link RevokeFn}). Default: none.
+	 * ({@link RevokeFn}).
 	 */
 	revoke?: RevokeFn | undefined;
 	/**
@@ -726,7 +726,7 @@ export type AuthOptions<Src extends UserSource> = {
 	 *
 	 * Tokens, user fields, saved values and error details are left out unless
 	 * you pass `{ sensitive: true }`. Pass a development flag, such as Expo's
-	 * `__DEV__`, to keep it out of production. Default: off.
+	 * `__DEV__`, to keep it out of production.
 	 */
 	debug?: AuthDebug | undefined;
 	/**
@@ -740,7 +740,7 @@ export type AuthOptions<Src extends UserSource> = {
 	 * sign one of them out.
 	 *
 	 * It needs a user schema, as a user read from the access token can't show
-	 * while the token is locked. Default: off.
+	 * while the token is locked.
 	 */
 	locking?:
 		| (Src extends AccessTokenUser<any, any> ? never : true | AuthLocking)

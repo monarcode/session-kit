@@ -35,13 +35,15 @@ export type SecureStorageOptions = {
 	 * SecureStore unchanged.
 	 *
 	 * While the keychain can't be read, the session is `unavailable`, not
-	 * signed out. Default: `WHEN_UNLOCKED`, SecureStore's own.
+	 * signed out.
+	 * @default WHEN_UNLOCKED
 	 */
 	keychainAccessible?: KeychainAccessibilityConstant | undefined;
 	/**
 	 * Whether a reinstalled app starts signed out. iOS keeps keychain items
 	 * after the app is deleted, so a session an earlier install left is
-	 * removed before it's read. `false` restores it instead. Default: `true`.
+	 * removed before it's read. `false` restores it instead.
+	 * @default true
 	 */
 	clearOnReinstall?: boolean | undefined;
 };

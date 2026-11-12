@@ -123,7 +123,8 @@ export type RedirectIfSignedInOptions = {
 	redirectTo: unknown;
 	/**
 	 * Your sign-in page's path, or several. `redirectTo` never sends the user
-	 * back to one. Default: `"/login"`.
+	 * back to one.
+	 * @default "/login"
 	 */
 	loginPath?: string | readonly string[] | undefined;
 };

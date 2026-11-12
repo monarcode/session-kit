@@ -48,13 +48,15 @@ export type AuthFetchOptions = {
 	 * `Authorization` header, rather than rejecting with `UNAUTHENTICATED`.
 	 * Set `true` when one `authFetch` serves public and private endpoints. A
 	 * locked client still rejects with `LOCKED`. A 401 to a request sent
-	 * without a token comes back as it is. Default: `false`.
+	 * without a token comes back as it is.
+	 * @default false
 	 */
 	optional?: boolean | undefined;
 	/**
 	 * Whether a second 401, after a successful refresh, signs the user out.
 	 * Set `false` when some endpoints answer 401 for reasons other than a
-	 * rejected token, so they can't sign users out. Default: `true`.
+	 * rejected token, so they can't sign users out.
+	 * @default true
 	 */
 	signOutOnRepeated401?: boolean | undefined;
 };

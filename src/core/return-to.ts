@@ -16,8 +16,8 @@ export type SafeReturnToOptions = {
 	/**
 	 * Your sign-in page's path, or several. A path to it is replaced with
 	 * `"/"`, so signing in never sends the user back to sign in. Matched
-	 * ignoring case, percent-encoding and trailing slashes. Default:
-	 * `"/login"`.
+	 * ignoring case, percent-encoding and trailing slashes.
+	 * @default "/login"
 	 */
 	loginPath?: string | readonly string[] | undefined;
 };

@@ -121,17 +121,17 @@ export type MirrorAuthOptions<U, In = never> = {
 	 * Signs in on the server with `input`, and resolves the new session. Use
 	 * `serverAuth.signIn`, or your own sign-in that ends with it. Without this
 	 * option, the client has no `signIn`. Call your function, then pass its
-	 * result to `adopt`. Default: none.
+	 * result to `adopt`.
 	 */
 	signIn?: ((input: In) => Promise<Session<U>>) | undefined;
 	/**
 	 * Gets the access token from your server ({@link MirrorCredentials}), so
 	 * page scripts can call your API with `createAuthFetch` or `sessionBearer`.
 	 * Leave it out if they never do. `credentials.get()` and
-	 * `credentials.renew()` then reject with `INVALID_OPTIONS`. Default: none.
+	 * `credentials.renew()` then reject with `INVALID_OPTIONS`.
 	 */
 	credentials?: MirrorCredentials | undefined;
-	/** Logs what the client does, like `createAuth`'s `debug`. Default: off. */
+	/** Logs what the client does, like `createAuth`'s `debug`. */
 	debug?: AuthDebug | undefined;
 };
 

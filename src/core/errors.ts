@@ -78,8 +78,7 @@ export type AuthErrorCode =
  */
 export type AuthErrorOptions = ErrorOptions & {
 	/**
-	 * The schema's issues, for a `USER_VALIDATION_FAILED` error. Default:
-	 * none.
+	 * The schema's issues, for a `USER_VALIDATION_FAILED` error.
 	 */
 	issues?: readonly StandardSchemaV1.Issue[] | undefined;
 };

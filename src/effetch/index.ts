@@ -43,13 +43,15 @@ export interface SessionBearerOptions {
 	 * Whether a call made while signed out is sent without an `Authorization`
 	 * header, rather than failing with `UNAUTHENTICATED`. Set `true` when one
 	 * client serves public and private endpoints. A locked client still fails
-	 * with `LOCKED`. Calls can override it. Default: `false`.
+	 * with `LOCKED`. Calls can override it.
+	 * @default false
 	 */
 	optional?: boolean | undefined;
 	/**
 	 * Whether a second 401, after a successful refresh, signs the user out.
 	 * Set `false` when some endpoints answer 401 for reasons other than a
-	 * rejected token. Calls can override it. Default: `true`.
+	 * rejected token. Calls can override it.
+	 * @default true
 	 */
 	signOutOnRepeated401?: boolean | undefined;
 }

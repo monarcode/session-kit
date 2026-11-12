@@ -47,15 +47,20 @@ import { createSealer, readSecrets, type Sealer } from "./seal.js";
 export type SessionCookieOptions = {
 	/**
 	 * Sends the cookie over HTTPS only. Turn it off only for plain-http
-	 * development on `localhost`. Default: `true`.
+	 * development on `localhost`.
+	 * @default true
 	 */
 	secure?: boolean | undefined;
 	/**
 	 * Which cross-site requests send the cookie. `"none"` needs `secure`, or
-	 * `createServerAuth` throws `INVALID_OPTIONS`. Default: `"lax"`.
+	 * `createServerAuth` throws `INVALID_OPTIONS`.
+	 * @default "lax"
 	 */
 	sameSite?: "lax" | "strict" | "none" | undefined;
-	/** The paths the cookie is sent to. Default: `"/"`. */
+	/**
+	 * The paths the cookie is sent to.
+	 * @default "/"
+	 */
 	path?: string | undefined;
 	/** Shares the cookie with subdomains. Default: this host only. */
 	domain?: string | undefined;
@@ -111,12 +116,11 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	secret: string | readonly string[];
 	/**
 	 * Exchanges a refresh token for new tokens, as {@link RefreshFn} says.
-	 * Default: none.
 	 */
 	refresh?: RefreshFn<NoInfer<UserInput<Src>>> | undefined;
 	/**
 	 * Asks your backend to revoke the tokens after `signOut`
-	 * ({@link RevokeFn}). Default: none.
+	 * ({@link RevokeFn}).
 	 */
 	revoke?: RevokeFn | undefined;
 	/**
@@ -133,12 +137,11 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 * Lets `clientCredentials` give the access token to your own page scripts,
 	 * through a function you expose. The refresh token never leaves the
 	 * server. Without it, `clientCredentials` rejects with `INVALID_OPTIONS`.
-	 * Default: `false`.
+	 * @default false
 	 */
 	clientCredentials?: boolean | undefined;
 	/**
 	 * Logs what auth does on the server, like `createAuth`'s `debug` option.
-	 * Default: off.
 	 */
 	debug?: AuthDebug | undefined;
 };
@@ -164,7 +167,7 @@ export type RefreshIfDueOptions = {
 	 * Refreshes when the access token expires within this many seconds, so it
 	 * lasts through the request. Keep it well below the token's lifetime: a
 	 * token that lives less than `within` is refreshed on every request.
-	 * Default: `60`.
+	 * @default 60
 	 */
 	within?: number | undefined;
 };

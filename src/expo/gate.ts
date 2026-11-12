@@ -49,7 +49,6 @@ export type { UnavailableProps };
 export type SessionGateProps = {
 	/**
 	 * The root navigator, usually a `Stack` guarded with `Stack.Protected`.
-	 * Default: none.
 	 */
 	children?: ReactNode | undefined;
 	/**
@@ -58,7 +57,7 @@ export type SessionGateProps = {
 	 *
 	 * Without it, the error is thrown to the root layout's `ErrorBoundary`.
 	 * That boundary's `retry` only renders again, and a failed refresh stays
-	 * failed until `auth.retry()`, so call both. Default: none.
+	 * failed until `auth.retry()`, so call both.
 	 */
 	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
@@ -70,7 +69,8 @@ export type SessionGateProps = {
 	 *
 	 * It only holds the splash screen the first time, even if the gate
 	 * remounts. Setting it `false` later changes nothing on screen, but the
-	 * deep link opened after a sign-in still waits for it. Default: `true`.
+	 * deep link opened after a sign-in still waits for it.
+	 * @default true
 	 */
 	ready?: boolean | undefined;
 };
