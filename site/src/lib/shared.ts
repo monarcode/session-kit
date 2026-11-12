@@ -1,14 +1,16 @@
 import { createGetUrl } from "fumadocs-core/source";
 
+import { charbox } from "./charbox";
+
 export const docsRoute = "/docs";
 
 /**
- * The code theme of docs pages and the landing page's tour. The site is dark
- * only, so both slots take one dark theme. Its comments keep 5.5:1 on a code
- * block, where the default `github-dark`'s fall to 3.5:1.
+ * The code theme of docs pages and the landing page: Charbox, the maintainer's
+ * Zed theme. The site is dark only, so both slots take it. Its comments keep
+ * about 6:1 on the site's ink.
  */
 export const codeThemes = {
-	themes: { light: "github-dark-default", dark: "github-dark-default" },
+	themes: { light: charbox, dark: charbox },
 	defaultColor: false,
 } as const;
 

@@ -19,7 +19,7 @@ colors:
   lane-mark: "#4d5160"
   lane-played: "#9a9ca8"
   scrollbar-thumb: "#3a3c48"
-  code-string: "#a5d6ff"
+  code-string: "#83a598"
 typography:
   display-quiet:
     fontFamily: "Geist Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace"
@@ -213,15 +213,24 @@ signal. Everything else is a cool blue-grey ramp drawn from the ink.
 
 ### Tertiary
 
-- **Keyword Red** (`--color-buffer-red`, `#ff7b72`): the syntax theme's
-  keyword colour, and in the lanes the colour of what ends the session: the
+- **Keyword Red** (`--color-buffer-red`, `#fb4934`): Charbox's keyword
+  colour, and in the lanes the colour of what ends the session: the
   refresh your backend rejects, the cleared storage, the route guard's
   redirect, and the "signed out" notes when `refresh` is off.
-- **Code String Blue** (`code-string`, the `--color-buffer-blue` token): the
-  syntax theme's string colour, and the colour of your own code. It marks
-  the entry-point specifiers in the setups list, and your app's sign-in call
-  to its backend in the lanes, before Session kit takes over at 09:00. Code
-  blocks otherwise take the docs' syntax theme unchanged.
+- **Your Code Blue** (`code-string`, the `--color-buffer-blue` token,
+  `#83a598`): Charbox's identifier colour, and the colour of your own code.
+  It marks the entry-point specifiers in the setups list, and your app's
+  sign-in call to its backend in the lanes, before Session kit takes over
+  at 09:00. The lanes' blue and red are the code's own, so the page reads
+  in one palette.
+- **Code (Charbox):** every code block takes Charbox, the maintainer's
+  Gruvbox-inspired Zed theme, as a Shiki theme (`src/lib/charbox.ts`): cream
+  text `#ebdbb2`, red keywords `#fb4934`, green strings and functions
+  `#b8bb26`, yellow types and constants `#fabd2f`, blue identifiers
+  `#83a598`, purple numbers and literals `#d3869b`, aqua operators and JSX
+  tags `#8ec07c`, orange italic parameters `#fe8019`, and comments in
+  `#a89984` (6.4:1 on ink). Only its syntax colours come over: code sits on
+  the ink, not Charbox's own `#111111`.
 
 ### Named Rules
 

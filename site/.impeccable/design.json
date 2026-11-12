@@ -278,25 +278,25 @@
 			},
 			"code-string": {
 				"role": "tertiary",
-				"displayName": "Code String Blue",
-				"canonical": "#a5d6ff",
+				"displayName": "Your Code Blue",
+				"canonical": "#83a598",
 				"tonalRamp": [
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff",
-					"#a5d6ff"
+					"#83a598",
+					"#83a598",
+					"#83a598",
+					"#83a598",
+					"#83a598",
+					"#83a598",
+					"#83a598",
+					"#83a598"
 				],
-				"note": "The syntax theme's string blue, as the --color-buffer-blue token: your own code. Entry-point specifiers in the setups list, and your app's sign-in call to its backend in the lanes, before Session kit takes over at 09:00."
+				"note": "Charbox's identifier blue, as the --color-buffer-blue token: your own code. Entry-point specifiers in the setups list, and your app's sign-in call to its backend in the lanes, before Session kit takes over at 09:00."
 			},
 			"buffer-red": {
 				"role": "tertiary",
 				"displayName": "Keyword Red",
-				"canonical": "#ff7b72",
-				"note": "The syntax theme's keyword red, as the --color-buffer-red token: what ends the session in the lanes (a rejected refresh, the cleared storage, the route guard's redirect)."
+				"canonical": "#fb4934",
+				"note": "Charbox's keyword red, as the --color-buffer-red token: what ends the session in the lanes (a rejected refresh, the cleared storage, the route guard's redirect)."
 			}
 		},
 		"typographyMeta": {
@@ -455,7 +455,7 @@
 			"refersTo": "lane-cell",
 			"description": "A lane of minute cells: played bar cells lime, a passed moment grey, a moment ahead darker.",
 			"html": "<div class=\"ds-lane\"><span class=\"ds-lane-name\">refresh</span><div class=\"ds-cells\"><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-past\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-now\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-ahead\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span></div></div><div class=\"ds-lane\"><span class=\"ds-lane-name\">signed in</span><div class=\"ds-cells\"><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span></div></div>",
-			"css": ".ds-lane { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: grid; grid-template-columns: 8rem 1fr; gap: 12px; align-items: center; padding: 4px 0; background: var(--brand-ink, #16171d); } .ds-lane-name { font-size: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 20px; } .ds-c, .ds-b { border-radius: 1px; transition: background-color 200ms; background: var(--color-buffer-cell, #1f2129); } .ds-b { height: 8px; align-self: center; } .ds-b-on { background: var(--brand-lime, #d5f70d); } .ds-b-off { background: #2b2d37; } .ds-hit-now { background: var(--brand-lime, #d5f70d); } .ds-hit-past { background: #9a9ca8; } .ds-hit-ahead { background: var(--color-buffer-mark, #4d5160); } .ds-call { height: 8px; align-self: center; border-radius: 1px; background: var(--color-buffer-blue, #a5d6ff); } .ds-end { border-radius: 1px; background: var(--color-buffer-red, #ff7b72); }"
+			"css": ".ds-lane { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: grid; grid-template-columns: 8rem 1fr; gap: 12px; align-items: center; padding: 4px 0; background: var(--brand-ink, #16171d); } .ds-lane-name { font-size: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 20px; } .ds-c, .ds-b { border-radius: 1px; transition: background-color 200ms; background: var(--color-buffer-cell, #1f2129); } .ds-b { height: 8px; align-self: center; } .ds-b-on { background: var(--brand-lime, #d5f70d); } .ds-b-off { background: #2b2d37; } .ds-hit-now { background: var(--brand-lime, #d5f70d); } .ds-hit-past { background: #9a9ca8; } .ds-hit-ahead { background: var(--color-buffer-mark, #4d5160); } .ds-call { height: 8px; align-self: center; border-radius: 1px; background: var(--color-buffer-blue, #83a598); } .ds-end { border-radius: 1px; background: var(--color-buffer-red, #fb4934); }"
 		},
 		{
 			"name": "Comment Section Head",
@@ -485,7 +485,7 @@
 			"refersTo": "docs-frame",
 			"description": "A titled code block in the docs: the path as a tab on a hairline rail, the code flat on ink with a comment-grey line gutter, closed by a hairline.",
 			"html": "<figure class=\"ds-code\"><div class=\"ds-code-rail\"><span>src/auth.ts</span></div><pre><code><span class=\"l\"><span class=\"k\">export const</span> auth = createAuth({</span><span class=\"l\">  name: <span class=\"s\">\"my-app\"</span>,</span><span class=\"l\">});</span></code></pre></figure>",
-			"css": ".ds-code { margin: 0; border-bottom: 1px solid var(--color-buffer-line, #262833); font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); } .ds-code-rail { display: flex; height: 38px; border-bottom: 1px solid var(--color-buffer-line, #262833); } .ds-code-rail span { display: flex; align-items: center; font-size: 12px; color: var(--color-fd-foreground, #e8e9ee); box-shadow: inset 0 -2px 0 var(--color-fd-foreground, #e8e9ee); } .ds-code pre { margin: 0; padding: 14px 0; font-size: 13px; line-height: 1.7; color: #e6edf3; } .ds-code code { display: flex; flex-direction: column; counter-reset: line; } .ds-code .l::before { counter-increment: line; content: counter(line, decimal-leading-zero); display: inline-block; width: 2ch; margin-inline-end: 2.5ch; text-align: end; color: var(--color-buffer-dim, #7f828e); } .ds-code .k { color: #ff7b72; } .ds-code .s { color: #a5d6ff; }"
+			"css": ".ds-code { margin: 0; border-bottom: 1px solid var(--color-buffer-line, #262833); font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); } .ds-code-rail { display: flex; height: 38px; border-bottom: 1px solid var(--color-buffer-line, #262833); } .ds-code-rail span { display: flex; align-items: center; font-size: 12px; color: var(--color-fd-foreground, #e8e9ee); box-shadow: inset 0 -2px 0 var(--color-fd-foreground, #e8e9ee); } .ds-code pre { margin: 0; padding: 14px 0; font-size: 13px; line-height: 1.7; color: #ebdbb2; } .ds-code code { display: flex; flex-direction: column; counter-reset: line; } .ds-code .l::before { counter-increment: line; content: counter(line, decimal-leading-zero); display: inline-block; width: 2ch; margin-inline-end: 2.5ch; text-align: end; color: var(--color-buffer-dim, #7f828e); } .ds-code .k { color: #fb4934; } .ds-code .s { color: #b8bb26; }"
 		}
 	],
 	"narrative": {

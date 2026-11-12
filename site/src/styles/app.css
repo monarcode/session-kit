@@ -16,11 +16,11 @@
 	--color-buffer-line: #262833;
 	--color-buffer-cell: #1f2129;
 	--color-buffer-mark: #4d5160;
-	/* The syntax theme's string blue: your own code, such as the entry points
-	   and your app's sign-in call in the lanes. */
-	--color-buffer-blue: #a5d6ff;
-	/* The syntax theme's keyword red: what ends the session in the lanes. */
-	--color-buffer-red: #ff7b72;
+	/* Your own code, such as the entry points and your app's sign-in call in
+	   the lanes. Charbox's identifier blue, as in the code blocks. */
+	--color-buffer-blue: #83a598;
+	/* What ends the session in the lanes. Charbox's keyword red. */
+	--color-buffer-red: #fb4934;
 }
 
 /* The cursor on a queued edit. */
