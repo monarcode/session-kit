@@ -35,7 +35,7 @@ export function Features() {
 				{FEATURES.map(([title, text]) => (
 					<div key={title}>
 						<h3 className="font-medium">{title}</h3>
-						<p className="mt-1 text-sm text-fd-muted-foreground">
+						<p className="mt-1 text-sm text-pretty text-fd-muted-foreground">
 							{text}
 						</p>
 					</div>
@@ -43,7 +43,7 @@ export function Features() {
 			</div>
 			<div className="mt-12 rounded-xl border border-fd-border bg-fd-card p-6">
 				<h3 className="font-medium">What it doesn't do</h3>
-				<p className="mt-1 text-sm text-fd-muted-foreground">
+				<p className="mt-1 text-sm text-pretty text-fd-muted-foreground">
 					session-kit never signs users in. It has no sign-in form, OAuth
 					flow or user database: it starts where your backend's sign-in
 					response ends.{" "}

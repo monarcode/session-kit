@@ -1,10 +1,23 @@
 import { Link } from "@tanstack/react-router";
-import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
+import {
+	CodeBlock,
+	CodeBlockTab,
+	CodeBlockTabs,
+	CodeBlockTabsList,
+	CodeBlockTabsTrigger,
+	Pre,
+} from "fumadocs-ui/components/codeblock";
 
 import { Logo } from "@/components/logo";
 import { gitConfig } from "@/lib/shared";
 
-const INSTALL = "npm install @monarcode/session-kit";
+// The same managers, in the same order, as the docs' install tabs.
+const INSTALL = [
+	["npm", "npm install @monarcode/session-kit"],
+	["pnpm", "pnpm add @monarcode/session-kit"],
+	["yarn", "yarn add @monarcode/session-kit"],
+	["bun", "bun add @monarcode/session-kit"],
+] as const;
 
 export function Hero({ version }: { version: string }) {
 	return (
@@ -25,17 +38,33 @@ export function Hero({ version }: { version: string }) {
 				keeps every tab in step, and guards your routes.
 			</p>
 			<div className="mt-8 w-full max-w-md text-left">
-				<CodeBlock className="my-0">
-					<Pre>
-						<code>{INSTALL}</code>
-					</Pre>
-				</CodeBlock>
+				<CodeBlockTabs defaultValue="npm" className="my-0">
+					<CodeBlockTabsList>
+						{INSTALL.map(([manager]) => (
+							<CodeBlockTabsTrigger key={manager} value={manager}>
+								{manager}
+							</CodeBlockTabsTrigger>
+						))}
+					</CodeBlockTabsList>
+					{INSTALL.map(([manager, command]) => (
+						<CodeBlockTab key={manager} value={manager}>
+							<CodeBlock>
+								<Pre>
+									<code>
+										{/* `line` carries the code block's padding. */}
+										<span className="line">{command}</span>
+									</code>
+								</Pre>
+							</CodeBlock>
+						</CodeBlockTab>
+					))}
+				</CodeBlockTabs>
 			</div>
 			<div className="mt-6 flex flex-wrap justify-center gap-3">
 				<Link
 					to="/docs/$"
 					params={{ _splat: "getting-started" }}
-					className="rounded-lg bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground"
+					className="rounded-lg bg-fd-primary px-4 py-2 text-sm font-medium text-fd-primary-foreground transition-colors hover:bg-fd-primary/85"
 				>
 					Get started
 				</Link>

@@ -2,6 +2,16 @@ import { createGetUrl } from "fumadocs-core/source";
 
 export const docsRoute = "/docs";
 
+/**
+ * The code theme of docs pages and the landing page's tour. The site is dark
+ * only, so both slots take one dark theme. Its comments keep 5.5:1 on a code
+ * block, where the default `github-dark`'s fall to 3.5:1.
+ */
+export const codeThemes = {
+	themes: { light: "github-dark-default", dark: "github-dark-default" },
+	defaultColor: false,
+} as const;
+
 export const gitConfig = {
 	user: "monarcode",
 	repo: "session-kit",

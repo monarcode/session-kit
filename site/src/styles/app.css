@@ -3,18 +3,47 @@
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
 
-/* The brand lime is too pale on a light background, so light mode uses a
-   darker shade of it (3.3:1 on the sidebar, over the 3:1 graphics need). */
-:root {
-	--brand-lime: #7a8c00;
-}
-
+/* The site is dark only, built on the brand's two colours: the background
+   #16171d and the lime #d5f70d. Fumadocs' dark tokens are retinted to the
+   background's blue-grey; every text pairing keeps at least 4.5:1. */
 .dark {
 	--brand-lime: #d5f70d;
+	--brand-ink: #16171d;
+
+	--color-fd-background: var(--brand-ink);
+	--color-fd-foreground: #e8e9ee;
+	--color-fd-muted: #1d1e25;
+	--color-fd-muted-foreground: #9a9ca8;
+	--color-fd-popover: #1b1c23;
+	--color-fd-popover-foreground: #e2e3e8;
+	--color-fd-card: #1c1d24;
+	--color-fd-card-foreground: #f4f4f6;
+	--color-fd-border: hsla(230, 12%, 60%, 0.16);
+	--color-fd-primary: var(--brand-lime);
+	--color-fd-primary-foreground: var(--brand-ink);
+	--color-fd-secondary: #22232b;
+	--color-fd-secondary-foreground: #e8e9ee;
+	--color-fd-accent: hsla(230, 12%, 50%, 0.22);
+	--color-fd-accent-foreground: #eeeff3;
+	--color-fd-ring: var(--brand-lime);
+}
+
+/* Fumadocs' neutral theme greys the sidebar with a more specific rule. */
+.dark #nd-sidebar {
+	--color-fd-muted: #1d1e25;
+	--color-fd-secondary: #22232b;
+	--color-fd-muted-foreground: #9a9ca8;
 }
 
 html {
 	scrollbar-gutter: stable;
+	scrollbar-color: #3a3c48 var(--brand-ink);
+	caret-color: var(--brand-lime);
+}
+
+::selection {
+	background: var(--brand-lime);
+	color: var(--brand-ink);
 }
 
 html > body[data-scroll-locked] {

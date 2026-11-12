@@ -13,12 +13,12 @@ const SETUPS = [
 	],
 	[
 		"React Router",
-		"Declarative, data and framework mode without SSR.",
+		"Declarative and data mode, and framework mode as a SPA.",
 		"/docs/setups/react-router",
 	],
 	[
 		"React Router SSR",
-		"Framework mode with the session kept on the server.",
+		"Framework mode with server rendering, the session on the server.",
 		"/docs/setups/react-router-ssr",
 	],
 	[
@@ -30,11 +30,6 @@ const SETUPS = [
 		"Expo Router",
 		"Keychain storage, a held splash screen and deep links.",
 		"/docs/setups/expo",
-	],
-	[
-		"React",
-		"No router: render by the session's status.",
-		"/docs/getting-started",
 	],
 	[
 		"Effect",

@@ -6,7 +6,7 @@ import { defineDocs } from "fumadocs-mdx/macro";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
-import { docsRoute, LATEST, versionOfPath } from "./shared";
+import { codeThemes, docsRoute, LATEST, versionOfPath } from "./shared";
 
 export const docs = defineDocs({
 	dir: "content/docs",
@@ -16,6 +16,7 @@ export const docs = defineDocs({
 		mdxOptions: applyMdxPreset({
 			rehypeCodeOptions: {
 				...rehypeCodeDefaultOptions,
+				...codeThemes,
 				// Type hovers on blocks marked `twoslash`. They need no imports
 				// from other files: each block compiles on its own. No cache: it's
 				// keyed by the block, so it would hide a change to the types.

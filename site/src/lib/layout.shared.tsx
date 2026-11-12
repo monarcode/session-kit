@@ -9,6 +9,8 @@ export function baseOptions(): BaseLayoutProps {
 		nav: {
 			title: <Mark className="h-6 w-auto" />,
 		},
+		// The site is dark only.
+		themeSwitch: { enabled: false },
 		githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
 	};
 }

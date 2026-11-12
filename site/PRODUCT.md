@@ -93,8 +93,11 @@ those same checked examples, so the code shown is code that compiles.
 - **Maker's mark:** the lime brace and dot alone, `assets/monarcode_logo.svg`,
   is monarcode's mark, shared across monarcode projects such as effetch. The
   site's top bar shows it.
-- **Brand lime:** `#D5F70D`. In light mode the site uses a darker shade of it
-  (`#7A8C00`) so the mark keeps at least 3:1 contrast.
+- **Brand colours:** the element colour is lime `#D5F70D` and must stay
+  exactly that value; the background is `#16171D`. The site's identity is
+  built around these two. Variations and combinations are open, the lime
+  itself is not.
+- **Dark only.** The site has no light mode and no theme switch.
 - `assets/sk-banner.png` is the README's banner. `assets/logo.png` (a palm
   and keyhole) is no longer used on the site.
 - **Voice:** plain and direct, written for app developers. Short sentences,

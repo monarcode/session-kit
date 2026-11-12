@@ -18,7 +18,7 @@ export const Route = createFileRoute("/")({
 			{
 				name: "description",
 				content:
-					"Schema-driven auth state and sessions for React: your backend signs users in, session-kit handles everything after.",
+					"Your backend signs users in. session-kit handles everything after: it saves and restores the session, refreshes tokens, keeps tabs in step and guards your routes.",
 			},
 		],
 	}),
@@ -28,7 +28,14 @@ export const Route = createFileRoute("/")({
 function Home() {
 	const steps = Route.useLoaderData();
 	return (
-		<HomeLayout {...baseOptions()}>
+		<HomeLayout
+			{...baseOptions()}
+			// Only here: in the docs, the sidebar already lists these pages.
+			links={[
+				{ text: "Docs", url: "/docs" },
+				{ text: "Reference", url: "/docs/reference" },
+			]}
+		>
 			<main className="flex flex-1 flex-col">
 				<Hero version={version} />
 				<Tour steps={steps} />

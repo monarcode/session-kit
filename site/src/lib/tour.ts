@@ -5,6 +5,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { staticFunctionMiddleware } from "@tanstack/start-static-server-functions";
 import { highlightHast } from "fumadocs-core/highlight";
 
+import { codeThemes } from "@/lib/shared";
+
 /**
  * The landing page's code tour. Each step shows an example from a docs page,
  * read from the page when the site is built, so it's the code `check-docs`
@@ -54,7 +56,8 @@ export const loadTour = createServerFn({ method: "GET" })
 			TOUR.map(async (step) => {
 				const code = await readExample(step.page, step.file);
 				const lang = step.file.endsWith(".tsx") ? "tsx" : "ts";
-				return { ...step, code: await highlightHast(code, { lang }) };
+				const hast = await highlightHast(code, { lang, ...codeThemes });
+				return { ...step, code: hast };
 			}),
 		),
 	);
