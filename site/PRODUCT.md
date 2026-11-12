@@ -89,11 +89,11 @@ those same checked examples, so the code shown is code that compiles.
 - **Pitch:** "Your backend signs users in. Session kit handles everything
   after."
 - **Wordmark:** "Session Kit" with the brace-and-dot mark,
-  `assets/Session-kit-logo.svg`. On the site, the name takes the text colour
-  so it reads in both themes.
+  `assets/Session-kit-logo.svg`. The site's top bar and the docs sidebar
+  show it, with the name in the text colour.
 - **Maker's mark:** the lime brace and dot alone, `assets/monarcode_logo.svg`,
   is monarcode's mark, shared across monarcode projects such as effetch. The
-  site's top bar shows it.
+  site doesn't show it on its own.
 - **Brand colours:** the element colour is lime `#D5F70D` and must stay
   exactly that value; the background is `#16171D`. The site's identity is
   built around these two. Variations and combinations are open, the lime

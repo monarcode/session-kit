@@ -19,7 +19,7 @@ export function Hero({
 	config: ConfigLine[];
 }) {
 	return (
-		<section className={`${COLUMN} pt-8 pb-4 sm:pt-7`}>
+		<section className={`${COLUMN} pt-8 pb-4 sm:pt-10`}>
 			<h1 className="text-[clamp(1.5rem,3.6vw,2.75rem)] leading-[1.12] tracking-[-0.04em]">
 				<span className="block">
 					<span className="font-light text-fd-muted-foreground">
@@ -42,8 +42,8 @@ export function Hero({
 				</span>
 			</h1>
 
-			<div className="mt-4">
-				<p className="max-w-[80ch] text-sm leading-relaxed text-pretty text-fd-muted-foreground sm:text-base">
+			<div className="mt-3 sm:mt-4">
+				<p className="max-w-[72ch] text-sm leading-relaxed text-pretty text-fd-muted-foreground sm:text-base sm:leading-[1.75]">
 					<span aria-hidden="true" className="text-buffer-dim">
 						{"// "}
 					</span>
@@ -53,7 +53,9 @@ export function Hero({
 				</p>
 			</div>
 
-			<div className="mt-4">
+			{/* Three groups, set apart by space: the pitch, what to do next, and
+			    the demo. */}
+			<div className="mt-5 sm:mt-6">
 				<div className="flex min-w-0 flex-wrap items-end gap-3">
 					<div className="w-full max-w-md">
 						<Install />

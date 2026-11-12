@@ -195,26 +195,25 @@ function columnAt(minute: number) {
 	return `${((minute + PRE) / COLUMNS) * 100}%`;
 }
 
+// A held state runs through the gaps between minutes, so it reads as one
+// strip rather than dashes. The gaps are 1px, and 3px from 640px.
+const BAR = "h-1.5 self-center -me-px sm:h-2 sm:-me-[3px]";
+
 // Lime only for what has played or is playing; the brand lime, never a tint.
-// Red only for what ends the session.
+// Red only for what ends the session. An empty minute draws nothing: the
+// lane's track shows through.
 function cellClass(lane: "bar" | "hit", kind: Cell, m: number, minute: number) {
 	// The skipped time between the hour and later is a break in every lane.
-	if (m === HOUR) return "";
-	if (kind === "end") {
-		return m <= minute ? "bg-buffer-red" : "bg-buffer-mark";
-	}
+	if (m === HOUR || kind === "") return "";
 	if (lane === "bar") {
-		const shape = "h-1.5 self-center sm:h-2";
-		if (kind === "bar") {
-			return `${shape} ${m <= minute ? "bg-fd-primary" : "bg-[#2b2d37]"}`;
-		}
-		return `${shape} bg-buffer-cell`;
+		return `${BAR} ${m <= minute ? "bg-fd-primary" : "bg-[#2b2d37]"}`;
 	}
-	if (kind === "hit") {
-		if (m === minute || m === minute - 1) return "bg-fd-primary";
-		return m < minute ? "bg-[#c9cbd4]" : "bg-buffer-mark";
+	const shape = "rounded-[1px]";
+	if (kind === "end") {
+		return `${shape} ${m <= minute ? "bg-buffer-red" : "bg-buffer-mark"}`;
 	}
-	return "bg-buffer-cell";
+	if (m === minute || m === minute - 1) return `${shape} bg-fd-primary`;
+	return `${shape} ${m < minute ? "bg-fd-muted-foreground" : "bg-buffer-mark"}`;
 }
 
 // Wrapped code lines hang under the line they continue. Fumadocs pads each
@@ -373,7 +372,7 @@ export function LiveConfig({
 
 	return (
 		<>
-			<div className="mt-5 text-[13px] leading-[1.8] sm:text-[15px] sm:leading-[1.7]">
+			<div className="mt-7 text-[13px] leading-[1.8] sm:mt-8 sm:text-[15px] sm:leading-[1.7]">
 				{lines.map((line, i) => {
 					const live = line.text.trimStart().startsWith("refresh:");
 					const n = start + i;
@@ -445,7 +444,7 @@ export function LiveConfig({
 			<figure
 				ref={figure}
 				aria-labelledby={captionId}
-				className="mt-5 border-t border-buffer-line pt-4"
+				className="mt-5 border-t border-buffer-line pt-5"
 			>
 				<p className="sr-only">
 					Before 09:00, your app signs in with your backend, then hands the
@@ -466,17 +465,31 @@ export function LiveConfig({
 						{LANES.map(([lane, kind], k) => (
 							<div
 								key={lane}
-								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-1 sm:grid-cols-[8rem_1fr]"
+								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-[5px] sm:grid-cols-[8rem_1fr]"
 							>
 								<span className="text-xs text-fd-muted-foreground">
 									{lane}
 								</span>
 								<div
-									className="relative grid h-4 gap-px sm:h-5 sm:gap-[3px]"
+									className="relative isolate grid h-4 gap-px sm:h-5 sm:gap-[3px]"
 									style={{
 										gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`,
 									}}
 								>
+									{/* The lane's track: a hairline under its minutes,
+									    broken where the hour skips to later. Only the
+									    signed-in lane starts before 09:00. */}
+									<span
+										className="absolute top-1/2 -z-10 h-px bg-[#2b2d37]"
+										style={{
+											left: columnAt(k === 0 ? -PRE : 0),
+											right: `calc(100% - ${columnAt(HOUR)})`,
+										}}
+									/>
+									<span
+										className="absolute top-1/2 right-0 -z-10 h-px bg-[#2b2d37]"
+										style={{ left: columnAt(HOUR + 1) }}
+									/>
 									{/* Before 09:00 only the signed-in lane has anything:
 									    your backend's sign-in call, in blue. The other
 									    lanes start when Session kit does. */}
@@ -488,7 +501,7 @@ export function LiveConfig({
 												key={m}
 												onPointerEnter={() => setHovered(-PRE)}
 												onPointerLeave={() => setHovered(null)}
-												className={`h-1.5 cursor-help self-center rounded-[1px] transition-colors duration-200 sm:h-2 ${m <= shownMinute ? "bg-buffer-blue" : "bg-[#2b2d37]"}`}
+												className={`${BAR} cursor-help transition-colors duration-200 ${m <= shownMinute ? "bg-buffer-blue" : "bg-[#2b2d37]"}`}
 											/>
 										);
 									})}
@@ -511,7 +524,7 @@ export function LiveConfig({
 														? () => setHovered(null)
 														: undefined
 												}
-												className={`rounded-[1px] transition-colors duration-200 ${explained ? "cursor-help" : ""} ${cellClass(kind, cell, m, shownMinute)}`}
+												className={`transition-colors duration-200 ${explained ? "cursor-help" : ""} ${cellClass(kind, cell, m, shownMinute)}`}
 											/>
 										);
 									})}
@@ -526,7 +539,7 @@ export function LiveConfig({
 								</div>
 							</div>
 						))}
-						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.5rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.75rem]">
+						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.625rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.875rem]">
 							<div
 								ref={head}
 								className="absolute inset-y-[-4px] w-0.5 bg-fd-primary"
@@ -562,7 +575,7 @@ export function LiveConfig({
 				</div>
 
 				{/* The status line, under the lanes it describes. */}
-				<div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground">
+				<div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground">
 					<figcaption id={captionId} className="text-pretty">
 						One illustrative hour, as Session kit runs it
 					</figcaption>
@@ -595,7 +608,7 @@ export function LiveConfig({
 						</button>
 					</div>
 				</div>
-				<p className="mt-3 text-xs leading-relaxed text-buffer-dim">
+				<p className="mt-2 max-w-[110ch] text-xs leading-relaxed text-buffer-dim">
 					{"// "}Illustrative:{" "}
 					<span
 						aria-hidden="true"
@@ -638,8 +651,8 @@ function Tooltip({ minute, moments }: { minute: number; moments: Moment[] }) {
 			    the tip. The tip sits above the axis times, which come later in
 			    the page. */}
 			<span
-				className="absolute h-2.5 w-px bg-buffer-dim max-sm:hidden"
-				style={{ left: x, top: `calc(${below} - 0.25rem)` }}
+				className="absolute h-[11px] w-px bg-buffer-dim max-sm:hidden"
+				style={{ left: x, top: `calc(${below} - 5px)` }}
 			/>
 			<div
 				key={minute}

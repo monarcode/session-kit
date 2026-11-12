@@ -3,32 +3,9 @@ import type { ComponentProps, CSSProperties } from "react";
 // A style, not a `fill` attribute: SVG attributes don't resolve CSS variables.
 const LIME: CSSProperties = { fill: "var(--brand-lime)" };
 
-/** The monarcode mark, from `assets/monarcode_logo.svg`: a lime brace and dot. */
-export function Mark(props: ComponentProps<"svg">) {
-	return (
-		<svg
-			viewBox="70 0 249 447"
-			fill="none"
-			role="img"
-			aria-label="Session kit"
-			{...props}
-		>
-			<path
-				d="M228.706 310.99L139.78 301.061L158.113 319.394L228.506 349.98C226.34 387.533 210.479 411.042 180.922 420.506L189.796 446.674C216.343 439.089 236.443 426.726 250.096 409.584C263.9 392.442 270.803 369.612 270.803 341.093V295.128C270.803 258.266 286.883 239.834 319.042 239.834V206.84C286.883 206.84 270.803 188.712 270.803 152.456V104.672C270.651 76.6074 263.824 54.0803 250.323 37.0901C236.822 19.9483 216.646 7.58491 189.796 1.52588e-05L181.149 26.1679C212.854 36.3317 228.706 62.8029 228.706 105.582V151.774C228.706 187.119 242.435 211.012 269.892 223.451C242.435 236.194 228.706 260.086 228.706 295.128V310.99Z"
-				style={LIME}
-			/>
-			<path
-				d="M154.676 135.876C154.676 159.227 135.746 178.156 112.396 178.156C89.0455 178.156 70.1162 159.227 70.1162 135.876C70.1162 112.526 89.0455 93.5968 112.396 93.5968C135.746 93.5968 154.676 112.526 154.676 135.876Z"
-				style={LIME}
-			/>
-		</svg>
-	);
-}
-
 /**
  * The Session kit wordmark, from `assets/Session-kit-logo.svg`. The brace
- * and dot stay lime; the name takes the text colour, so it reads in light
- * and dark mode.
+ * and dot stay lime; the name takes the text colour.
  */
 export function Logo(props: ComponentProps<"svg">) {
 	return (

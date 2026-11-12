@@ -17,7 +17,7 @@ colors:
   lane-empty: "#1f2129"
   lane-unplayed: "#2b2d37"
   lane-mark: "#4d5160"
-  lane-played: "#c9cbd4"
+  lane-played: "#9a9ca8"
   scrollbar-thumb: "#3a3c48"
   code-string: "#a5d6ff"
 typography:
@@ -119,7 +119,7 @@ components:
     typography: "{typography.label}"
     width: "48px"
   lane-cell:
-    backgroundColor: "{colors.lane-empty}"
+    backgroundColor: "{colors.lane-mark}"
     rounded: "{rounded.cell}"
     height: "20px"
   lane-cell-played:
@@ -205,9 +205,10 @@ signal. Everything else is a cool blue-grey ramp drawn from the ink.
 - **Surfaces** (`surface-muted`, `surface-popover`, `surface-card`,
   `surface-secondary`): Fumadocs' retinted panels for search, the sidebar and
   popovers. On the landing, only the lane tooltip uses one (`surface-popover`).
-- **Lane greys** (`lane-empty`, `lane-unplayed`, `lane-mark`, `lane-played`):
-  the hour's cells. Empty minutes, a bar not yet reached, a moment still
-  ahead, and a moment already passed.
+- **Lane greys** (`lane-unplayed`, `lane-mark`, `lane-played`): a lane's
+  hairline track and a bar not yet reached, a moment still ahead, and a
+  moment already passed (the quiet grey, so passed moments recede behind
+  the lime). `lane-empty` is the inline-code fill in the docs.
 - **Scrollbar** (`scrollbar-thumb`): the page scrollbar on an ink track.
 
 ### Tertiary
@@ -297,7 +298,12 @@ phones, 48px from 640px), comment grey, tabular and unselectable, and the
 code starts to the right of it, so it reads as a block set into the page. A live line's `>` marker hangs into the margin to the
 left of its number, so the numbers stay in one column.
 
-The hero runs as a vertical stack with 16–20px between blocks. Sections
+The hero runs as three groups set apart by space, with tight spacing
+inside each: the pitch (the H1, then the lead 12–16px under it, at most
+72ch), the actions 20–24px below (the package-manager switch, the install
+row, Get started, GitHub), and the demo 28–32px below that (the config,
+then a hairline with 20px either side, then the lanes). The hero opens
+32px (40px from 640px) under the navbar. Sections
 below it open with 80px (112px from 640px) of space and a comment headline,
 then 32px to their content. Lists are full-width rows between hairlines with
 16px vertical padding; from 640px they become aligned columns (setups: name,
@@ -306,7 +312,9 @@ entry point, description, "guide"; features: name, description).
 The hour's lanes are a two-column grid: lane names (5.5rem, 8rem from
 640px), then 68 equal cells with a 1px gap (3px from 640px): two for the
 sign-in call (08:58, 08:59), 62 for the hour, a blank column for the time
-skipped, then three for "later". The playhead spans the
+skipped, then three for "later". Rows are 26px (30px from 640px). The
+status line sits 20px under the axis, with the footnote just below it.
+The playhead spans the
 lanes, not the axis. Axis times sit at the start of their minute's column,
 so 09:00 marks the handover.
 
@@ -336,10 +344,13 @@ veil, a foreground underline or, if it is live, lime.
 
 Square. Buttons, the install field, the queued chip, code blocks and the
 tour's tabs all have zero radius, overriding Fumadocs' rounded defaults on
-the landing. The only rounding is 1px on lane cells, to keep 62 small
-rectangles from shimmering. Lane bars are thin strips (6px, 8px from 640px)
-centred in their row; moment cells fill the row's height (16px, 20px from
-640px). Borders are always 1px hairlines.
+the landing. The only rounding is 1px on moment cells, to keep small
+rectangles from shimmering. Each lane is a 1px track (lane-unplayed) through
+its row's centre, broken at the skipped column; an empty minute draws
+nothing on it. Bars are solid strips (6px, 8px from 640px) that run through
+the gaps between minutes, so a held state never reads as dashes. Moment
+cells fill the row's height (16px, 20px from 640px). Borders are always 1px
+hairlines.
 
 ## Components
 
@@ -386,8 +397,9 @@ Set in the buffer's type, square, 48px tall.
   (4px offset); hover changes only the underline colour, to foreground.
   Quiet links (footer, version, a row's "guide") are grey and brighten to
   foreground on hover.
-- **Navbar:** Fumadocs' home navbar, with the maker's mark, Docs and
-  Reference. Solid ink on the landing, no backdrop blur.
+- **Navbar:** Fumadocs' home navbar, with the Session kit wordmark (lime
+  brace and dot, the name in foreground, 20px tall), Docs and Reference.
+  The docs sidebar shows the same wordmark. Solid ink on the landing, no backdrop blur.
 
 ### Docs Frame
 

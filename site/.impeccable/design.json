@@ -198,7 +198,7 @@
 			},
 			"lane-empty": {
 				"role": "neutral",
-				"displayName": "Empty Minute",
+				"displayName": "Inline Code Fill",
 				"canonical": "#1f2129",
 				"tonalRamp": [
 					"#16171d",
@@ -210,7 +210,7 @@
 					"#9a9ca8",
 					"#e8e9ee"
 				],
-				"note": "--color-buffer-cell."
+				"note": "The docs' inline-code fill. Lane minutes no longer draw a cell; the lane track shows through."
 			},
 			"lane-unplayed": {
 				"role": "neutral",
@@ -247,7 +247,7 @@
 			"lane-played": {
 				"role": "neutral",
 				"displayName": "Moment Passed",
-				"canonical": "#c9cbd4",
+				"canonical": "#9a9ca8",
 				"tonalRamp": [
 					"#16171d",
 					"#1f2129",
@@ -455,7 +455,7 @@
 			"refersTo": "lane-cell",
 			"description": "A lane of minute cells: played bar cells lime, a passed moment grey, a moment ahead darker.",
 			"html": "<div class=\"ds-lane\"><span class=\"ds-lane-name\">refresh</span><div class=\"ds-cells\"><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-past\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-now\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c ds-hit-ahead\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span><span class=\"ds-c\"></span></div></div><div class=\"ds-lane\"><span class=\"ds-lane-name\">signed in</span><div class=\"ds-cells\"><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-on\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span><span class=\"ds-b ds-b-off\"></span></div></div>",
-			"css": ".ds-lane { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: grid; grid-template-columns: 8rem 1fr; gap: 12px; align-items: center; padding: 4px 0; background: var(--brand-ink, #16171d); } .ds-lane-name { font-size: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 20px; } .ds-c, .ds-b { border-radius: 1px; transition: background-color 200ms; background: var(--color-buffer-cell, #1f2129); } .ds-b { height: 8px; align-self: center; } .ds-b-on { background: var(--brand-lime, #d5f70d); } .ds-b-off { background: #2b2d37; } .ds-hit-now { background: var(--brand-lime, #d5f70d); } .ds-hit-past { background: #c9cbd4; } .ds-hit-ahead { background: var(--color-buffer-mark, #4d5160); } .ds-call { height: 8px; align-self: center; border-radius: 1px; background: var(--color-buffer-blue, #a5d6ff); } .ds-end { border-radius: 1px; background: var(--color-buffer-red, #ff7b72); }"
+			"css": ".ds-lane { font-family: var(--font-mono, 'Geist Mono Variable', ui-monospace, monospace); display: grid; grid-template-columns: 8rem 1fr; gap: 12px; align-items: center; padding: 4px 0; background: var(--brand-ink, #16171d); } .ds-lane-name { font-size: 12px; color: var(--color-fd-muted-foreground, #9a9ca8); } .ds-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 20px; } .ds-c, .ds-b { border-radius: 1px; transition: background-color 200ms; background: var(--color-buffer-cell, #1f2129); } .ds-b { height: 8px; align-self: center; } .ds-b-on { background: var(--brand-lime, #d5f70d); } .ds-b-off { background: #2b2d37; } .ds-hit-now { background: var(--brand-lime, #d5f70d); } .ds-hit-past { background: #9a9ca8; } .ds-hit-ahead { background: var(--color-buffer-mark, #4d5160); } .ds-call { height: 8px; align-self: center; border-radius: 1px; background: var(--color-buffer-blue, #a5d6ff); } .ds-end { border-radius: 1px; background: var(--color-buffer-red, #ff7b72); }"
 		},
 		{
 			"name": "Comment Section Head",
