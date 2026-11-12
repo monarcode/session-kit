@@ -1,0 +1,30 @@
+---
+title: "TanStack Start"
+description: "Server sessions and hydration for TanStack Start."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/tanstack-start";
+```
+
+Guide: [TanStack Start](/docs/setups/tanstack-start).
+
+## Functions
+
+### loadSession
+
+Reads this request's session into the client. Call it in the root route's `beforeLoad`.
+
+### sessionHydration
+
+Router options that carry the session from the server render to the browser. Spread them into `createRouter`.
+
+## Types
+
+### DehydratedSession
+
+The session the server render sends to the browser, from [`sessionHydration`](#sessionhydration)'s `dehydrate`. It holds no tokens.
+
+### SessionHydration
+
+The router options [`sessionHydration`](#sessionhydration) returns, for `createRouter`.

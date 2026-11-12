@@ -1,0 +1,54 @@
+---
+title: Errors
+description: The AuthError codes session-kit fails with, how to show them to users, and the storage failures that need your decision.
+---
+
+Every error from session-kit's own logic is an `AuthError`, whether thrown,
+rejected with, or published in `state.error`. Match on its `code`, not its
+message:
+
+| Code                     | Meaning                                                                               |
+| ------------------------ | ------------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                           |
+| `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use.         |
+| `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.      |
+| `USER_VALIDATION_FAILED` | The schema rejected the user; `issues` holds its issues.                              |
+| `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.    |
+| `PERSISTENCE_FAILED`     | Storage could not be read, written, or cleared.                                       |
+| `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves. |
+| `LOCKED`                 | The session is locked: `unlock()` it first.                                           |
+| `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                   |
+| `INVALID_OPTIONS`        | Misuse: an option or argument session-kit can't use.                                  |
+
+[Error codes](/docs/reference/error-codes) describes each code in full.
+
+`cause` holds whatever failed underneath, such as the error your refresh
+callback threw. A map from codes to your own wording keeps messages out of
+components:
+
+```ts title="src/error-message.ts"
+import { AuthError, type AuthErrorCode } from "@monarcode/session-kit";
+
+const messages: Partial<Record<AuthErrorCode, string>> = {
+  REFRESH_FAILED: "We can't reach the server. Check your connection.",
+  PERSISTENCE_FAILED: "Your browser wouldn't save the session.",
+  USER_VALIDATION_FAILED: "Your account couldn't be loaded.",
+};
+
+export function errorMessage(error: unknown): string {
+  if (error instanceof AuthError) return messages[error.code] ?? error.message;
+  return error instanceof Error ? error.message : "Something went wrong";
+}
+```
+
+Two storage failures need a decision from you:
+
+- **Storage can't be written.** The session ends and the error is published,
+  rather than leaving a session that would vanish on reload.
+- **Storage can't be cleared.** Sign-out still takes effect in this tab, but
+  the promise rejects and the error stays in `state.error`. Call `signOut()`
+  again once storage is available, because undeleted credentials could
+  survive a reload.
+
+`authFetch` lets `fetch`'s and `Request`'s own failures, such as a network
+error, through unchanged.

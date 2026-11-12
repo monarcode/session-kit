@@ -26,8 +26,9 @@ Consumers import from the root and from subpaths:
 
 1. **Don't trust memory for dependency APIs.** Before using an API from
    `nanostores`, `@standard-schema/spec`, `expo-secure-store`,
-   `expo-router`, `@tanstack/react-router` or `react-router`, open its
-   source or `.d.ts` in `node_modules` and read the signature and docs.
+   `expo-router`, `@tanstack/react-router`, `react-router` or Fumadocs
+   (`fumadocs-*`, in the site), open its source or `.d.ts` in
+   `node_modules` and read the signature and docs.
    Platform behaviour differs too: `expo-secure-store` keys iOS items by
    `requireAuthentication`, for example.
 2. **Verify tool flags against current docs** (tsc, node's test runner,
@@ -44,7 +45,8 @@ Consumers import from the root and from subpaths:
    entry points import without touching browser globals. The core entry
    point never imports `react` or `react-native`; only `./expo` imports
    Expo or React Native modules, only `./tanstack-start/server` imports
-   `@tanstack/react-start`, and no entry point imports `next`.
+   `@tanstack/react-start`, and no entry point imports `next`. These targets
+   are the package's: the docs site in `site/` isn't shipped.
 5. **Behaviour belongs in the core engine** (`src/core/client.ts` and its
    modules). Adapters (`./react`, the routers, `./expo`, `./http`) only
    subscribe, guard and wire up lifecycle. State lives in a client, never at
@@ -112,8 +114,12 @@ developers, not for us. Every comment ships: keep it short, plain and true.
 - **The reader's words, not the engine's:** "signed in", "the saved
   session", "another tab", "the access token expired". Never internal
   names such as `epoch`, `revision` or `flight`.
-- **Options and props members** say what the option is for and end with
-  `Default: x.` ("Default: none." when there is none).
+- **Options and props members** say what the option is for. A default that's
+  a value goes in a last `@default` tag (`@default false`,
+  `@default "/login"`): editors show it, and the site's type tables fill
+  their Default column from it. A default that takes words, such as "the
+  nearest `AuthProvider`'s", ends the description as `Default: …`. Say
+  nothing when there's no default.
 - **Link the next API a reader needs** with `@see {@link X} to …`, or
   `{@link}` in the text.
 - A `{@link X}` must resolve in the published `.d.ts`: `X` is declared in
@@ -122,17 +128,17 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   export, as a code span. `check-docs` fails on a link that doesn't resolve.
 - **Examples are short** (about a dozen lines, one concept) and show real
   use; a trailing comment can show the result (`// "/dashboard"`).
-  Walkthroughs belong in the README and `docs/`. Examples import from
+  Walkthroughs belong in the site's pages. Examples import from
   `@monarcode/session-kit` and its subpaths as an app would, and
   `declare const` what they don't build. They compile under NodeNext and
   Bundler resolution with `exactOptionalPropertyTypes`, and `./expo`
-  examples without DOM types. `./next` examples and `docs/next.md` compile
+  examples without DOM types. `./next` examples and the Next.js page compile
   under Bundler only, as Next apps do: `next` has no `exports` map. An
   example that augments a module (`declare module`) compiles on its own; the
   rest share one program. `tsx` blocks compile as TSX.
 - **Give each fact one home.** A behaviour is described on the export that
-  owns it, and other exports link to it rather than repeat it. The README
-  and `docs/` explain how to use the API and name it rather than repeat its
+  owns it, and other exports link to it rather than repeat it. The site's
+  pages explain how to use the API and name it rather than repeat its
   details.
 - **Internal code.** Document only what's non-obvious. A JSDoc on an
   internal function says why it exists or what's surprising about it, in one
@@ -155,12 +161,24 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   NodeNext and Bundler resolution. Use `// @ts-expect-error` with a reason.
 - Type tests also run with `exactOptionalPropertyTypes` off, as most apps
   have it.
-- Examples in `README.md` and `docs/*.md` marked `<!-- file: path -->` are
-  type-checked as small apps by `scripts/check-docs.mjs`, together with the
-  JSDoc examples, in memory. A guide that builds on the README's Getting
-  started lists the files it uses as `shared` there. A README example marked
-  `<!-- from: docs/guide.md -->` is an excerpt of that guide's examples, and
-  the check fails when the two differ: edit the guide, then copy.
+- The site's pages live in `site/content/docs/(latest)/`. A `ts` or `tsx`
+  block with `title="path"` is an example, and each page's examples are
+  type-checked as one small app by `scripts/check-docs.mjs`, together with
+  the JSDoc examples, in memory. Each page is listed in its `documents`, and
+  a page that builds on Getting started lists the files it uses as `shared`.
+  A new page with titled examples fails the check until it's listed.
+- A README example marked `<!-- from: site/content/docs/(latest)/page.mdx -->`
+  is an excerpt of that page's examples, and the check fails when the two
+  differ: edit the page, then copy.
+- The reference pages in `site/content/docs/(latest)/reference/` (one per
+  entry point, and the error codes) are generated from the JSDoc by
+  `pnpm run docs:reference`, except the entry points index and
+  Compatibility. Don't edit them by hand: the check fails when they differ
+  from what the JSDoc renders.
+- `pnpm run check` doesn't build the site. Run `pnpm run build:site` after
+  changing `site/`, a page's MDX or Twoslash blocks.
+- Older release lines in `site/content/docs/<line>/` are snapshots. Don't
+  edit them for a change in the current line.
 
 ## Working with the maintainer
 
@@ -184,5 +202,6 @@ The maintainer handles commits, pull requests, CI and npm.
 Run `pnpm run check` and make sure it passes. It runs lint, the format check,
 the build, the tests in both storage modes, the type tests, and the docs
 check (every public export has a description, `@example` and `@since`,
-every example in the JSDoc, the README and `docs/` compiles, and every
+every example in the JSDoc, the README and the site's pages compiles, every
+export is on the reference, and every
 `{@link}` resolves in the published types).

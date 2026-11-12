@@ -1,0 +1,44 @@
+---
+title: "Next.js"
+description: "Server sessions for the Next.js App Router."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/next";
+```
+
+Guide: [Next.js](/docs/setups/next).
+
+## Functions
+
+### nextJar
+
+The `CookieJar` for `cookies()` from `next/headers`, to pass to `serverAuth` from `@monarcode/session-kit/server`.
+
+### proxyJar
+
+The `CookieJar` for a request in Next's Proxy (`proxy.ts`). It reads `request`'s cookies and sets new ones on `response`. Use it with `serverAuth.refreshIfDue`, so the pages that render the request see a fresh token through [`nextJar`](#nextjar).
+
+## Types
+
+### NextCookies
+
+A request's cookie store, as `cookies()` from `next/headers` resolves it. [`nextJar`](#nextjar) reads and writes it, and Next's own store fits.
+
+### NextJarOptions
+
+Options for [`nextJar`](#nextjar).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
+  name="NextJarOptions"
+/>
+
+### ProxyRequest
+
+The request [`proxyJar`](#proxyjar) reads cookies from. A `NextRequest` fits.
+
+### ProxyResponse
+
+The response [`proxyJar`](#proxyjar) sets cookies on. A `NextResponse` fits.

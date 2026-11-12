@@ -1,0 +1,69 @@
+---
+title: Locking
+description: Restore a saved session as locked until the user unlocks it, for example with biometrics, in native apps.
+---
+
+Locking is for native apps that ask a returning user to unlock, for example
+with biometrics, before the app opens. With the `locking` option, a saved
+session restores as `locked`: `user` and `sessionId` are set, so a
+"Welcome back" screen can greet the user, but the tokens wait for
+`auth.unlock()`.
+
+```ts title="src/locked-auth.ts"
+import { createAuth, type AuthStorage } from "@monarcode/session-kit";
+
+import { userSchema } from "./backend.js";
+
+// Your app's own: a native secure store, and encryption with a key it holds
+// in memory only while unlocked.
+declare const storage: AuthStorage;
+declare const key: CryptoKey;
+declare function encrypt(key: CryptoKey, plain: string): Promise<string>;
+declare function decrypt(key: CryptoKey, sealed: string): Promise<string>;
+
+export const lockedAuth = createAuth({
+  name: "my-native-app",
+  user: userSchema,
+  storage,
+  locking: {
+    // Runs whenever the tokens are saved.
+    seal: (payload) => encrypt(key, payload),
+    // Runs only from `unlock()`.
+    open: (sealed) => decrypt(key, sealed),
+  },
+});
+
+/** Once the app has its key: resolves the session, now `authenticated`. */
+export const unlockApp = () => lockedAuth.unlock();
+
+/** `locked` again. The saved session stays, and the tokens leave memory. */
+export const lockApp = () => lockedAuth.lock();
+```
+
+- **Sealing is yours.** session-kit depends on no crypto or biometrics
+  library. The user and session ID are saved beside the sealed tokens,
+  readable while locked. `locking: true` stores the tokens as they are, for a
+  lock screen in front of an otherwise ordinary session.
+- **While locked, nothing waits.** `getSession`, `retry`, `refresh`,
+  `updateUser`, `credentials.get`, and `credentials.renew` reject with
+  `LOCKED` instead of waiting for an unlock that may never come. Nothing
+  refreshes, and timers are off. `signIn` replaces the session, which is the password path, and
+  `signOut` clears it without calling `revoke`, since the tokens are sealed.
+- **A failed unlock isn't always still locked.** When `open` throws,
+  `unlock()` rejects with `UNLOCK_FAILED` and the session stays locked. But a
+  refresh that fails after the tokens were opened rejects with
+  `REFRESH_FAILED` and leaves the session unlocked and `unavailable` until
+  `retry()`. Check `status` after a rejection.
+- **Keep the key until `lock()` settles.** A refresh already running still
+  saves its tokens, and saving seals them.
+- **Native apps only.** Locking is built for one JavaScript context. In a
+  browser, tabs don't follow each other with `locking`, and the router
+  adapters treat a locked session as signed out. It also needs a user schema:
+  a user read from the access token can't be shown without its token.
+- **Turning it on and off.** A session saved before `locking` was added
+  restores as `locked` too, and is sealed when unlocked. Turning
+  `locking` off later makes sealed sessions unreadable, which signs those
+  users out.
+
+The [Expo guide](/docs/setups/expo#locking) has a worked example: a key behind
+the device's biometrics, AES-GCM sealing, and a welcome-back screen.

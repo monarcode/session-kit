@@ -1,0 +1,60 @@
+---
+title: Authenticated requests
+description: A fetch that sends the access token to one API, refreshes on a 401, and never leaks the token.
+---
+
+`createAuthFetch(auth, baseUrl)` returns a `fetch` for one API. It is built so
+that a token can't leak and a user can't be signed out by accident:
+
+| When…                                   | `authFetch`…                                                                 |
+| --------------------------------------- | ---------------------------------------------------------------------------- |
+| The path is on another origin           | Rejects with `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.   |
+| The response is a redirect              | Rejects rather than following it.                                            |
+| The response is a 401                   | Refreshes once, then sends a GET or HEAD again with the new token.           |
+| A POST, PUT, PATCH or DELETE gets a 401 | Refreshes, and resolves the 401. It never sends a request twice on its own.  |
+| The replayed request gets a 401 too     | Signs out, unless `signOutOnRepeated401` is `false`.                         |
+| The session changes during the request  | Rejects with `SESSION_CHANGED` rather than resolve another account's answer. |
+| Nobody is signed in                     | Rejects with `UNAUTHENTICATED`, unless `optional` is `true`.                 |
+| The network fails                       | Rejects as `fetch` does, unchanged.                                          |
+
+Because a write is never replayed for you, retry it yourself where sending it
+twice is safe. By then the token has been refreshed:
+
+```ts title="src/add-to-cart.ts"
+import { authFetch } from "./api.js";
+
+export async function addToCart(userId: number, productId: number) {
+  const send = () =>
+    authFetch("auth/carts/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId,
+        products: [{ id: productId, quantity: 1 }],
+      }),
+    });
+
+  let response = await send();
+  // The 401 refreshed the token, so one more try uses the new one.
+  if (response.status === 401) response = await send();
+  if (!response.ok) throw new Error(`Add to cart failed (${response.status})`);
+}
+```
+
+Two options change the defaults:
+
+```ts title="src/public-api.ts"
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+export const publicFetch = createAuthFetch(auth, `${API}/`, {
+  // One `fetch` for public and private endpoints: signed out, requests are
+  // sent without a token instead of rejecting.
+  optional: true,
+  // For APIs that answer 401 for reasons other than a rejected token, so one
+  // of those endpoints can't sign users out.
+  signOutOnRepeated401: false,
+});
+```

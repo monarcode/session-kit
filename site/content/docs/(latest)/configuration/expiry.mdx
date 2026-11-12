@@ -1,0 +1,14 @@
+---
+title: Expiry
+description: How the client finds out when the access token expires, and which of your backend's answers to prefer.
+---
+
+The client needs to know when the access token expires. It reads that from
+`expiresIn` (seconds, as in OAuth), `expiresAt` (Unix milliseconds), or a
+JWT's `exp` and `iat` claims. Prefer `expiresIn` when your backend sends it:
+it is counted from receipt, so a wrong device clock can't expire the token
+early or late. Pass one or the other, not both; the `Tokens` type documents
+how each is read.
+
+When the client can't tell, the token is used until a request gets a 401,
+and [`authFetch`](/docs/client/requests) refreshes then.

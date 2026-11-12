@@ -1,0 +1,68 @@
+---
+title: "Expo"
+description: "Secure storage, the session gate and deep links for Expo Router."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/expo";
+```
+
+Guide: [Expo Router](/docs/setups/expo).
+
+## Functions
+
+### rememberDeepLink
+
+Keeps an incoming deep link, so `SessionGate` can open it after the user signs in. Without it, `Stack.Protected` sends a signed-out user from a guarded screen to one they may see, and the link is lost.
+
+### secureStorage
+
+Saves the session with `expo-secure-store`: in the iOS keychain, and encrypted with an Android Keystore key on Android. Pass it as `createAuth`'s `storage` in Expo apps.
+
+## Components
+
+### SessionGate
+
+Wraps the root navigator in `app/_layout.tsx`. It adds what Expo Router's `Stack.Protected` lacks: a splash screen held while the session is restored, a screen for when access is unavailable, and deep links kept for after sign-in.
+
+## Types
+
+### RememberDeepLinkOptions
+
+Options for [`rememberDeepLink`](#rememberdeeplink), the same as `safeReturnTo`'s. Set `loginPath` when your sign-in screen isn't `/login`, so links to it are dropped rather than kept.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/expo/index.d.ts"
+  name="RememberDeepLinkOptions"
+/>
+
+### SecureStorageOptions
+
+Options for [`secureStorage`](#securestorage). Both are for iOS: when the keychain may be read, and what happens to a session an earlier install left there.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/expo/index.d.ts"
+  name="SecureStorageOptions"
+/>
+
+### SessionGateProps
+
+Props for [`SessionGate`](#sessiongate): the root navigator, what to show while access is unavailable, and what else the splash screen waits for.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/expo/index.d.ts"
+  name="SessionGateProps"
+/>
+
+### UnavailableProps
+
+What the `unavailable` render prop of an adapter component, such as React Router's `SessionOutlet` or Expo's `SessionGate`, receives.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/expo/index.d.ts"
+  name="UnavailableProps"
+/>

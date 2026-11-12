@@ -1,8 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
+
+import { renderReference } from "./reference-docs.mjs";
 
 /** What TanStack Router's generator would write for its guide's routes. */
 const ROUTE_TREE = `
@@ -115,38 +117,80 @@ declare const process: { env: Record<string, string | undefined> };
 `;
 
 /**
- * Markdown documents whose TypeScript examples, marked with a
- * `<!-- file: path -->` comment, form one small app per document: they can
- * import each other, with `fixtures` standing in for generated files and the
- * app's other dependencies. A guide that builds on another document's app
- * names the files it uses as `shared`; its own file replaces a shared one of
- * the same path. `requires` skips a document when an installed package is
- * older than it needs.
+ * How a document marks an example: a `<!-- file: path -->` comment before the
+ * fence in Markdown, which can't show the path, and the fence's `title` in
+ * MDX, which Fumadocs shows above the block. Other meta, such as `twoslash`,
+ * may sit beside the title.
+ */
+const MARKERS = {
+	md: /<!-- file: ([\w/()+.$@[\]-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+	mdx: new RegExp(
+		'^```tsx?[^\\S\\n]+(?:[^\\n]*?\\s)?title="([\\w/()+.$@[\\]-]+\\.tsx?)"' +
+			"[^\\n]*\\n([\\s\\S]*?)\\n```$",
+		"gm",
+	),
+};
+
+/** Where the site's pages for the current release line live. */
+const PAGES = "site/content/docs/(latest)";
+
+/** A site page's path, from its slug. */
+const page = (slug) => `${PAGES}/${slug}.mdx`;
+
+/** The Getting started app, which the other pages build on. */
+const GETTING_STARTED = {
+	from: page("getting-started"),
+	files: [
+		"src/backend.ts",
+		"src/auth.ts",
+		"src/sign-in.tsx",
+		"src/hooks.ts",
+		"src/app.tsx",
+		"src/api.ts",
+	],
+};
+
+/** A page about the client, compiled with the Getting started app. */
+const clientPage = (slug) => ({
+	path: page(slug),
+	resolutions: ["NodeNext", "Bundler"],
+	dom: true,
+	fixtures: {},
+	shared: GETTING_STARTED,
+});
+
+/**
+ * The site's pages whose TypeScript examples form one small app per page,
+ * marked by the fence's `title="path"`. They can import each other, with
+ * `fixtures` standing in for generated files and the app's other
+ * dependencies. A page that builds on another page's app names the files it
+ * uses as `shared`; its own file replaces a shared one of the same path.
+ * `requires` skips a page when an installed package is older than it needs.
  */
 const documents = [
 	{
-		path: "README.md",
+		path: page("getting-started"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: {},
 	},
 	{
-		path: "docs/tanstack-router.md",
+		path: page("setups/tanstack-router"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: { "src/routeTree.gen.ts": ROUTE_TREE },
 		shared: {
-			from: "README.md",
+			from: page("getting-started"),
 			files: ["src/backend.ts", "src/auth.ts", "src/sign-in.tsx"],
 		},
 	},
 	{
-		path: "docs/react-router.md",
+		path: page("setups/react-router"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: {},
 		shared: {
-			from: "README.md",
+			from: page("getting-started"),
 			files: [
 				"src/backend.ts",
 				"src/auth.ts",
@@ -158,7 +202,7 @@ const documents = [
 		},
 	},
 	{
-		path: "docs/expo.md",
+		path: page("setups/expo"),
 		// Metro resolves like a bundler, and Expo apps import without extensions.
 		resolutions: ["Bundler"],
 		// No DOM, so browser-only code fails as it would on a device.
@@ -166,7 +210,7 @@ const documents = [
 		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
 	},
 	{
-		path: "docs/tanstack-start.md",
+		path: page("setups/tanstack-start"),
 		// Vite resolves like a bundler, and Start apps import without extensions.
 		resolutions: ["Bundler"],
 		dom: true,
@@ -176,7 +220,7 @@ const documents = [
 		},
 	},
 	{
-		path: "docs/next.md",
+		path: page("setups/next"),
 		// Next apps resolve like a bundler: `next` has no `exports`.
 		resolutions: ["Bundler"],
 		// The App Router runs React 19, and the guide uses its APIs.
@@ -189,7 +233,7 @@ const documents = [
 		},
 	},
 	{
-		path: "docs/react-router-ssr.md",
+		path: page("setups/react-router-ssr"),
 		// React Router's Vite plugin resolves like a bundler.
 		resolutions: ["Bundler"],
 		// The guide's code is React Router 8's, with the `url` argument.
@@ -198,7 +242,23 @@ const documents = [
 		fixtures: { "app/env.d.ts": SERVER_ENV },
 	},
 	{
-		path: "docs/effect.md",
+		path: page("effect"),
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {},
+	},
+	clientPage("client/state"),
+	clientPage("client/sessions"),
+	clientPage("client/signing-in-and-out"),
+	clientPage("client/updating-the-user"),
+	clientPage("client/requests"),
+	clientPage("client/other-http-clients"),
+	clientPage("client/users-from-tokens"),
+	clientPage("client/locking"),
+	clientPage("configuration/errors"),
+	clientPage("configuration/debugging"),
+	{
+		path: page("reference/error-codes"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: {},
@@ -277,13 +337,14 @@ const sourceProgram = ts.createProgram(
 	{ ...readCompilerOptions(), noEmit: true },
 );
 const exportCount = checkExportDocs(sourceProgram);
+checkReference(sourceProgram);
 const jsdocExamples = extractJsdocExamples(sourceProgram);
 compileExamples("JSDoc", jsdocExamples, ["NodeNext", "Bundler"]);
 const checkedDocuments = documents.filter(checkDocument).length;
-const excerpts = documents.reduce(
-	(count, document) => count + checkExcerpts(document.path),
-	0,
-);
+// Only Markdown can hold the `<!-- from: -->` marker, so only the README
+// has excerpts.
+const excerpts = checkExcerpts("README.md");
+checkPagesListed();
 checkLinks();
 
 if (problems.length > 0) {
@@ -399,6 +460,24 @@ function checkExportDocs(program) {
 	return seen.size;
 }
 
+/**
+ * The reference pages are what `scripts/reference-docs.mjs` renders from the
+ * JSDoc, whitespace aside (Oxfmt may wrap them), so they can't fall behind it.
+ */
+function checkReference(program) {
+	const squash = (text) => text.replace(/\s+/g, "");
+	for (const [path, body] of renderReference(program)) {
+		const file = join(root, path);
+		if (
+			!existsSync(file) ||
+			squash(readFileSync(file, "utf8")) !== squash(body)
+		)
+			problems.push(
+				`${path}: out of date with the JSDoc. Run \`pnpm run docs:reference\`.`,
+			);
+	}
+}
+
 /** The fenced `ts` and `tsx` blocks in `src`'s JSDoc comments. */
 function extractJsdocExamples(program) {
 	const examples = [];
@@ -435,23 +514,42 @@ function extractJsdocExamples(program) {
 	return examples;
 }
 
-/** A document's examples marked with a `<!-- file: path -->` comment. */
+/** A document's marked examples. */
 function markedExamples(path, dom) {
 	const text = readFileSync(join(root, path), "utf8");
 	const files = [];
-	for (const match of text.matchAll(
-		/<!-- file: ([\w/()+.-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
-	)) {
-		const codeStart = match.index + match[0].indexOf("```");
+	for (const match of text.matchAll(MARKERS[markerOf(path)])) {
+		const fenceStart = match.index + match[0].indexOf("```");
 		files.push({
 			origin: join(root, path),
-			line: text.slice(0, codeStart).split("\n").length + 1,
+			line: text.slice(0, fenceStart).split("\n").length + 1,
 			path: match[1],
 			dom,
 			code: match[2],
 		});
 	}
 	return files;
+}
+
+function markerOf(path) {
+	return path.endsWith(".mdx") ? "mdx" : "md";
+}
+
+/**
+ * Every site page with a titled example is in `documents`, so a new page
+ * can't skip the check. Pages of older release lines are skipped: their
+ * examples compiled when their line was current.
+ */
+function checkPagesListed() {
+	const listed = new Set(documents.map(({ path }) => path));
+	const pages = readdirSync(join(root, PAGES), { recursive: true })
+		.filter((name) => name.endsWith(".mdx"))
+		.map((name) => `${PAGES}/${name.split(sep).join("/")}`);
+	for (const page of pages) {
+		if (listed.has(page)) continue;
+		if (markedExamples(page, true).length > 0)
+			problems.push(`${page}: has titled examples but isn't in documents`);
+	}
 }
 
 /**
@@ -476,16 +574,17 @@ function sharedExamples(path, { from, files, directories }, dom) {
 }
 
 /**
- * An example marked `<!-- from: path -->` is an excerpt of that document's
- * marked examples, which compile: it must match part of one, whitespace
- * aside, so the two can't drift apart. Returns how many `path` has.
+ * An example marked `<!-- from: path -->` in a Markdown file is an excerpt of
+ * that page's marked examples, which compile: it must match part of one,
+ * whitespace aside, so the two can't drift apart. Returns how many `path`
+ * has.
  */
 function checkExcerpts(path) {
 	const text = readFileSync(join(root, path), "utf8");
 	const squash = (code) => code.replace(/\s+/g, "");
 	const excerpts = [
 		...text.matchAll(
-			/<!-- from: ([\w/.-]+\.md) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+			/<!-- from: ([\w/.()-]+\.mdx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
 		),
 	];
 	const marked = text.match(/<!-- from: /g)?.length ?? 0;

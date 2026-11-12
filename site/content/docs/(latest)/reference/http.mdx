@@ -1,0 +1,36 @@
+---
+title: "HTTP"
+description: "A fetch that sends the access token and refreshes on a 401."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/http";
+```
+
+Guide: [Authenticated requests](/docs/client/requests).
+
+## Functions
+
+### createAuthFetch
+
+Creates a `fetch` for your API ([`AuthFetch`](#authfetch)) that sends the current access token as `Authorization: Bearer`. After a 401, it gets a new access token once. `GET` and `HEAD` requests are then sent again; other requests resolve the 401 for you to retry. If the request sent again gets a 401 too, the user is signed out, unless `signOutOnRepeated401` is off.
+
+## Types
+
+### AuthFetch
+
+The `fetch` that [`createAuthFetch`](#createauthfetch) returns. Call it with a path under your API's base URL, and `init` as you would pass to `fetch`. Use the name to type a prop, a context or a test fake that stands in for it.
+
+### AuthFetchClient
+
+The part of an auth client that [`createAuthFetch`](#createauthfetch) uses. A `createAuth` or `createMirrorAuth` client fits, and so does a request's session from `serverAuth.forRequest(jar)`.
+
+### AuthFetchOptions
+
+Options for [`createAuthFetch`](#createauthfetch).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/http/index.d.ts"
+  name="AuthFetchOptions"
+/>

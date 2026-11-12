@@ -1,0 +1,91 @@
+---
+title: Introduction
+description: session-kit keeps your app signed in with your backend's tokens, through reloads, expired tokens, other tabs, and outages.
+---
+
+## Why session-kit
+
+Signing in is the easy part. Your backend checks a password and answers with
+an access token and a refresh token, and for a moment the app is done.
+
+Then the user reloads the page. The access token expires halfway through a
+form. They open a second tab, sign out of one, and switch accounts in the
+other. The backend goes down for a minute, just as a refresh was due.
+
+Every app with its own backend has to get these moments right. It usually
+takes a few hundred lines spread across an auth context, a fetch wrapper, and
+the route guards, and one or two cases stay missing until a user finds them.
+session-kit is that code, written once and tested with the routers and
+frameworks it supports.
+
+### What it does
+
+| When…                                             | session-kit…                                                                                                           |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage`, before the first paint. |
+| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                         |
+| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                              |
+| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token, and the other reuse what it saved.                                               |
+| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                   |
+| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                             |
+| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                              |
+| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                   |
+| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                |
+
+### What it doesn't do
+
+session-kit doesn't sign users in. It has no sign-in form, no OAuth flow, and
+no user database: it starts where your backend's sign-in response ends. If you
+need those too, use an auth service or framework such as Auth.js, Better Auth,
+or Clerk, which manage their own sessions.
+
+## How it works
+
+session-kit sits between your backend and your components. Tokens travel on
+the left, and only state reaches the right:
+
+```text
+    Your backend             session-kit             Your components
+ ┌───────────────┐      ┌───────────────────┐      ┌──────────────────┐
+ │ POST /login   │ ───▶ │ signIn()          │ ───▶ │ useAuth()        │
+ │ POST /refresh │ ◀──▶ │ refresh, on time  │      │ route guards     │
+ │ GET  /orders  │ ◀─── │ authFetch()       │ ◀─── │ loaders, queries │
+ └───────────────┘      └───────────────────┘      └──────────────────┘
+   issues tokens          keeps the session        state, never tokens
+```
+
+Five terms come up throughout:
+
+- **Tokens** are what your backend issues. The access token goes with each
+  request and is short-lived. The refresh token, if there is one, is exchanged
+  for a new access token when the old one expires.
+- **The client**, from `createAuth`, holds the tokens and does the work:
+  saving, restoring, refreshing, and telling other tabs. An app has one.
+- **A session** is who is signed in: `{ sessionId, user }`. It never holds
+  tokens, so it is safe to render and to pass around.
+- **State** is what components read: `status`, `user`, `sessionId`, and
+  `error`, updated as the session changes.
+- **Credentials** are the access token and its expiry, given only to code that
+  attaches them to requests, such as `createAuthFetch`.
+
+`status` says where the session stands, and checking it narrows `user`:
+
+| `status`          | Meaning                                                                   | `user` |
+| ----------------- | ------------------------------------------------------------------------- | ------ |
+| `initializing`    | The saved session is being restored.                                      | `null` |
+| `authenticated`   | Access is usable.                                                         | Set    |
+| `refreshing`      | A refresh is replacing expired or rejected access.                        | Set    |
+| `locked`          | With `locking`, a session is saved, but its tokens wait for `unlock()`.   | Set    |
+| `unauthenticated` | No session; sign-in is needed.                                            | `null` |
+| `unavailable`     | Restoring failed, or a failed refresh left no usable access; see `error`. | `null` |
+
+The session is kept in one of two places, depending on where your app renders:
+
+|                   | In the browser or on the device                                            | On the server                                              |
+| ----------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| For               | Single-page apps and Expo apps                                             | TanStack Start, Next.js, React Router with SSR             |
+| Client            | `createAuth`                                                               | `createServerAuth`, with `createMirrorAuth` in the browser |
+| Saved in          | `localStorage`, `sessionStorage`, or the iOS keychain and Android Keystore | An encrypted `httpOnly` cookie                             |
+| The refresh token | Stays in that storage                                                      | Never reaches the browser                                  |
+
+Hooks, guards, and tab sync work the same in both.

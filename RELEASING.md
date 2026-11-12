@@ -44,6 +44,53 @@ receives OIDC and release-write permissions. Its tarball and release notes come
 from the same run's artifact, retained for 14 days. Publishing uses npm only for
 the OIDC-authenticated upload; installation, tests, and packing use pnpm.
 
+## The docs site
+
+Cloudflare Pages builds the site from this repository. Its production branch
+is `site`, so the live docs show the newest release, and `main` deploys as a
+preview: the docs for what's next. Every pull request gets a preview too.
+
+One-time setup, in Cloudflare Pages: connect the repository, set the
+production branch to `site`, the build command to `pnpm run build:site`, the
+output directory to `site/dist/client`, and the `NODE_VERSION` variable to
+`24`. Then create the branch once from `main`:
+
+```sh
+git push origin main:refs/heads/site
+```
+
+After publishing, the Release workflow moves `site` to the released commit.
+If that step fails, the package is published: move the branch yourself, with
+the run's full commit SHA. A release whose changes include
+`.github/workflows/` may need this, since the workflow's token can't update
+a branch to a commit that changes workflow files.
+
+```sh
+git push --force origin FULL_COMMIT_SHA_FROM_THE_RUN:refs/heads/site
+```
+
+**Fixing the live docs between releases.** Fix it on `main` first, then
+cherry-pick the commit onto `site`. The next release moves `site` to a
+commit that already has the fix. A fix made only on `site` is lost.
+
+```sh
+git switch site
+git cherry-pick FIX_SHA
+git push origin site
+```
+
+**Starting a new release line.** Before releasing the first version of a new
+line, such as `0.2.0-rc.0`, freeze the outgoing line's docs:
+
+```sh
+node scripts/snapshot-docs.mjs 0.1
+```
+
+It copies the pages from the line's newest release tag into
+`site/content/docs/0.1/`, with that release's types from npm, and adds it to
+the site's version dropdown. Commit the result with the release. After a
+later patch to an old line, run it again for that line.
+
 ## Recover a partial release
 
 If npm publishing fails, resolve the reported problem before rerunning. Check

@@ -1,0 +1,26 @@
+---
+title: "React Router server"
+description: "Server sessions in React Router's framework mode."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/react-router/server";
+```
+
+Guide: [React Router with server rendering](/docs/setups/react-router-ssr).
+
+## Functions
+
+### cookieJarMiddleware
+
+Server middleware that gives each request a `CookieJar`, found with [`routerJar`](#routerjar). It sets the cookies written to the jar on the response, redirects and error responses included.
+
+### routerJar
+
+The `CookieJar` for the request React Router is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Every call during one request returns the same jar.
+
+## Types
+
+### RouterContextLike
+
+The `context` React Router passes to server middleware, loaders and actions in framework mode: a `RouterContextProvider`, one per request. [`routerJar`](#routerjar) and [`cookieJarMiddleware`](#cookiejarmiddleware) find the request's jar by it. It's typed by its shape, so this entry point doesn't depend on React Router's types.

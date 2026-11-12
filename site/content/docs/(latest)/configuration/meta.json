@@ -1,0 +1,13 @@
+{
+	"title": "Configuring the client",
+	"pages": [
+		"index",
+		"user-schemas",
+		"refresh",
+		"expiry",
+		"storage",
+		"tabs",
+		"errors",
+		"debugging"
+	]
+}

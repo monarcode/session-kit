@@ -1,0 +1,70 @@
+---
+title: "TanStack Router"
+description: "Route guards and router wiring for TanStack Router."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/tanstack-router";
+```
+
+Guide: [TanStack Router](/docs/setups/tanstack-router).
+
+## Functions
+
+### connectAuth
+
+Starts auth for a Router whose context holds the client as `auth`. It restores the session, runs expiry timers, follows other tabs, and runs guards such as `requireSession` again when the session changes. Call it once, beside the Router.
+
+### redirectIfSignedIn
+
+Guards your sign-in page in `beforeLoad`, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`.
+
+### requireSession
+
+Guards a route in `beforeLoad`, so only signed-in users get through. They get `{ session }` in route context, typed and never `null`, with no tokens in it.
+
+### useRouterAuth
+
+Reads the auth client from Router context, where it's `auth`. Pass it to `createAuthHooks` as `useClient`, so the hooks need no `AuthProvider`. Then mount the client with `connectAuth`.
+
+## Components
+
+### SessionOutlet
+
+Renders the child routes of a route guarded by `requireSession`, but only while the session it accepted is still the signed-in one.
+
+## Types
+
+### RedirectIfSignedInOptions
+
+Options for [`redirectIfSignedIn`](#redirectifsignedin).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/tanstack-router/index.d.ts"
+  name="RedirectIfSignedInOptions"
+/>
+
+### RegisteredAuth
+
+The auth client type in your registered Router's context, which [`useRouterAuth`](#userouterauth) returns. It's `never` until the Router is registered.
+
+### RequireSessionOptions
+
+Options for [`requireSession`](#requiresession).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/tanstack-router/index.d.ts"
+  name="RequireSessionOptions"
+/>
+
+### SessionOutletProps
+
+Props for [`SessionOutlet`](#sessionoutlet).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/tanstack-router/index.d.ts"
+  name="SessionOutletProps"
+/>

@@ -1,0 +1,33 @@
+---
+title: Signing in and out
+description: Save a new session, end it in every tab, and revoke the ended tokens on your backend.
+---
+
+`auth.signIn({ accessToken, refreshToken?, expiresIn?, user })` validates and
+saves a new session, replacing any current one. The latest call wins, and
+invalid input keeps the previous session. [Expiry](/docs/configuration/expiry)
+covers how the token's lifetime is found.
+
+`auth.signOut()` ends the session in every tab and clears storage. If your
+backend can revoke tokens, give the client a `revoke` callback: it receives
+the ended tokens once the user is already signed out.
+
+```ts title="src/revoke.ts"
+import type { RevokeFn } from "@monarcode/session-kit";
+
+/** Pass as `createAuth`'s `revoke` option. */
+export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
+  if (!refreshToken) return;
+  const response = await fetch("https://api.example.com/auth/revoke", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!response.ok) throw new Error(`Revoke failed (${response.status})`);
+};
+```
+
+A failed revocation is reported in `state.error` as `REVOKE_FAILED` without
+undoing the sign-out: the user asked to leave, and has. A session the backend
+already rejected is not revoked.

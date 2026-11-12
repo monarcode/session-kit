@@ -1,0 +1,59 @@
+---
+title: Configuring the client
+description: Every option createAuth takes, with a page for each part of the client you can configure.
+---
+
+`createAuth` takes three required options and five optional ones:
+
+| Option    | Required | What it sets                                                                                                    |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `name`    | Yes      | The storage namespace: letters, digits, `_` or `-`. Keeps two apps on one origin apart.                         |
+| `user`    | Yes      | A [user schema](/docs/configuration/user-schemas), or [`fromAccessToken`](/docs/client/users-from-tokens).      |
+| `storage` | Yes      | [Where the session is saved](/docs/configuration/storage).                                                      |
+| `refresh` | No       | [How expired access is replaced](/docs/configuration/refresh). Without it, an expired token signs the user out. |
+| `revoke`  | No       | [Revokes the ended tokens](/docs/client/signing-in-and-out) on your backend after a sign-out.                   |
+| `maxAge`  | No       | How long a saved session is restored, in seconds. Default: 30 days, renewed on each save.                       |
+| `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                                    |
+| `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.                    |
+
+The pages in this section cover how the client checks users, refreshes and
+expires access, saves the session, follows other tabs, and reports what
+happens:
+
+<Cards>
+  <Card
+    title="User schemas"
+    href="/docs/configuration/user-schemas"
+    description="How the schema checks users, and the rules restoring a session sets for it."
+  />
+  <Card
+    title="Refresh"
+    href="/docs/configuration/refresh"
+    description="What the refresh callback returns, and when a refresh runs."
+  />
+  <Card
+    title="Expiry"
+    href="/docs/configuration/expiry"
+    description="How the client finds out when the access token expires."
+  />
+  <Card
+    title="Storage"
+    href="/docs/configuration/storage"
+    description="Where the session is saved: localStorage, sessionStorage, the device, or your own store."
+  />
+  <Card
+    title="Tabs"
+    href="/docs/configuration/tabs"
+    description="How tabs follow each other's sign-ins, and share one refresh."
+  />
+  <Card
+    title="Errors"
+    href="/docs/configuration/errors"
+    description="Every AuthError code, and the failures that need a decision from you."
+  />
+  <Card
+    title="Debugging"
+    href="/docs/configuration/debugging"
+    description="Log what the client does, or send it to your error reporting."
+  />
+</Cards>

@@ -1,0 +1,298 @@
+---
+title: Getting started
+description: Build a small app that signs in, stays signed in across reloads and tabs, calls an API, and signs out.
+---
+
+These six steps are the same for every setup that keeps the session in the
+browser or on the device. Server-rendered apps create their client
+differently, so start from [Server rendering](/docs/server-rendering) instead.
+
+The code signs in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth), a public test
+backend, so it runs as written.
+
+## 1. Talk to your backend
+
+session-kit never calls your backend for you, so start with the two requests
+you would write anyway: one that signs in, and one that exchanges a refresh
+token for new tokens. Nothing in this file imports session-kit.
+
+```ts title="src/backend.ts"
+import { z } from "zod";
+
+export const API = "https://dummyjson.com";
+
+export const userSchema = z.object({
+  id: z.number(),
+  username: z.string(),
+  email: z.string(),
+  firstName: z.string(),
+});
+
+const tokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+});
+
+const post = (path: string, body: unknown, init?: RequestInit) =>
+  fetch(API + path, {
+    ...init,
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+/** Checks the password, and resolves the tokens and the user. */
+export async function login(username: string, password: string) {
+  const response = await post("/auth/login", { username, password });
+  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+  // DummyJSON returns the user's fields beside the tokens.
+  const body: unknown = await response.json();
+  return { ...tokensSchema.parse(body), user: userSchema.parse(body) };
+}
+
+/**
+ * Exchanges a refresh token for new tokens. Resolves `null` when the backend
+ * rejects the token, and throws for any other failure.
+ */
+export async function refresh(refreshToken: string, signal: AbortSignal) {
+  const response = await post("/auth/refresh", { refreshToken }, { signal });
+  // DummyJSON answers 403 for an invalid token and 401 for a missing one.
+  if (response.status === 401 || response.status === 403) return null;
+  if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+  return tokensSchema.parse(await response.json());
+}
+```
+
+The schemas do two jobs: they check what the backend sent, and they give the
+rest of the app its types. Requests omit `credentials: "include"`, because
+session-kit keeps tokens out of cookies and attaches them itself.
+
+## 2. Create the client
+
+The client is the one object that knows about the session. Tell it what a
+user is, where to save the session, and how to refresh.
+
+```ts title="src/auth.ts"
+import { createAuth, webStorage } from "@monarcode/session-kit";
+
+import { login, refresh, userSchema } from "./backend.js";
+
+export const auth = createAuth({
+  // Keeps this app's saved session apart from any other on the same origin.
+  name: "my-app",
+  // Every user is checked against this schema, and typed by it.
+  user: userSchema,
+  // Where the session is saved: `localStorage`.
+  storage: webStorage(),
+  // How expired access is replaced.
+  refresh: ({ refreshToken, signal }) => refresh(refreshToken, signal),
+});
+
+/** Signs in with the backend, then hands the result to session-kit. */
+export async function signInWithPassword(username: string, password: string) {
+  await auth.signIn(await login(username, password));
+}
+
+export type AppAuth = typeof auth;
+```
+
+`refresh` tells two failures apart. `null` means the backend rejected the
+refresh token, so the user is signed out. A throw means something else failed,
+so the session is kept and the error reported. That split is why an outage
+doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the details, and
+[Storage](/docs/configuration/storage) lists the other places a session can
+be saved.
+
+Create one client per `name` in each tab.
+
+DummyJSON's tokens are JWTs, so their expiry comes from the `exp` and `iat`
+claims. [Expiry](/docs/configuration/expiry) covers backends that say it
+another way.
+
+## 3. Add a sign-in form
+
+`signInWithPassword` is all a form needs. It has no session-kit code of its
+own.
+
+```tsx title="src/sign-in.tsx"
+import { useState, type FormEvent } from "react";
+
+import { signInWithPassword } from "./auth.js";
+
+export function SignIn({ onSignedIn }: { onSignedIn?: () => unknown }) {
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setError("");
+    setPending(true);
+    try {
+      await signInWithPassword(
+        String(form.get("username")),
+        String(form.get("password")),
+      );
+      await onSignedIn?.();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not sign in");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit}>
+      <h1>Sign in</h1>
+      {/* DummyJSON's documented test user. */}
+      <label>
+        Username
+        <input name="username" defaultValue="emilys" autoComplete="username" />
+      </label>
+      <label>
+        Password
+        <input
+          name="password"
+          type="password"
+          defaultValue="emilyspass"
+          autoComplete="current-password"
+        />
+      </label>
+      {error && <p role="alert">{error}</p>}
+      <button disabled={pending}>{pending ? "Signing in…" : "Sign in"}</button>
+    </form>
+  );
+}
+```
+
+The form doesn't have to do anything when it succeeds: signing in changes the
+client's state, and the next step renders from that state. `onSignedIn` is for
+routers, which use it to send the user on to the page they asked for.
+
+## 4. Read the session in React
+
+Create the hooks once, typed by your client, and export them for every
+component to share.
+
+```ts title="src/hooks.ts"
+import { createAuthHooks } from "@monarcode/session-kit/react";
+
+import type { auth } from "./auth.js";
+
+export const { AuthProvider, useAuth, useAuthClient } =
+  createAuthHooks<typeof auth>();
+```
+
+Then render by `status`. Each case is one of the states in
+[How it works](/docs#how-it-works), and TypeScript knows `user` is set by the
+time the last one is reached.
+
+```tsx title="src/app.tsx"
+import { auth } from "./auth.js";
+import { AuthProvider, useAuth, useAuthClient } from "./hooks.js";
+import { SignIn } from "./sign-in.js";
+
+export function App() {
+  return (
+    <AuthProvider client={auth}>
+      <AuthError />
+      <Screen />
+    </AuthProvider>
+  );
+}
+
+function Screen() {
+  const { status, user } = useAuth();
+  const client = useAuthClient();
+
+  switch (status) {
+    case "initializing":
+      return <p>Restoring your session…</p>;
+    case "unauthenticated":
+      return <SignIn />;
+    case "unavailable":
+      // Access couldn't be restored or refreshed: offer another try.
+      return (
+        <button onClick={() => void client.retry().catch(() => {})}>
+          Try again
+        </button>
+      );
+    default:
+      // Signed in: "authenticated", or "refreshing" with the user on screen.
+      return (
+        <main>
+          <h1>Welcome, {user.firstName}</h1>
+          <button onClick={() => void client.signOut().catch(() => {})}>
+            Sign out
+          </button>
+        </main>
+      );
+  }
+}
+
+/** The latest failure, such as a refresh the backend couldn't answer. */
+function AuthError() {
+  const error = useAuth((state) => state.error);
+  return error ? <p role="alert">{error.message}</p> : null;
+}
+```
+
+- `AuthProvider` mounts the client: it restores the saved session, starts the
+  refresh timer, and follows other tabs.
+- `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
+  it, and re-renders only when that part changes, as `AuthError` does.
+- `useAuthClient()` returns the client, for actions.
+- `retry` and `signOut` reject when they fail, and publish the same failure in
+  `state.error`. `AuthError` shows it, so the handlers have nothing left to
+  do.
+
+With [`locking`](/docs/client/locking), give `locked` a case of its own: it
+has a user too, but no usable access.
+
+That is a working app. Sign in and reload: you are still signed in. Open a
+second tab and sign out: both tabs show the form.
+
+## 5. Call your API
+
+`createAuthFetch` makes a `fetch` that sends the access token to one origin,
+and to no other.
+
+```ts title="src/api.ts"
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { auth } from "./auth.js";
+import { API, userSchema } from "./backend.js";
+
+export const authFetch = createAuthFetch(auth, `${API}/`);
+
+/** The signed-in user, fresh from the backend. */
+export async function fetchProfile() {
+  const response = await authFetch("auth/me");
+  if (!response.ok) throw new Error(`Profile failed (${response.status})`);
+  return userSchema.parse(await response.json());
+}
+```
+
+When a request gets a 401, `authFetch` refreshes, then sends a GET or HEAD
+again. Other methods are never sent twice.
+[Authenticated requests](/docs/client/requests) covers the rest of its
+behaviour and its options.
+
+## 6. Protect your routes
+
+The client is the same everywhere. What changes is how each router keeps
+signed-out users away from private pages, so continue with yours:
+
+- [TanStack Router](/docs/setups/tanstack-router), and
+  [TanStack Start in SPA mode](/docs/setups/tanstack-router#tanstack-start-in-spa-mode).
+- [React Router](/docs/setups/react-router), in declarative, data, or
+  framework mode with `ssr: false`.
+- [Expo Router](/docs/setups/expo), for iOS and Android.
+- Without a router, you are done: render by `status`, as `Screen` does.
+
+With Effect, the same client becomes a service: see
+[Effect and effetch](/docs/effect).
+
+[Using the client](/docs/client) then covers what else the client does, and
+[Configuring the client](/docs/configuration) the rest of its options.

@@ -1,0 +1,30 @@
+---
+title: Storage
+description: Where the client saves the session, from localStorage to the device's secure store or your own.
+---
+
+`createAuth`'s `storage` option chooses where the session is saved:
+
+| Storage                           | Saved in                                  | Use it for                                           |
+| --------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `webStorage()`                    | `localStorage`                            | Browsers. One session, shared by every tab.          |
+| `webStorage({ area: "session" })` | `sessionStorage`                          | One session per tab, ending with the tab.            |
+| `secureStorage()`                 | The iOS keychain, or the Android Keystore | Expo apps. From `@monarcode/session-kit/expo`.       |
+| `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
+| Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
+
+- **Prefer `localStorage` with rotating refresh tokens.** Browsers copy
+  `sessionStorage` into a duplicated tab and into windows opened with
+  `window.open`, so both start with the same refresh token but never see each
+  other's saves. Whichever refreshes second sends a spent token and is signed
+  out, or, with reuse detection, both are.
+- **`secureStorage()`** splits sessions over SecureStore's 2048-byte limit
+  across keys and reads synchronously; see the
+  [Expo guide](/docs/setups/expo#secure-storage).
+- **Custom storage** is applied one operation at a time, in the order the
+  client issued them.
+
+Tokens and the user share one `<name>:auth:session` entry, so every save is a
+single write that other tabs see whole. A user read from the access token is
+not saved. Sessions saved by earlier alphas are not restored, so users sign in
+once after upgrading.

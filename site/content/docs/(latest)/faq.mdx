@@ -1,0 +1,42 @@
+---
+title: Common questions
+description: Short answers about refresh tokens, expiry, storing tokens, caches, bundle size, and other ways to sign in.
+---
+
+**Do I need a refresh token?** No. Without one, or without a `refresh`
+callback, the session simply ends when the access token expires or is
+rejected.
+
+**My backend doesn't say when the token expires.** That works.
+[Expiry](/docs/configuration/expiry) says where the client looks for it, and
+what it does when it finds nothing.
+
+**Is it safe to keep tokens in `localStorage`?** Any script on your origin
+can read them, as [Security](/docs/security) explains. If that isn't
+acceptable, keep the session on the server with
+[server rendering](/docs/server-rendering).
+
+**How do I use it with TanStack Query, or another cache?** Put
+[`state.sessionId`](/docs/client/state) in the query key, or clear the cache
+when it changes, so one account never reads another's data. With
+effetch-query, [`resetKey`](/docs/effect#caching-with-effetch-query) does it.
+
+**Why does TanStack Start in SPA mode flash my pending component?** That is
+the HTML shell the build prerenders, shown before any JavaScript runs. The
+session is restored as soon as the script loads; plain TanStack Router shows
+a blank page for the same moment. Give the shell a neutral pending component,
+as [TanStack Start in SPA mode](/docs/setups/tanstack-router#tanstack-start-in-spa-mode)
+does.
+
+**Some of my endpoints answer 401 for other reasons.** Pass
+`{ signOutOnRepeated401: false }` to `createAuthFetch`, so they can't sign
+users out. See [Authenticated requests](/docs/client/requests).
+
+**How much does it add to my bundle?** About 11 kB gzipped for a single-page
+app with a router adapter and `createAuthFetch`, and about 5 kB with server
+rendering, where the session work happens on the server. The routers you
+don't use add nothing: see [Entry points](/docs/reference).
+
+**Can I sign users in with Google, or a magic link?** Yes, through your
+backend: whatever it does to sign a user in, session-kit starts from the
+tokens it answers with. See [What it doesn't do](/docs#what-it-doesnt-do).

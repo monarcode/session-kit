@@ -1,0 +1,21 @@
+---
+title: Security
+description: What session-kit protects, what stays your backend's job, and where tokens live in each setup.
+---
+
+- **Your backend is the authority.** It must authenticate every request and
+  authorize private operations. Route guards, screen guards, and local user
+  fields decide what to show, not what is allowed.
+- **In browsers, tokens are readable by same-origin JavaScript**, as with any
+  browser-stored credential. They never go in cookies, so browsers don't send
+  them automatically.
+- **With [server rendering](/docs/server-rendering)**, tokens sit in an
+  encrypted
+  `httpOnly` cookie that page scripts can't read. Only the access token
+  reaches page scripts, and only with `clientCredentials`.
+- **In Expo apps**, `secureStorage()` keeps tokens in the iOS keychain or
+  encrypted with an Android Keystore key, out of Android backups with the
+  `expo-secure-store` config plugin, and removes a session an earlier install
+  left in the iOS keychain.
+- **Sessions, route context, and loader results hold no tokens.** Never put
+  tokens in loader results or hydrated page data yourself.

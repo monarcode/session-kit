@@ -1,0 +1,58 @@
+---
+title: "Effect"
+description: "The session as an Effect service."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/effect";
+```
+
+Guide: [Effect and effetch](/docs/effect).
+
+## Classes
+
+### Auth
+
+Your auth client as an Effect service. Its Effects read the session, get an access token for API calls, sign in and out, update the user, and stream state changes.
+
+### AuthFailure
+
+How `Auth`'s Effects fail: a tagged error that carries the client's `AuthError`. Handle it with `Effect.catchTag("AuthFailure", …)` and match on `code`. The original error is the `cause`.
+
+## Types
+
+### AuthFailureCode
+
+The codes an [`AuthFailure`](#authfailure) carries: every `AuthErrorCode` except `INVALID_OPTIONS`, which is misuse and so a defect.
+
+### AuthLayerClient
+
+What `Auth.layer` takes. Once you register a client in [`Register`](#register), that's your client, or on the server a `serverAuth.forRequest(jar)` view with the same user. Until then, it's any [`AuthServiceClient`](#authserviceclient).
+
+### AuthServiceClient
+
+What `Auth` needs from a client. Any `createAuth` or `createMirrorAuth` client fits, and so does a fake with these members in tests. `signIn` is optional, because a mirror made without it has none.
+
+### Register
+
+Register your client's type here, once, so `Auth`'s Effects carry your user. Without it, the user is typed `unknown`. The same registration types `Auth` on the server, where `Auth.layer` takes a `serverAuth.forRequest(jar)` view.
+
+### RegisteredAuth
+
+The client registered in [`Register`](#register), or a client with an `unknown` user when none is.
+
+### RegisteredSession
+
+The session `Auth.session` gives you: your registered client's `Session`, never `null`.
+
+### RegisteredSignIn
+
+What `Auth.signIn` takes: your registered client's `signIn` input. It's `never` for a client without `signIn`.
+
+### RegisteredState
+
+Your registered client's `AuthState`, as `Auth.changes` emits it.
+
+### RegisteredUserInput
+
+What `Auth.updateUser` takes: your registered client's user input. It's `never` for a client without `updateUser`, such as one whose user comes from the access token.

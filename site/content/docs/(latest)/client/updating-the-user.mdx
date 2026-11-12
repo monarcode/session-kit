@@ -1,0 +1,18 @@
+---
+title: Updating the user
+description: Replace the signed-in user without ending the session, safely across account switches.
+---
+
+`auth.updateUser` replaces the user and keeps the session. Pass it a function
+that fetches the new user, rather than the user itself, whenever a request is
+involved. The session is noted before the function runs, so if it changes
+meanwhile the result is discarded instead of landing on another account.
+`fetchProfile` is the request from
+[Getting started](/docs/getting-started#5-call-your-api):
+
+```ts title="src/profile.ts"
+import { fetchProfile } from "./api.js";
+import { auth } from "./auth.js";
+
+export const reloadProfile = () => auth.updateUser(fetchProfile);
+```

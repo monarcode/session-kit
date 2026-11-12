@@ -1,0 +1,17 @@
+{
+	"title": "0.1",
+	"root": "version",
+	"pages": [
+		"index",
+		"installation",
+		"getting-started",
+		"setups",
+		"server-rendering",
+		"client",
+		"configuration",
+		"effect",
+		"reference",
+		"faq",
+		"security"
+	]
+}

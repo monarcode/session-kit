@@ -1,0 +1,21 @@
+{
+	"title": "Reference",
+	"pages": [
+		"index",
+		"core",
+		"react",
+		"tanstack-router",
+		"react-router",
+		"react-router-server",
+		"http",
+		"server",
+		"tanstack-start",
+		"tanstack-start-server",
+		"next",
+		"expo",
+		"effect",
+		"effetch",
+		"error-codes",
+		"compatibility"
+	]
+}

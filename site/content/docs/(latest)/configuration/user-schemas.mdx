@@ -1,0 +1,36 @@
+---
+title: User schemas
+description: How the user schema checks every user the client accepts, and what restoring a session requires of it.
+---
+
+The schema you pass as `createAuth`'s `user` option checks every user the
+client accepts: at sign-in, after a refresh that returns one, when a saved
+session is restored, and when another tab saves one. Accepted users are copied
+and frozen.
+
+The schema also types the user. Hover `user` to see the type `createAuth`
+inferred from it:
+
+```ts twoslash
+import { createAuth, memoryStorage } from "@monarcode/session-kit";
+import { z } from "zod";
+
+const auth = createAuth({
+  name: "my-app",
+  user: z.object({ id: z.number(), firstName: z.string() }),
+  storage: memoryStorage(),
+});
+
+const { user } = auth.state.get();
+//      ^?
+```
+
+Two rules follow from restoring. The schema's output must be a plain JSON
+object, because it is saved beside the tokens. And the schema must accept its
+own output and return it unchanged, because that saved user is validated again
+on the next reload. Sign-in rejects a schema that doesn't, such as one with a
+one-way transform, instead of signing users out when they reload.
+
+A saved user the schema rejects, after a deploy that changed the schema for
+example, isn't restored: the user signs in again. The same goes for a user
+another tab saved, which signs every tab out with `USER_VALIDATION_FAILED`.

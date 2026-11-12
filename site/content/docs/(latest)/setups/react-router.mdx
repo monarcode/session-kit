@@ -1,0 +1,451 @@
+---
+title: React Router
+description: Guard routes in React Router's declarative, data or framework mode, with the session kept in the browser.
+---
+
+React Router has three modes, and session-kit guards each one the way that
+mode works:
+
+| Mode                         | The guard                          | Beside it                              |
+| ---------------------------- | ---------------------------------- | -------------------------------------- |
+| Declarative                  | `SessionOutlet`                    | Nothing                                |
+| Data                         | `requireSession` in loaders        | `SessionOutlet`, `useAuthRevalidation` |
+| Framework, with `ssr: false` | `requireSession` in `clientLoader` | `SessionOutlet`, `useAuthRevalidation` |
+
+This page continues from [Getting started](/docs/getting-started): it uses
+the client in `src/auth.ts`, the hooks in `src/hooks.ts`, and the form in
+`src/sign-in.tsx` from there. Each mode has a complete example app. For
+framework mode with server rendering, follow
+[React Router with server rendering](/docs/setups/react-router-ssr).
+
+## Installation
+
+```sh
+pnpm add @monarcode/session-kit react-router zod
+```
+
+React Router 7 and 8 both work.
+
+## Before the router
+
+In every mode, `AuthProvider` goes around the router. It mounts the client in
+a layout effect, so with `localStorage` the session is restored before the
+first paint, and nothing starts on a server.
+
+The modes below share one page to protect:
+
+```tsx title="src/home.tsx"
+import { useAuth, useAuthClient } from "./hooks.js";
+
+export function Home() {
+  const user = useAuth((state) => state.user);
+  const auth = useAuthClient();
+  return (
+    <main>
+      <h1>Welcome, {user?.firstName}</h1>
+      <button onClick={() => void auth.signOut().catch(() => {})}>
+        Sign out
+      </button>
+    </main>
+  );
+}
+```
+
+## Declarative mode
+
+Declarative mode has no loaders, so `SessionOutlet` is the guard. Render it
+as a layout route's element, `<Route element={<Private />}>`, and the routes
+inside it render only while someone is signed in.
+
+```tsx title="src/main.tsx"
+import { StrictMode } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useSearchParams,
+} from "react-router";
+
+import { safeReturnTo } from "@monarcode/session-kit";
+import { SessionOutlet } from "@monarcode/session-kit/react-router";
+import { createRoot } from "react-dom/client";
+
+import { auth } from "./auth.js";
+import { Home } from "./home.js";
+import { AuthProvider, useAuth } from "./hooks.js";
+import { SignIn } from "./sign-in.js";
+
+/** The guard: its child routes render only while someone is signed in. */
+function Private() {
+  return (
+    <SessionOutlet
+      loginPath="/login"
+      pending={<p>Checking session…</p>}
+      unavailable={({ error, retry }) => (
+        <div role="alert">
+          <p>{error?.message ?? "Can't reach the server."}</p>
+          <button onClick={retry}>Try again</button>
+        </div>
+      )}
+    />
+  );
+}
+
+/** Signing in changes the state, which renders this again and redirects. */
+function Login() {
+  const signedIn = useAuth(
+    (state) =>
+      state.status === "authenticated" || state.status === "refreshing",
+  );
+  const [search] = useSearchParams();
+  if (signedIn)
+    return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;
+  return <SignIn />;
+}
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <AuthProvider client={auth}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<Private />}>
+            <Route index element={<Home />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  </StrictMode>,
+);
+```
+
+`SessionOutlet` shows `pending` while the saved session is restored, sends
+signed-out users to `loginPath` with `redirectTo` set to where they were
+going, and renders `unavailable` after a failed refresh. Without
+`unavailable`, the error is thrown to the nearest error boundary.
+
+`safeReturnTo` accepts only same-origin paths and returns `/` for anything
+else, including the sign-in page itself, so a stale `redirectTo` cannot loop.
+
+A complete app is in
+[`examples/react-router-declarative`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-declarative).
+
+## Data mode
+
+In data mode, loaders run before a route renders, so the guard goes there:
+a private route's data is never fetched for a signed-out user.
+
+```tsx title="src/router.tsx"
+import {
+  createBrowserRouter,
+  Outlet,
+  useNavigate,
+  useRouteError,
+  useSearchParams,
+} from "react-router";
+
+import { safeReturnTo } from "@monarcode/session-kit";
+import {
+  redirectIfSignedIn,
+  requireSession,
+  SessionOutlet,
+  useAuthRevalidation,
+} from "@monarcode/session-kit/react-router";
+
+import { auth } from "./auth.js";
+import { Home } from "./home.js";
+import { useAuthClient } from "./hooks.js";
+import { SignIn } from "./sign-in.js";
+
+/** Runs the loaders again when auth changes, and with them the guards. */
+function Root() {
+  useAuthRevalidation();
+  return <Outlet />;
+}
+
+function Login() {
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
+  return (
+    <SignIn
+      onSignedIn={() =>
+        navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
+      }
+    />
+  );
+}
+
+/** Shown after a failed refresh; a repeated failure shows here again. */
+function SessionError() {
+  const error = useRouteError();
+  const client = useAuthClient();
+  return (
+    <div role="alert">
+      <p>{error instanceof Error ? error.message : "Something went wrong"}</p>
+      <button onClick={() => void client.retry().catch(() => {})}>Retry</button>
+    </div>
+  );
+}
+
+export const router = createBrowserRouter([
+  {
+    element: <Root />,
+    HydrateFallback: () => <p>Checking session…</p>,
+    children: [
+      {
+        path: "/login",
+        loader: async ({ request }) => {
+          const redirectTo = new URL(request.url).searchParams.get(
+            "redirectTo",
+          );
+          await redirectIfSignedIn(auth, { redirectTo });
+          return null;
+        },
+        element: <Login />,
+      },
+      {
+        loader: ({ request }) =>
+          requireSession(auth, { request, loginPath: "/login" }),
+        errorElement: <SessionError />,
+        element: (
+          <SessionOutlet
+            loginPath="/login"
+            pending={<p>Checking session…</p>}
+          />
+        ),
+        children: [{ index: true, element: <Home /> }],
+      },
+    ],
+  },
+]);
+```
+
+Render it inside the provider:
+
+```tsx
+<AuthProvider client={auth}>
+  <RouterProvider router={router} />
+</AuthProvider>
+```
+
+Three pieces work together:
+
+- **`requireSession`** redirects signed-out users to `loginPath` with
+  `redirectTo`, and returns `{ session }` as the route's loader data. A failed
+  refresh is rethrown for the route's error element instead: the user is still
+  signed in.
+- **`useAuthRevalidation`** runs the loaders again after a sign-in, a
+  sign-out, an account switch, or a profile update, so the guards run again.
+  Call it once, in the root route.
+- **`SessionOutlet`**, as the guarded route's element, renders child routes
+  only while the session the loader accepted is still the signed-in one. When
+  another account signs in, it shows `pending` until the loader has run for
+  the new session, so no page sees the previous account's loader data.
+
+A complete app is in [`examples/react-router-data`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-data).
+
+## Framework mode with `ssr: false`
+
+Framework mode without a server is data mode with route modules: the guards
+are the same, in `clientLoader`. Keep the files from Getting started, and
+`home.tsx` from above, in `app/`.
+
+Turn server rendering off:
+
+```ts
+// react-router.config.ts
+import type { Config } from "@react-router/dev/config";
+
+export default { ssr: false } satisfies Config;
+```
+
+Provide the client, and watch for auth changes, in the root route:
+
+```tsx title="app/root.tsx"
+import type { ReactNode } from "react";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+
+import { useAuthRevalidation } from "@monarcode/session-kit/react-router";
+
+import { auth } from "./auth.js";
+import { AuthProvider } from "./hooks.js";
+
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta charSet="utf-8" />
+        <Meta />
+        <Links />
+      </head>
+      <body>
+        {children}
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+/** Runs the client loaders again when auth changes, and with them the guards. */
+function Revalidate() {
+  useAuthRevalidation();
+  return <Outlet />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider client={auth}>
+      <Revalidate />
+    </AuthProvider>
+  );
+}
+
+/** Prerendered into index.html, and shown until the client loaders finish. */
+export function HydrateFallback() {
+  return <p>Checking session…</p>;
+}
+```
+
+Guard a layout route, and nest the private routes under it:
+
+```tsx title="app/routes/protected.tsx"
+import { useRouteError } from "react-router";
+
+import {
+  requireSession,
+  SessionOutlet,
+} from "@monarcode/session-kit/react-router";
+
+import { auth } from "../auth.js";
+import { useAuthClient } from "../hooks.js";
+
+export function clientLoader({ request }: { request: Request }) {
+  return requireSession(auth, { request, loginPath: "/login" });
+}
+
+export default function Protected() {
+  return (
+    <SessionOutlet loginPath="/login" pending={<p>Checking session…</p>} />
+  );
+}
+
+/** Shown after a failed refresh; a repeated failure shows here again. */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const client = useAuthClient();
+  return (
+    <div role="alert">
+      <p>{error instanceof Error ? error.message : "Something went wrong"}</p>
+      <button onClick={() => void client.retry().catch(() => {})}>Retry</button>
+    </div>
+  );
+}
+```
+
+```tsx title="app/routes/login.tsx"
+import { useNavigate, useSearchParams } from "react-router";
+
+import { safeReturnTo } from "@monarcode/session-kit";
+import { redirectIfSignedIn } from "@monarcode/session-kit/react-router";
+
+import { auth } from "../auth.js";
+import { SignIn } from "../sign-in.js";
+
+export async function clientLoader({ request }: { request: Request }) {
+  const redirectTo = new URL(request.url).searchParams.get("redirectTo");
+  await redirectIfSignedIn(auth, { redirectTo });
+  return null;
+}
+
+export default function Login() {
+  const navigate = useNavigate();
+  const [search] = useSearchParams();
+  return (
+    <SignIn
+      onSignedIn={() =>
+        navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
+      }
+    />
+  );
+}
+```
+
+In `app/routes.ts`, nest the routes the layout protects:
+
+```ts
+import {
+  index,
+  layout,
+  route,
+  type RouteConfig,
+} from "@react-router/dev/routes";
+
+export default [
+  route("login", "routes/login.tsx"),
+  layout("routes/protected.tsx", [index("routes/home.tsx")]),
+] satisfies RouteConfig;
+```
+
+`routes/home.tsx` is the page, as its default export:
+`export { Home as default } from "../home.js";`.
+
+`AuthProvider` mounts the client in an effect, so the build-time prerender of
+the root route starts nothing, and the browser restores the session.
+
+A complete app is in
+[`examples/react-router-framework-spa`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-framework-spa).
+
+## Layouts around guarded pages
+
+A guarded route often has UI of its own around its pages, such as a sidebar
+and a top bar. Render it in the guarded route's element, with `SessionOutlet`
+where the pages go:
+
+```tsx title="src/dashboard.tsx"
+import { SessionOutlet } from "@monarcode/session-kit/react-router";
+
+import { useAuth } from "./hooks.js";
+
+/** The guarded route's element: `element: <Dashboard />`. */
+export function Dashboard() {
+  // From state, not loader data: this stays mounted through a sign-out.
+  const user = useAuth((state) => state.user);
+  const sessionId = useAuth((state) => state.sessionId);
+  return (
+    <div className="dashboard">
+      <header>{user ? `Signed in as ${user.firstName}` : null}</header>
+      {/* Keyed by session, so one account's choices never show for the next. */}
+      <nav key={sessionId}>…</nav>
+      <main>
+        <SessionOutlet loginPath="/login" pending={<p>Checking session…</p>} />
+      </main>
+    </div>
+  );
+}
+```
+
+Three things follow from where `SessionOutlet` sits:
+
+- **It protects only what it renders.** After a sign-out or an account switch,
+  the pages are swapped for `pending` and remounted, but the layout around
+  them stays mounted until the guard redirects.
+- **Read the user from state there.** In the layout, use
+  `useAuth((state) => state.user)` and handle `null`. The loader's `session`
+  is the one the guard accepted, which for that moment is the previous one.
+- **Key what belongs to an account.** Layout UI that holds state for one
+  account, such as a draft or an open panel, takes the session as its `key`,
+  so the next account starts fresh.
+
+## Things to know
+
+- **A router `basename`.** Pass the same `basename` to `requireSession`, so
+  `redirectTo` leaves it out. Redirects add it again.
+- **A failed refresh is not a redirect.** In declarative mode it renders
+  `unavailable`. In data and framework mode, `requireSession` rethrows it for
+  the route's error element, which can offer `auth.retry()`.
+- **Locked sessions.** [Locking](/docs/client/locking) is for native apps, so
+  the guards treat a locked session as signed out.
+- **Cached data.** `state.sessionId` is new on every sign-in. Scope private
+  cached data, such as TanStack Query results, to it.

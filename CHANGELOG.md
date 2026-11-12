@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The guides moved to the documentation site,
+  [session-kit.pages.dev](https://session-kit.pages.dev), with an API
+  reference for every entry point and every error code. The README is now a
+  short introduction and quick start, and each `docs/*.md` file points to its
+  page on the site.
+- Option defaults in the JSDoc are `@default` tags, which editors show in
+  hovers, instead of a "Default: x." sentence. Defaults that take words, such
+  as "the nearest `AuthProvider`'s", are still written out.
+
 ## 0.1.0-alpha.8
 
 ### Added
