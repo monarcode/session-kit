@@ -7,7 +7,7 @@ export type GuardClient<U> = Pick<
 	"getSession" | "isCurrent"
 >;
 
-/** How many times a guard reads a session that keeps changing before it gives up. */
+/** How many times a guard reads a changing session before giving up. */
 const MAX_ATTEMPTS = 3;
 
 /**

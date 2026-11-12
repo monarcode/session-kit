@@ -11,7 +11,10 @@ import { AuthError, type AuthErrorCode } from "../core/errors.js";
  * ```ts
  * import type { AuthFailureCode } from "@monarcode/session-kit/effect";
  *
- * const retryable: AuthFailureCode[] = ["REFRESH_FAILED", "PERSISTENCE_FAILED"];
+ * const retryable: AuthFailureCode[] = [
+ * 	"REFRESH_FAILED",
+ * 	"PERSISTENCE_FAILED",
+ * ];
  * ```
  *
  * @since 0.1.0
@@ -19,20 +22,20 @@ import { AuthError, type AuthErrorCode } from "../core/errors.js";
 export type AuthFailureCode = Exclude<AuthErrorCode, "INVALID_OPTIONS">;
 
 /**
- * How the Effects of `Auth` fail: the `AuthError` the client rejected with,
- * as a tagged error, so `Effect.catchTag("AuthFailure", …)` handles it. Match
- * on `code`; the original error is the `cause`.
+ * How `Auth`'s Effects fail: a tagged error that carries the client's
+ * `AuthError`. Handle it with `Effect.catchTag("AuthFailure", …)` and match on
+ * `code`. The original error is the `cause`.
  *
  * @example
  * ```ts
  * import * as Effect from "effect/Effect";
  * import { Auth } from "@monarcode/session-kit/effect";
  *
- * export const userName = Auth.session.pipe(
- * 	Effect.map((session) => String(session.user)),
+ * export const sessionId = Auth.session.pipe(
+ * 	Effect.map((session) => session.sessionId),
  * 	Effect.catchTag("AuthFailure", (failure) =>
  * 		failure.code === "UNAUTHENTICATED"
- * 			? Effect.succeed("guest")
+ * 			? Effect.succeed(null)
  * 			: Effect.fail(failure),
  * 	),
  * );
@@ -67,7 +70,10 @@ export function fromAuthError(
 	);
 }
 
-/** Runs the client call `run`, failing as {@link fromAuthError} does. */
+/**
+ * Runs the client call `run`, failing as {@link fromAuthError} does. `signal`
+ * aborts when the Effect is interrupted.
+ */
 export function fromPromise<A>(
 	run: (signal: AbortSignal) => PromiseLike<A>,
 ): Effect.Effect<A, AuthFailure> {

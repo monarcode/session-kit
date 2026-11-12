@@ -28,22 +28,29 @@ import type { Session } from "../core/types.js";
  * @since 0.1.0
  */
 export type RequireSessionOptions = {
-	/** The route location, from `beforeLoad`'s `location`. */
+	/**
+	 * The route's location, from `beforeLoad`'s `location`. Signed-out users
+	 * come back to it after signing in.
+	 */
 	location: { href: string };
-	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
+	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
 	loginPath: string;
 };
 
 /**
- * Guards a route in `beforeLoad`. Signed-out users are redirected to
- * `loginPath` with `?redirectTo=` set to where they were going; so are users
- * of a locked session, since locking is for native apps. Signed-in users get
- * `{ session }` in route context, typed and never `null`; it holds no tokens.
- * Errors from `getSession`, such as `REFRESH_FAILED` from a failed refresh
- * or `PERSISTENCE_FAILED` from a failed restore, are rethrown for the route's
- * error component, which can offer `auth.retry()`. Render the guarded route's
- * children through `SessionOutlet`, and call `connectAuth` so the guard runs
- * again when auth changes.
+ * Guards a route in `beforeLoad`, so only signed-in users get through. They
+ * get `{ session }` in route context, typed and never `null`, with no
+ * tokens in it.
+ *
+ * Signed-out users go to `loginPath`, with `?redirectTo=` set to where they
+ * were going. A locked session counts as signed out, as locking is for
+ * native apps and the router adapters don't unlock.
+ *
+ * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
+ * rethrown to the route's error component, which can offer `auth.retry()`.
+ *
+ * Render the route's children with `SessionOutlet`, and call `connectAuth`,
+ * so the guard runs again when the session changes.
  *
  * @example
  * ```tsx
@@ -109,17 +116,24 @@ export async function requireSession<U>(
  * @since 0.1.0
  */
 export type RedirectIfSignedInOptions = {
-	/** Where to send a signed-in user, usually the `redirectTo` search param. */
+	/**
+	 * Where to send a signed-in user, usually the `redirectTo` search param.
+	 * It's checked with `safeReturnTo`.
+	 */
 	redirectTo: unknown;
-	/** The sign-in path, never returned to. Default: `"/login"`. */
+	/**
+	 * Your sign-in page's path, or several. `redirectTo` never sends the user
+	 * back to one. Default: `"/login"`.
+	 */
 	loginPath?: string | readonly string[] | undefined;
 };
 
 /**
- * Guards the sign-in route in `beforeLoad`: a signed-in user is redirected to
- * `redirectTo`, checked with `safeReturnTo`. If the session cannot be
- * resolved, for example after a failed refresh or while locked, the sign-in
- * page shows so the user can sign in again.
+ * Guards your sign-in page in `beforeLoad`, so a signed-in user goes straight
+ * to `redirectTo`, made safe with `safeReturnTo`.
+ *
+ * If the session can't be read, such as after a failed refresh or while
+ * locked, the sign-in page shows, so the user can sign in again.
  *
  * @example
  * ```ts

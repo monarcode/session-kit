@@ -33,7 +33,10 @@ import {
  * @since 0.1.0
  */
 export type SessionOutletProps = {
-	/** Shown while the session is being checked again. Default: nothing. */
+	/**
+	 * Shown while the guard checks the session again, such as after a
+	 * sign-out. Default: nothing.
+	 */
 	pending?: ReactNode | undefined;
 	/**
 	 * The client to watch. Default: the nearest `AuthProvider`'s, then
@@ -43,15 +46,18 @@ export type SessionOutletProps = {
 };
 
 /**
- * Renders a route guarded by `requireSession`: its child routes while
- * the session the guard accepted is still the signed-in one, and `pending`
- * while the guard has yet to check a change, such as a sign-out or another
- * account signing in. A locked session also shows `pending` until the guard
- * redirects it to sign-in. Child routes are keyed by session, so nothing from
- * one account stays mounted for the next. Profile updates and token refreshes
- * keep them mounted. Only what it renders is guarded this way: UI the route
- * renders around it, such as a sidebar, stays mounted until the guard
- * redirects, so read the user there from state, where it may be `null`.
+ * Renders the child routes of a route guarded by `requireSession`, but only
+ * while the session it accepted is still the signed-in one.
+ *
+ * After a change, such as a sign-out or another account signing in, it shows
+ * `pending` until the guard has run again. A locked or `unavailable` session
+ * shows `pending` too, until the guard redirects or throws.
+ *
+ * Child routes remount for each account, so nothing from one stays mounted
+ * for the next. Token refreshes and profile updates keep them mounted.
+ *
+ * UI the route renders around the outlet, such as a sidebar, isn't guarded
+ * this way. Read the user there from state, where it may be `null`.
  *
  * @example
  * ```tsx
@@ -96,8 +102,7 @@ export function SessionOutlet({
 			status: AuthStatus;
 			sessionId: string | null;
 		};
-		// `status`, not `user`: a locked session has a user but no usable
-		// access, and locking is for native apps, so it shows `pending`.
+		// `status`, not `user`, as a locked session still has a user.
 		return status === "authenticated" || status === "refreshing"
 			? sessionId
 			: null;

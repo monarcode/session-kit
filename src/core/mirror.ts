@@ -9,10 +9,10 @@ import { sameSession, sameUser } from "./user.js";
 import { readClientCredentials, readSession } from "./wire.js";
 
 /**
- * The access token as the server hands it to page scripts: what
- * `serverAuth.clientCredentials` from `@monarcode/session-kit/server`
- * resolves. `expiresIn` counts seconds from when the server answered, so the
- * browser's clock doesn't matter.
+ * The access token as your server gives it to the browser, from
+ * `serverAuth.clientCredentials` in `@monarcode/session-kit/server`.
+ * `expiresIn` counts from when the server answered, so the browser's clock
+ * doesn't matter.
  *
  * @example
  * ```ts
@@ -26,21 +26,27 @@ import { readClientCredentials, readSession } from "./wire.js";
  * @since 0.1.0
  */
 export type ClientCredentials = Readonly<{
+	/** The session the token belongs to. */
 	sessionId: string;
+	/** The token your API accepts. */
 	accessToken: string;
-	/** Seconds the access token has left, if it expires. */
+	/** Seconds the token has left, if it expires. */
 	expiresIn?: number | undefined;
 }>;
 
 /**
- * How a {@link MirrorAuth} asks the server for the access token: the
- * `credentials` option of {@link MirrorAuthOptions}. Each calls the app's own
- * same-origin, CSRF-protected function, which calls `serverAuth`'s
- * `clientCredentials`.
+ * How a {@link MirrorAuth} gets the access token from your server. It's the
+ * `credentials` option of {@link MirrorAuthOptions}.
+ *
+ * Both functions call your own server functions, on the same origin and
+ * protected against CSRF, which call `serverAuth.clientCredentials`.
  *
  * @example
  * ```ts
- * import type { ClientCredentials, MirrorCredentials } from "@monarcode/session-kit";
+ * import type {
+ * 	ClientCredentials,
+ * 	MirrorCredentials,
+ * } from "@monarcode/session-kit";
  *
  * declare function getCredentialsFn(): Promise<ClientCredentials | null>;
  * declare function renewCredentialsFn(input: {
@@ -56,9 +62,15 @@ export type ClientCredentials = Readonly<{
  * @since 0.1.0
  */
 export type MirrorCredentials = {
-	/** Resolves `serverAuth.clientCredentials.get`'s result. */
+	/**
+	 * Gets the current access token from your server, which calls
+	 * `serverAuth.clientCredentials.get`.
+	 */
 	get: () => Promise<ClientCredentials | null>;
-	/** Sends `rejected` to `serverAuth.clientCredentials.renew` and resolves its result. */
+	/**
+	 * Sends the token your API rejected to your server, which calls
+	 * `serverAuth.clientCredentials.renew`, and resolves the new one.
+	 */
 	renew: (rejected: {
 		sessionId: string;
 		accessToken: string;
@@ -66,9 +78,9 @@ export type MirrorCredentials = {
 };
 
 /**
- * Options for {@link createMirrorAuth}. Every function is the app's own: a
- * server function, an action or a `fetch` to a route handler that calls
- * `serverAuth` from `@monarcode/session-kit/server`.
+ * Options for {@link createMirrorAuth}. Each function is your own server
+ * function, action, or `fetch` to a route handler, which calls `serverAuth`
+ * from `@monarcode/session-kit/server`.
  *
  * @example
  * ```ts
@@ -91,41 +103,46 @@ export type MirrorCredentials = {
  */
 export type MirrorAuthOptions<U, In = never> = {
 	/**
-	 * Letters, digits, `_` or `-`, up to 64 characters, as the server's. Tabs
-	 * tell each other about changes on the `BroadcastChannel` `<name>:auth`.
+	 * Names this auth. Tabs tell each other about changes on the
+	 * `BroadcastChannel` `<name>:auth`. Letters, digits, `_` or `-`, up to 64
+	 * characters.
 	 */
 	name: string;
 	/**
-	 * The session the server rendered with, from `serverAuth.getSession`, or
-	 * `null`. The client starts from it, so the first render is final.
+	 * The session the page was rendered with, from `serverAuth.getSession`, or
+	 * `null`. The client starts from it, so there's no loading state.
 	 */
 	session: Session<U> | null;
-	/** Reads the session on the server again: `serverAuth.getSession`. */
+	/** Reads the session on the server again, with `serverAuth.getSession`. */
 	revalidate: () => Promise<Session<U> | null>;
-	/** Signs out on the server: `serverAuth.signOut`. */
+	/** Signs out on the server, with `serverAuth.signOut`. */
 	signOut: () => Promise<unknown>;
 	/**
-	 * Signs in on the server with `input` and resolves the new session:
-	 * `serverAuth.signIn`, or the app's own sign-in that ends with it. Without
-	 * it, the client has no `signIn`; call your function, then `adopt` its
-	 * result.
+	 * Signs in on the server with `input`, and resolves the new session. Use
+	 * `serverAuth.signIn`, or your own sign-in that ends with it. Without this
+	 * option, the client has no `signIn`. Call your function, then pass its
+	 * result to `adopt`. Default: none.
 	 */
 	signIn?: ((input: In) => Promise<Session<U>>) | undefined;
 	/**
-	 * Gives `credentials` the access token, with `clientCredentials` on the
-	 * server. Without it, `credentials` rejects with `INVALID_OPTIONS`. See
-	 * {@link MirrorCredentials}.
+	 * Gets the access token from your server ({@link MirrorCredentials}), so
+	 * page scripts can call your API with `createAuthFetch` or `sessionBearer`.
+	 * Leave it out if they never do. `credentials.get()` and
+	 * `credentials.renew()` then reject with `INVALID_OPTIONS`. Default: none.
 	 */
 	credentials?: MirrorCredentials | undefined;
-	/** Reports what the client does, as `createAuth`'s `debug` does. */
+	/** Logs what the client does, like `createAuth`'s `debug`. Default: off. */
 	debug?: AuthDebug | undefined;
 };
 
 type MirrorAuthBase<U> = {
 	/**
-	 * Reactive {@link AuthState}: `authenticated` or `unauthenticated`, from
-	 * the start. A failed revalidation is kept in `error` and changes nothing
-	 * else. `subscribe` reports later changes, not the current value.
+	 * The current {@link AuthState}, and a way to listen for changes. It's only
+	 * ever `authenticated` or `unauthenticated`. A failed revalidation shows in
+	 * `error` and changes nothing else.
+	 *
+	 * `subscribe` calls the listener on each later change, not with the
+	 * current state.
 	 */
 	state: {
 		get: () => AuthState<U>;
@@ -133,66 +150,83 @@ type MirrorAuthBase<U> = {
 			unsubscribe: () => void;
 		};
 	};
-	/** The session this client holds, or `null`. Doesn't ask the server. */
+	/**
+	 * Resolves the session this client holds, or `null`. It doesn't ask the
+	 * server.
+	 */
 	getSession: () => Promise<Session<U> | null>;
 	/**
-	 * Reads the session on the server again with `revalidate`, and resolves
-	 * it. A failure rejects with `REFRESH_FAILED` and keeps the session.
+	 * Asks your server for the session again, with `revalidate`, and resolves
+	 * it. If that fails, it rejects with `REFRESH_FAILED` and keeps the
+	 * current session.
 	 */
 	retry: () => Promise<Session<U> | null>;
-	/** Like `retry`: the server refreshes tokens itself. */
+	/**
+	 * Same as `retry()`. The server refreshes tokens itself, so this only asks
+	 * for the session again.
+	 */
 	refresh: () => Promise<Session<U> | null>;
-	/** Whether this snapshot belongs to the current session (same `sessionId`). */
+	/**
+	 * Whether `session` is still the signed-in one, by its `sessionId`. Use it
+	 * to drop a response that arrives after the user signed out or switched
+	 * accounts.
+	 */
 	isCurrent: (session: { sessionId: string }) => boolean;
 	/**
-	 * Signs out on the server, then here and in other tabs. Rejects with
-	 * `PERSISTENCE_FAILED` when the server's sign-out fails, keeping the
-	 * session.
+	 * Signs out on your server, then in this tab and the others. If the
+	 * server's sign-out fails, it rejects with `PERSISTENCE_FAILED` and keeps
+	 * the session.
 	 */
 	signOut: () => Promise<void>;
 	/**
-	 * Takes `session` from the server, such as what the app's sign-in or
-	 * profile update returned, and tells other tabs. Guards run again when the
+	 * Takes a session your server returned, such as from your own sign-in or a
+	 * profile update, and tells other tabs. Route guards run again when the
 	 * account or the user changed. Throws `INVALID_SESSION` for anything but a
 	 * session or `null`.
 	 */
 	adopt: (session: Session<U> | null) => void;
 	/**
-	 * Starts watching while rendered: other tabs' changes, and the server's
-	 * session when the tab becomes visible again, unless the server answered
-	 * within the last 10 seconds. Called by `AuthProvider` and
-	 * the router adapters; mounts are counted, and the last cleanup stops.
+	 * Starts watching for other tabs' changes, and asks the server for the
+	 * session when the tab becomes visible again (unless it answered in the
+	 * last 10 seconds). Returns a function that stops. Calls are counted, and
+	 * watching stops when the last one is stopped. `AuthProvider` and the
+	 * router adapters call it for you.
 	 */
 	mount: () => () => void;
 	/**
-	 * The access token ({@link Credentials}), with the `credentials` option,
-	 * so `createAuthFetch` and `sessionBearer` work. Kept in memory only, and
-	 * asked for again shortly before it expires.
+	 * The access token ({@link Credentials}), for `createAuthFetch` and
+	 * `sessionBearer`. Needs the `credentials` option. The token is kept in
+	 * memory only, and fetched again shortly before it expires.
 	 */
 	credentials: {
 		/**
-		 * The current access token, or `null` when signed out. Concurrent calls
-		 * share one request. Rejects with `REFRESH_FAILED` when the server's
-		 * function fails.
+		 * Resolves the current access token, or `null` when signed out. Calls
+		 * that overlap share one request. Rejects with `REFRESH_FAILED` when
+		 * your server's function fails.
 		 */
 		get: () => Promise<Credentials | null>;
 		/**
-		 * Asks the server for new access after the backend rejected
-		 * `credentials`. Concurrent calls share one request; `null` means the
-		 * server signed out.
+		 * Asks your server for a new access token after your API rejected
+		 * `credentials`. Calls that overlap share one request. Resolves `null`
+		 * when the server has signed out.
 		 */
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
-		/** Signs out if `credentials` are still current. */
+		/**
+		 * Signs out because your API rejected `credentials` for good. Does
+		 * nothing if a newer token has replaced them.
+		 */
 		reject: (credentials: Credentials) => Promise<void>;
 	};
 };
 
 /**
- * The browser client from {@link createMirrorAuth}: it mirrors the session a
- * server keeps in its cookie. `U` is the user; `In` is what `signIn` takes,
- * or `never` without the `signIn` option. It fits `AuthProvider`, the hooks,
- * the router guards, `createAuthFetch` and `sessionBearer` as a
- * `createAuth` client does. It has no `lock`, `unlock` or `updateUser`.
+ * The browser client that {@link createMirrorAuth} returns. It mirrors a
+ * session your server keeps in a cookie.
+ *
+ * It works with `AuthProvider`, the hooks, the router guards,
+ * `createAuthFetch` and `sessionBearer`, as a `createAuth` client does. It
+ * has no `lock`, `unlock` or `updateUser`. `U` is the user, and `In` is what
+ * `signIn` takes (`never` without the `signIn` option).
  *
  * @example
  * ```ts
@@ -213,17 +247,20 @@ export type MirrorAuth<U, In = never> = MirrorAuthBase<U> &
 		? unknown
 		: {
 				/**
-				 * Signs in on the server with the `signIn` option, then adopts the
-				 * session it resolves and tells other tabs. Rejects with what the
-				 * option rejects with, as an `AuthError` (`USER_VALIDATION_FAILED`
-				 * unless it already is one) whose `cause` is the original.
+				 * Signs in on your server with the `signIn` option, then takes the
+				 * session it resolves and tells other tabs.
+				 *
+				 * If the option fails, it rejects with `USER_VALIDATION_FAILED`,
+				 * whose `cause` is the original error. An `AuthError` passes
+				 * through unchanged. If it resolves anything but a session, it
+				 * rejects with `INVALID_SESSION`.
 				 */
 				signIn: (input: In) => Promise<Session<U>>;
 			});
 
-/** How long after the server last answered a visible tab asks again, in milliseconds. */
+/** How long after the server last answered a visible tab asks again. */
 const RECHECK_AFTER_MS = 10_000;
-/** Access tokens this close to expiry are asked for again, in milliseconds. */
+/** Access tokens this close to expiry are fetched again. */
 const RENEW_BEFORE_MS = 5_000;
 
 /** Whether `credentials` belong to `sessionId` and aren't about to expire. */
@@ -245,14 +282,20 @@ export type MirrorHandle = {
 	 * change, since guards already ran with it, and no message to other tabs.
 	 */
 	hydrate: (session: unknown) => void;
-	/** Whether the server has answered: a revalidation succeeded, or `hydrate` ran. */
+	/**
+	 * Whether the server has answered: a revalidation succeeded, or `hydrate`
+	 * ran.
+	 */
 	readonly answered: boolean;
 };
 
-// By `state`, which copies of a client such as `{ ...auth }` keep.
+// Keyed by `state`, which a copy of the client such as `{ ...auth }` keeps.
 const handles = new WeakMap<object, MirrorHandle>();
 
-/** The handle of `client`, or `undefined` for a client `createMirrorAuth` didn't make. */
+/**
+ * The handle of `client`, or `undefined` for a client `createMirrorAuth` didn't
+ * make.
+ */
 export function mirrorOf(client: {
 	readonly state: object;
 }): MirrorHandle | undefined {
@@ -275,38 +318,43 @@ function stateOf<U>(
 }
 
 /**
- * Creates a browser client ({@link MirrorAuth}) for a session the server keeps
- * in an encrypted cookie, with `createServerAuth` from
- * `@monarcode/session-kit/server`. It starts from the session the server
- * rendered with, so there is no `initializing` state, and it never holds the
- * refresh token. Create it once per page load, not per request on the server.
- * Let TypeScript infer its types from the options: with an explicit
- * `createMirrorAuth<User>(…)`, `signIn` is left out of the type.
- * Throws `INVALID_OPTIONS` for options it can't use. See
- * {@link MirrorAuthOptions}.
+ * Creates a browser client ({@link MirrorAuth}) for a session your server
+ * keeps in an encrypted cookie, with `createServerAuth` from
+ * `@monarcode/session-kit/server`.
+ *
+ * It starts from the session the page was rendered with, so there's no
+ * loading state, and it never sees the refresh token. Create one per page
+ * load in the browser, and one per request on the server, never at module
+ * level. `useMirrorAuth` does this for you.
+ *
+ * Let TypeScript infer its types from the options. With an explicit
+ * `createMirrorAuth<User>(…)`, `signIn` drops out of the type. Throws
+ * `INVALID_OPTIONS` for options it can't use.
  *
  * @example
  * ```ts
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
  *
  * type User = { id: number; firstName: string };
- * declare const session: Session<User> | null; // from the server render
+ * type LoginInput = { username: string; password: string };
  * declare function getSessionFn(): Promise<Session<User> | null>;
  * declare function signInFn(input: {
- * 	data: { username: string; password: string };
+ * 	data: LoginInput;
  * }): Promise<Session<User>>;
  * declare function signOutFn(): Promise<void>;
  *
- * export const auth = createMirrorAuth({
- * 	name: "app",
- * 	session,
- * 	revalidate: () => getSessionFn(),
- * 	signIn: (data: { username: string; password: string }) => signInFn({ data }),
- * 	signOut: () => signOutFn(),
- * });
- *
- * await auth.signIn({ username: "emilys", password: "emilyspass" });
+ * // Called with the session the page was rendered with.
+ * export const createAppAuth = (session: Session<User> | null) =>
+ * 	createMirrorAuth({
+ * 		name: "app",
+ * 		session,
+ * 		revalidate: () => getSessionFn(),
+ * 		signIn: (data: LoginInput) => signInFn({ data }),
+ * 		signOut: () => signOutFn(),
+ * 	});
  * ```
+ *
+ * @see {@link MirrorAuthOptions} for every option
  *
  * @since 0.1.0
  */
@@ -350,7 +398,8 @@ export function createMirrorAuth<U, In = never>(
 		const previous = store.get();
 		const sameAccount = previous.sessionId === (session?.sessionId ?? null);
 		let user = session?.user ?? null;
-		// The same user keeps its object, so selectors comparing by reference see no change.
+		// The same user keeps its object, so selectors comparing by reference see
+		// no change.
 		if (sameAccount && user && previous.user && sameUser(previous.user, user))
 			user = previous.user;
 		const changed = !sameAccount || previous.user !== user;
@@ -376,6 +425,8 @@ export function createMirrorAuth<U, In = never>(
 
 	function broadcast() {
 		if (typeof BroadcastChannel !== "function") return;
+		// While unmounted, a one-off channel sends it. A channel never receives
+		// its own messages, so this tab isn't told about its own change.
 		const sender = channel ?? new BroadcastChannel(`${options.name}:auth`);
 		sender.postMessage("changed");
 		if (!channel) sender.close();
@@ -409,6 +460,8 @@ export function createMirrorAuth<U, In = never>(
 	}
 
 	function revalidate(reason: string): Promise<Session<U> | null> {
+		// Share one only while nothing changed here since it started. After a
+		// change, its answer is out of date.
 		if (revalidating?.generation === generation) return revalidating.promise;
 		const started = generation;
 		debug.log("sync", `revalidating (${reason})`);
@@ -418,6 +471,7 @@ export function createMirrorAuth<U, In = never>(
 				checkedAt = Date.now();
 				answered = true;
 				if (generation === started) follow(next);
+				// Not `next`: a change made here since it started wins.
 				return session;
 			} catch (cause) {
 				const error = toAuthError(
@@ -567,6 +621,7 @@ export function createMirrorAuth<U, In = never>(
 				const source = requireCredentials();
 				if (!session || session.sessionId !== rejected.sessionId)
 					throw sessionChanged();
+				// Another call already got a newer token than the rejected one.
 				if (
 					usable(cached, rejected.sessionId) &&
 					cached.accessToken !== rejected.accessToken
@@ -617,6 +672,7 @@ export function createMirrorAuth<U, In = never>(
 	handles.set(client.state, {
 		hydrate(value) {
 			replace(readSession<U>(value));
+			// A revalidation under way is older than the server render.
 			generation++;
 			checkedAt = Date.now();
 			answered = true;

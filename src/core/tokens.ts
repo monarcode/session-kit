@@ -64,6 +64,7 @@ function jwtClaims(token: string): {
 } {
 	const payload = decodeJwtPayload(token);
 	if (!payload) return {};
+	// A claim too large to turn into milliseconds counts as missing.
 	const seconds = (value: unknown) =>
 		typeof value === "number" && Number.isFinite(value * 1000)
 			? value
@@ -139,6 +140,8 @@ export function receiveTokens(value: unknown): SessionTokens {
 	if (exp === undefined) return tokens;
 	return {
 		...tokens,
+		// The lifetime `exp - iat` ignores this device's clock; `exp` alone is
+		// the fallback.
 		expiresAt:
 			iat !== undefined && exp > iat
 				? Date.now() + (exp - iat) * 1000

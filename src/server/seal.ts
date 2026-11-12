@@ -1,6 +1,8 @@
 import { AuthError } from "../core/errors.js";
 
-/** The shortest secret accepted: 32 characters, the AES-256 key size in bytes. */
+/**
+ * The shortest secret accepted: 32 characters, the AES-256 key size in bytes.
+ */
 const MIN_SECRET_LENGTH = 32;
 /** Marks the format, so a later one can be told apart. */
 const VERSION = "1.";
@@ -25,7 +27,9 @@ function fromBase64Url(text: string): Uint8Array {
 	);
 }
 
-/** Checks the `secret` option, returning the secrets in order: the first seals. */
+/**
+ * Checks the `secret` option, returning the secrets in order: the first seals.
+ */
 export function readSecrets(secret: unknown): readonly string[] {
 	const secrets = typeof secret === "string" ? [secret] : secret;
 	if (
@@ -78,6 +82,8 @@ export function createSealer(secrets: readonly string[], name: string): Sealer {
 					{
 						name: "HKDF",
 						hash: "SHA-256",
+						// Changing the salt or info changes every key, which signs
+						// everyone out.
 						salt: encoder.encode("session-kit"),
 						info: encoder.encode(`session-kit:${name}:cookie`),
 					},
@@ -88,6 +94,7 @@ export function createSealer(secrets: readonly string[], name: string): Sealer {
 				);
 			}),
 		).catch((cause: unknown) => {
+			// Derive again next time: the failure may pass.
 			keys = undefined;
 			throw cause;
 		}));
@@ -130,6 +137,7 @@ export function createSealer(secrets: readonly string[], name: string): Sealer {
 						key,
 						ciphertext,
 					);
+					// `fatal` rejects broken UTF-8 rather than replacing it.
 					return new TextDecoder("utf-8", { fatal: true }).decode(plain);
 				} catch {
 					// Sealed with another secret, or tampered with: try the next.

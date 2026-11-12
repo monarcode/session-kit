@@ -9,7 +9,9 @@ import {
 	client,
 	code,
 	credentialsOf,
+	serverSide,
 	setGlobal,
+	tokens,
 	useBrowserMocks,
 } from "./helpers.ts";
 
@@ -175,4 +177,56 @@ test("a sign-in during an optional signed-out request rejects with SESSION_CHANG
 	await assert.rejects(request("/me"), code("SESSION_CHANGED"));
 	assert.equal(body.cancelled, true);
 	assert.equal(auth.state.get().status, "authenticated");
+});
+
+test("createAuthFetch over a request's view sends the cookie's token and saves a renewed one", async () => {
+	const { serverAuth, request } = serverSide("test");
+	await serverAuth.signIn(request(), tokens());
+	const headers: (string | null)[] = [];
+	setGlobal("fetch", async (sent: Request) => {
+		headers.push(sent.headers.get("Authorization"));
+		return new Response(null, { status: headers.length === 1 ? 401 : 200 });
+	});
+	const authFetch = createAuthFetch(
+		serverAuth.forRequest(request()),
+		"https://api.example.com/",
+	);
+	assert.equal((await authFetch("/me")).status, 200);
+	assert.deepEqual(headers, ["Bearer access-1", "Bearer access-2"]);
+	// The next request reads the renewed token from the cookie.
+	assert.equal(
+		(await serverAuth.credentials.get(request()))?.accessToken,
+		"access-2",
+	);
+});
+
+test("createAuthFetch over a request's view ends the session after a repeated 401", async () => {
+	const { serverAuth, request, cookies, cookie } = serverSide("test");
+	await serverAuth.signIn(request(), tokens());
+	setGlobal("fetch", async () => new Response(null, { status: 401 }));
+	const authFetch = createAuthFetch(
+		serverAuth.forRequest(request()),
+		"https://api.example.com/",
+	);
+	assert.equal((await authFetch("/me")).status, 401);
+	assert.equal(cookies.has(cookie), false);
+	assert.equal(await serverAuth.getSession(request()), null);
+});
+
+test("createAuthFetch over a read-only view can't renew after a 401, and keeps the session", async () => {
+	const { serverAuth, request, cookies, cookie } = serverSide("test");
+	await serverAuth.signIn(request(), tokens());
+	let calls = 0;
+	setGlobal("fetch", async () => {
+		calls++;
+		return new Response(null, { status: 401 });
+	});
+	const authFetch = createAuthFetch(
+		serverAuth.forRequest(request(false)),
+		"https://api.example.com/",
+	);
+	await assert.rejects(authFetch("/me"), code("REFRESH_FAILED"));
+	assert.equal(calls, 1);
+	assert.ok(cookies.has(cookie));
+	assert.ok(await serverAuth.getSession(request(false)));
 });

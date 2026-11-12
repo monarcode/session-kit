@@ -1,8 +1,8 @@
 import { AuthError } from "./errors.js";
 
 /**
- * Where an {@link AuthDebugEvent} comes from. Stable across releases, so it is
- * safe to filter on.
+ * Which part of auth an {@link AuthDebugEvent} comes from, such as `refresh`
+ * or `storage`. These names don't change between releases, so filter on them.
  *
  * @example
  * ```ts
@@ -33,9 +33,11 @@ export type AuthDebugType =
 	| "lock";
 
 /**
- * One thing auth did, for reading while debugging, as passed to the `debug`
- * option ({@link AuthDebug}). `type` is stable; the wording of `message` and
- * the fields in `data` may change in any release. Events are frozen.
+ * One thing auth did, sent to the `debug` option ({@link AuthDebug}).
+ *
+ * Filter on `type`, which doesn't change between releases. `message` and
+ * `data` are for reading, and may change in any release. Events are frozen,
+ * so copy one before changing it.
  *
  * @example
  * ```ts
@@ -56,23 +58,23 @@ export type AuthDebugType =
 export type AuthDebugEvent = Readonly<{
 	/** The `name` passed to `createAuth`. */
 	name: string;
+	/** Which part of auth it comes from. */
 	type: AuthDebugType;
 	/** One readable line, such as `started (proactive)`. */
 	message: string;
 	/** Details, such as `status`, `sessionId`, or `durationMs`. */
 	data?: Readonly<Record<string, unknown>> | undefined;
 	/**
-	 * The failure, when the event reports one: its `code` and `message`. Its
-	 * `cause` and `issues`, which can hold tokens or user fields, only with
-	 * `sensitive`.
+	 * The failure, when the event reports one. Without `sensitive`, only its
+	 * `code` and `message` are kept, as `cause` and `issues` can hold tokens
+	 * or user fields.
 	 */
 	error?: AuthError | undefined;
 }>;
 
 /**
- * Options for debug logging, as the object form of `createAuth`'s `debug`
- * option ({@link AuthDebug}): where events go, and whether they include
- * secrets.
+ * The object form of `createAuth`'s `debug` option ({@link AuthDebug}):
+ * where events go, and whether they include secrets.
  *
  * @example
  * ```ts
@@ -90,25 +92,28 @@ export type AuthDebugOptions = {
 	/** Receives every event. Default: one `console.info` line per event. */
 	log?: ((event: AuthDebugEvent) => void) | undefined;
 	/**
-	 * Also puts tokens, saved values, user fields, whole deep-link paths, and
-	 * errors' causes in events. Anyone who reads such logs can act as the
-	 * user, so keep this to development builds. Default: `false`.
+	 * Also puts tokens, saved values, user fields, whole deep-link paths and
+	 * error details in events. Anyone who reads such logs can act as the user,
+	 * so use it only in development. Default: `false`.
 	 */
 	sensitive?: boolean | undefined;
 };
 
 /**
- * The `debug` option of `createAuth`. `true` logs every event to the console,
- * a function receives every {@link AuthDebugEvent}, and
- * {@link AuthDebugOptions} choose both and whether to include secrets.
- * `false` or omitted turns debugging off.
+ * What `createAuth`'s `debug` option takes:
+ * - `true`: log every event to the console.
+ * - A function: receive every {@link AuthDebugEvent}.
+ * - {@link AuthDebugOptions}: choose where events go, and whether they
+ *   include secrets.
+ * - `false`, or leaving it out: no logging.
  *
  * @example
  * ```ts
  * import type { AuthDebug } from "@monarcode/session-kit";
  *
  * const toConsole: AuthDebug = true;
- * const toLogger: AuthDebug = (event) => console.debug(event.type, event.message);
+ * const toLogger: AuthDebug = (event) =>
+ * 	console.debug(event.type, event.message);
  * const withSecrets: AuthDebug = { sensitive: true };
  * ```
  *
@@ -129,7 +134,9 @@ export type Debugger = {
 		data?: Record<string, unknown>,
 		error?: AuthError,
 	): void;
-	/** `fields` while `sensitive`, otherwise nothing, for spreading into `data`. */
+	/**
+	 * `fields` while `sensitive`, otherwise nothing, for spreading into `data`.
+	 */
 	secret(fields: Record<string, unknown>): Record<string, unknown>;
 };
 
@@ -188,7 +195,7 @@ export function createDebugger(
 			try {
 				log(event);
 			} catch (failure) {
-				// A failing logger must not interrupt the auth operation it reports.
+				// A failing logger must not interrupt what it reports.
 				queueMicrotask(() => {
 					throw failure;
 				});

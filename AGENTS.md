@@ -69,31 +69,6 @@ Consumers import from the root and from subpaths:
 ## Code style
 
 - Write clean, maintainable code that reads like the code around it.
-- Keep comments rare. Write one only for non-obvious behaviour, a workaround,
-  or a note a future maintainer needs, and make it say why, not what.
-- Document the public API in JSDoc: what it does, an `@example` that compiles
-  (`check-docs` compiles every one), `@since`, and `{@link}` to related APIs
-  so readers can navigate. Non-obvious behaviour, such as which methods
-  reject while locked or when a guard redirects, belongs there too. Members
-  of options and props types get a description; other members only when
-  there's something to say beyond the name.
-- A `{@link X}` must resolve in the published `.d.ts`: `X` is declared in
-  that file, or imported there for its declarations. `tsc` drops imports
-  used only in comments, so write any other name, such as another subpath's
-  export, as a code span. `check-docs` fails on a link that doesn't resolve.
-- Examples are short (about a dozen lines, one concept): walkthroughs belong
-  in the README and `docs/`. They import from `@monarcode/session-kit` and
-  its subpaths as an app would, and `declare const` what they don't build.
-  They compile under NodeNext and Bundler resolution with
-  `exactOptionalPropertyTypes`, and `./expo` examples without DOM types.
-  `./next` examples and `docs/next.md` compile under Bundler only, as Next
-  apps do: `next` has no `exports` map. An
-  example that augments a module (`declare module`) compiles on its own; the
-  rest share one program. `tsx` blocks compile as TSX.
-- Give each piece of guidance one home. API behaviour lives in the JSDoc;
-  the README and `docs/` explain how to use it and name the API rather than
-  repeat its details.
-- Internal modules aren't public: document only what's non-obvious.
 - Pass `useEffect` (and `useLayoutEffect`) a named function, not an arrow,
   and name its cleanup too:
   `useEffect(function watchForeground() { … return function unwatch() { … } }, [deps])`.
@@ -114,6 +89,58 @@ Consumers import from the root and from subpaths:
 - Example apps stand alone, so some files are copies: `tests/examples.test.ts`
   lists them and fails when they drift. Edit one, then copy it.
 - The build is plain `tsc`, not a bundler.
+
+## Comments and JSDoc
+
+Consumers read the hovers in their editor, so the JSDoc is written for app
+developers, not for us. Every comment ships: keep it short, plain and true.
+
+- **Public API.** Every export has a description, an `@example` that
+  compiles (`check-docs` compiles every one) and `@since`. Members of options
+  and props types get a description; other members only when there's
+  something to say beyond the name.
+- **First sentence: what it is or does, in plain words.** "Reads the current
+  auth state and re-renders when it changes." Not how it works, and no
+  internal names. A reader who sees only this line should know what it's for.
+- **Then short paragraphs, one idea each**, in this order when they apply:
+  more on what it does; errors, with their `AuthErrorCode`; server, React
+  Native or framework differences; setup. Behaviour a caller will hit, such
+  as which methods reject while locked or when a guard redirects, belongs
+  here. Keep each paragraph to about four lines.
+- **Short sentences.** One idea per sentence. Use a colon for a list or an
+  example, not to join two sentences. Avoid chains of semicolons.
+- **The reader's words, not the engine's:** "signed in", "the saved
+  session", "another tab", "the access token expired". Never internal
+  names such as `epoch`, `revision` or `flight`.
+- **Options and props members** say what the option is for and end with
+  `Default: x.` ("Default: none." when there is none).
+- **Link the next API a reader needs** with `@see {@link X} to …`, or
+  `{@link}` in the text.
+- A `{@link X}` must resolve in the published `.d.ts`: `X` is declared in
+  that file, or imported there for its declarations. `tsc` drops imports
+  used only in comments, so write any other name, such as another subpath's
+  export, as a code span. `check-docs` fails on a link that doesn't resolve.
+- **Examples are short** (about a dozen lines, one concept) and show real
+  use; a trailing comment can show the result (`// "/dashboard"`).
+  Walkthroughs belong in the README and `docs/`. Examples import from
+  `@monarcode/session-kit` and its subpaths as an app would, and
+  `declare const` what they don't build. They compile under NodeNext and
+  Bundler resolution with `exactOptionalPropertyTypes`, and `./expo`
+  examples without DOM types. `./next` examples and `docs/next.md` compile
+  under Bundler only, as Next apps do: `next` has no `exports` map. An
+  example that augments a module (`declare module`) compiles on its own; the
+  rest share one program. `tsx` blocks compile as TSX.
+- **Give each fact one home.** A behaviour is described on the export that
+  owns it, and other exports link to it rather than repeat it. The README
+  and `docs/` explain how to use the API and name it rather than repeat its
+  details.
+- **Internal code.** Document only what's non-obvious. A JSDoc on an
+  internal function says why it exists or what's surprising about it, in one
+  to three sentences, when its name and types don't say enough. A line
+  comment is for a race guard, an ordering constraint, a workaround or a
+  trap for the next maintainer, and says why, not what. Never restate the
+  next line.
+- Wrap comments at 80 columns, like the code.
 
 ## Testing
 

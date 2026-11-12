@@ -14,14 +14,15 @@ import { AuthError } from "./errors.js";
  */
 export type SafeReturnToOptions = {
 	/**
-	 * Sign-in paths that must not be returned to, to avoid redirect loops.
-	 * Matched ignoring case, percent-encoding, and trailing slashes.
-	 * Default: `"/login"`.
+	 * Your sign-in page's path, or several. A path to it is replaced with
+	 * `"/"`, so signing in never sends the user back to sign in. Matched
+	 * ignoring case, percent-encoding and trailing slashes. Default:
+	 * `"/login"`.
 	 */
 	loginPath?: string | readonly string[] | undefined;
 };
 
-/** Normalizes a pathname the way Router matching treats it by default. */
+/** Normalizes a pathname the way routers match paths by default. */
 function routeKey(pathname: string): string {
 	return decodeURIComponent(pathname).toLowerCase().replace(/\/+$/, "") || "/";
 }
@@ -44,13 +45,16 @@ export function sameRoute(a: string, b: string): boolean {
 }
 
 /**
- * Checks a path to send the user back to after signing in, such as a
- * `?redirectTo=` search param. Returns it, normalized, when it is a path in
- * this app, and `"/"` for anything else: other origins, protocol-relative
- * `//host` paths, backslashes, spaces, control characters, and the sign-in
- * page itself, so a stale `redirectTo` cannot loop. Query and fragment are
- * kept. Throws an `AuthError` with code `INVALID_OPTIONS` when a `loginPath`
- * doesn't start with `/`. See {@link SafeReturnToOptions}.
+ * Makes a "send me back here after sign-in" path safe to redirect to, such as
+ * a `?redirectTo=` search param. It returns the path, normalized, when it
+ * leads somewhere in your app, query and fragment included.
+ *
+ * Anything else returns `"/"`:
+ * - another site, including protocol-relative `//host` paths;
+ * - a path with backslashes, spaces or control characters;
+ * - the sign-in page itself, so a stale `redirectTo` can't loop.
+ *
+ * Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
  *
  * @example
  * ```ts
@@ -85,6 +89,8 @@ export function safeReturnTo(
 		/[\\\u0000- \u007f]/.test(value)
 	)
 		return "/";
+	// A placeholder origin (`.invalid` never resolves), only to resolve the
+	// path and see whether it leaves the app.
 	const base = "https://auth.invalid";
 	try {
 		const url = new URL(value, base);

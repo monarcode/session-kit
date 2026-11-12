@@ -47,6 +47,7 @@ export async function obtainTokens<U>(input: {
 			adopted: true,
 		};
 	}
+	// Another tab may have rotated the refresh token since this one read it.
 	const refreshToken = stored?.refreshToken ?? current.refreshToken!;
 	const value = await refresh({ refreshToken, signal });
 	if (value === null) return null;
@@ -61,10 +62,11 @@ export async function obtainTokens<U>(input: {
 		);
 	}
 	let user: U | undefined;
-	// A derived user always follows the new token.
+	// A user read from the token always follows the new token.
 	if (!users.saved) user = await users.receive(tokens.accessToken, undefined);
 	else if (isRecord(value) && value.user !== undefined)
 		user = await users.receive(tokens.accessToken, value.user);
+	// Keep a profile update another tab saved.
 	else if (stored) user = await savedUser(stored);
 	return {
 		tokens: { ...tokens, refreshToken: tokens.refreshToken ?? refreshToken },

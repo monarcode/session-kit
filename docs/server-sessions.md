@@ -10,6 +10,7 @@ framework guides show the code:
 - [The cookie](#the-cookie)
 - [The secret](#the-secret)
 - [Cookie jars](#cookie-jars)
+- [Code that takes a client](#code-that-takes-a-client)
 - [Refreshing](#refreshing)
 - [Signing out](#signing-out)
 - [The access token in the browser](#the-access-token-in-the-browser)
@@ -21,7 +22,7 @@ framework guides show the code:
 the user in one cookie, `<name>.session`, sealed with AES-256-GCM through Web
 Crypto. It is `httpOnly`, so page scripts can't read it, and `Secure` and
 `SameSite=Lax` unless you pass other `cookie` options. It takes the options
-`createAuth` does, except `storage`, plus `secret`.
+`createAuth` does, except `storage` and `locking`, plus `secret`.
 
 Keep the module that creates it on the server: each guide shows how its
 framework keeps such a module out of the browser bundle.
@@ -48,6 +49,15 @@ Component renders or a page streams. There, nothing is refreshed or saved:
 see `CookieJar.writable` for which calls reject and with what. Refresh before
 rendering, in middleware or a proxy, with `serverAuth.refreshIfDue`. For
 another server, build a `CookieJar` over its cookies.
+
+## Code that takes a client
+
+`serverAuth.forRequest(jar)` is one request's session shaped like a client
+(`RequestAuth`). Code written for a client works on the server with it:
+`createAuthFetch(serverAuth.forRequest(jar), baseUrl)` sends the cookie's
+token and saves a renewed one after a 401, and Effect's `Auth.layer` takes
+it ([Effect on the server](./effect.md#on-the-server)). Make it per request,
+like the jar.
 
 ## Refreshing
 

@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-router";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
@@ -22,7 +23,7 @@ import {
 	type SessionBearerPlugin,
 } from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
-import { createAuthFetch } from "../dist/http/index.js";
+import { createAuthFetch, type AuthFetch } from "../dist/http/index.js";
 import {
 	createAuth,
 	createMirrorAuth,
@@ -50,7 +51,11 @@ import {
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
 import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
-import { createServerAuth, type CookieJar } from "../dist/server/index.js";
+import {
+	createServerAuth,
+	type CookieJar,
+	type RequestAuth,
+} from "../dist/server/index.js";
 import {
 	connectAuth,
 	requireSession,
@@ -94,6 +99,13 @@ connectAuth(router);
 createAuthFetch(auth, "https://api.example.com");
 createAuthFetch(auth, "https://api.example.com", { optional: true });
 createAuthFetch(auth, "https://api.example.com", { optional: undefined });
+const authFetch: AuthFetch = createAuthFetch(auth, "https://api.example.com");
+void authFetch("orders", { method: "POST" }).then((response) => response.ok);
+const fakeFetch: AuthFetch = async () => new Response("[]");
+const plainFetch: AuthFetch = fetch;
+void [fakeFetch, plainFetch];
+// @ts-expect-error: a path is required.
+void authFetch();
 
 // Provider-free hooks typed by the registered Router.
 const { useAuth, useAuthClient } = createAuthHooks({
@@ -475,6 +487,35 @@ const tokenServer = createServerAuth({
 });
 // @ts-expect-error A user read from the token has no updateUser.
 void tokenServer.updateUser;
+
+// One request's session, shaped like a client's read side.
+const requestAuth: RequestAuth<z.output<typeof userSchema>> =
+	serverAuth.forRequest(jar);
+async function requestSide() {
+	const session = await requestAuth.getSession();
+	const viewEmail: string | undefined = session?.user.email;
+	const status: AuthState<unknown>["status"] = requestAuth.state.get().status;
+	return [viewEmail, status, await requestAuth.credentials.get()];
+}
+void requestSide;
+createAuthFetch(requestAuth, "https://api.example.com");
+createAuthFetch(tokenServer.forRequest(jar), "https://api.example.com");
+// @ts-expect-error Signing in stays on serverAuth.
+void requestAuth.signIn;
+// @ts-expect-error So does updateUser.
+void requestAuth.updateUser;
+// @ts-expect-error The view is read-only.
+requestAuth.getSession = async () => null;
+// @ts-expect-error So is its state.
+requestAuth.state.get = () => requestAuth.state.get();
+
+// On the server, `Auth.layer` takes a request's session with the registered user.
+const requestLayer: Layer.Layer<Auth> = Auth.layer(serverAuth.forRequest(jar));
+void Effect.runPromise(Effect.provide(Auth.session, requestLayer));
+// @ts-expect-error A request's session with another user doesn't fit.
+Auth.layer(tokenServer.forRequest(jar));
+// @ts-expect-error An Effect that needs the session doesn't run without it.
+void Effect.runPromise(Auth.session);
 
 declare const initial: Session<z.output<typeof userSchema>> | null;
 const mirror = createMirrorAuth({

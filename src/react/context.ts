@@ -16,11 +16,9 @@ import { AuthError } from "../core/errors.js";
 import type { AuthClient, AuthState } from "../core/types.js";
 
 /**
- * A layout effect where there is a screen, otherwise a passive one. Layout
- * effects run before the screen paints, so a session restored at mount
- * replaces the "initializing" state before anyone sees it. On a server, where
- * neither kind runs, React warns about layout effects. Browsers and React
- * Native define `window`; servers don't.
+ * A layout effect where there's a screen (browsers and React Native define
+ * `window`), so a session restored at mount shows before the first paint. On
+ * a server, a passive one, as React warns about layout effects there.
  */
 export function useMountEffect(
 	effect: () => void | (() => void),
@@ -32,9 +30,9 @@ export function useMountEffect(
 }
 
 /**
- * What React bindings need from an auth client: reactive `state`, and `mount`
- * to start background work while rendered. Any `createAuth` client
- * fits. See `createAuthHooks`.
+ * What the React bindings need from an auth client: its `state`, and `mount`
+ * to start background work while rendered. A `createAuth` or
+ * `createMirrorAuth` client fits.
  *
  * @example
  * ```ts
@@ -51,8 +49,8 @@ export function useMountEffect(
 export type AuthSource = Pick<AuthClient<unknown, unknown>, "state" | "mount">;
 
 /**
- * The state type of a client: what `useAuth()` returns. See
- * {@link AuthState}.
+ * The state type of a client: what `useAuth()` returns
+ * ({@link AuthState}).
  *
  * @example
  * ```ts
@@ -105,7 +103,9 @@ export function useProvidedClient(client?: AuthSource): AuthSource | null {
 	return client ?? provided;
 }
 
-/** Subscribes to `client`'s state; re-renders only when the selection changes. */
+/**
+ * Subscribes to `client`'s state; re-renders only when the selection changes.
+ */
 export function useAuthState<Client extends AuthSource, T>(
 	client: Client,
 	selector: (state: StateOf<Client>) => T,
@@ -155,7 +155,9 @@ export type RetryableSource = AuthSource &
  * @since 0.1.0
  */
 export type UnavailableProps = {
-	/** Why access is unavailable, such as a failed refresh or a locked keychain. */
+	/**
+	 * Why access is unavailable, such as a failed refresh or a locked keychain.
+	 */
 	error: AuthError | null;
 	/**
 	 * Tries again, as `auth.retry()` does. A repeated failure stays in
@@ -204,6 +206,7 @@ export function renderUnavailable(
 			state.error ?? new AuthError("REFRESH_FAILED", "Access is unavailable")
 		);
 	const retry = () => {
+		// A failure shows in `state.error`, which re-renders this.
 		void auth.retry().catch(() => {});
 	};
 	return createElement(

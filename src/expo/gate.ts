@@ -25,8 +25,8 @@ import { watchForeground } from "./foreground.js";
 export type { UnavailableProps };
 
 /**
- * Props for {@link SessionGate}: the root navigator, plus what to show while
- * access is unavailable and what else the splash screen waits for.
+ * Props for {@link SessionGate}: the root navigator, what to show while access
+ * is unavailable, and what else the splash screen waits for.
  *
  * @example
  * ```tsx
@@ -39,8 +39,7 @@ export type { UnavailableProps };
  *
  * // Holds the splash screen for the app's fonts as well as the session.
  * export function AppGate(props: SessionGateProps) {
- * 	const fontsLoaded = useFontsLoaded();
- * 	const ready = fontsLoaded && props.ready !== false;
+ * 	const ready = useFontsLoaded() && props.ready !== false;
  * 	return <SessionGate {...props} ready={ready} />;
  * }
  * ```
@@ -48,25 +47,30 @@ export type { UnavailableProps };
  * @since 0.1.0
  */
 export type SessionGateProps = {
-	/** The root navigator, usually a `Stack` guarded with `Stack.Protected`. */
+	/**
+	 * The root navigator, usually a `Stack` guarded with `Stack.Protected`.
+	 * Default: none.
+	 */
 	children?: ReactNode | undefined;
 	/**
 	 * Shown instead of the navigator while access is unavailable, such as
-	 * after a failed refresh. Without it, the error is thrown to the root
-	 * layout's `ErrorBoundary`. That boundary's `retry` only renders again,
-	 * and a failed refresh stays failed until `auth.retry()`, so call both.
+	 * after a failed refresh.
+	 *
+	 * Without it, the error is thrown to the root layout's `ErrorBoundary`.
+	 * That boundary's `retry` only renders again, and a failed refresh stays
+	 * failed until `auth.retry()`, so call both. Default: none.
 	 */
 	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
 	client?: RetryableSource | undefined;
 	/**
 	 * Whether the rest of the app is ready for its first screen, such as
-	 * fonts or remote config loaded. Until it is `true`, as well as while the
-	 * session is restored, the gate renders nothing and keeps the splash
-	 * screen up. That holds only before the splash screen is first hidden,
-	 * even if the gate remounts: `ready` going `false` later changes nothing
-	 * on screen. The deep link opened after a sign-in always waits for it.
-	 * Default: `true`.
+	 * fonts or remote config. Until it's `true`, and while the session is
+	 * restored, the gate renders nothing and keeps the splash screen up.
+	 *
+	 * It only holds the splash screen the first time, even if the gate
+	 * remounts. Setting it `false` later changes nothing on screen, but the
+	 * deep link opened after a sign-in still waits for it. Default: `true`.
 	 */
 	ready?: boolean | undefined;
 };
@@ -92,7 +96,10 @@ function useShown(auth: AuthSource, ready: boolean): boolean {
 // new to say.
 const lastEvents = new WeakMap<object, readonly unknown[]>();
 
-/** Logs a gate event, unless it repeats the last one for this client. */
+/**
+ * Logs a gate event, unless it repeats the last one for this client. `detail`
+ * tells apart events with the same message, such as two account switches.
+ */
 function logGate(
 	auth: AuthSource,
 	message: string,
@@ -109,16 +116,16 @@ function logGate(
 }
 
 function hideSplash() {
+	// There's nothing to do if the native module fails to hide it.
 	void SplashScreen.hideAsync().catch(() => {});
 }
 
 /**
  * A key that changes only when one account replaces another without a
- * sign-out between them. Not the `sessionId` itself, as `SessionOutlet`
- * uses: on a sign-in or sign-out, `Stack.Protected` already swaps the
- * screens, so remounting the whole navigator as well would only rebuild it
- * while it opens the screens it now admits. Updated during render, so the
- * account swap and the remount land in the same commit.
+ * sign-out between them. Not the `sessionId`: on a sign-in or sign-out,
+ * `Stack.Protected` already swaps the screens, and a remount would only
+ * rebuild the navigator for nothing. Updated during render, so the account
+ * swap and the remount land in the same commit.
  */
 function useAccountKey(sessionId: string | null): number {
 	const [account, setAccount] = useState({ sessionId, key: 0 });
@@ -130,9 +137,12 @@ function useAccountKey(sessionId: string | null): number {
 }
 
 /**
- * Wraps the root navigator in `app/_layout.tsx`, inside `AuthProvider` or
- * with a `client`, and adds what Expo Router's `Stack.Protected` lacks. It
- * mounts the client, so it works without `AuthProvider` too.
+ * Wraps the root navigator in `app/_layout.tsx`. It adds what Expo Router's
+ * `Stack.Protected` lacks: a splash screen held while the session is
+ * restored, a screen for when access is unavailable, and deep links kept
+ * for after sign-in.
+ *
+ * Render it inside `AuthProvider`, or pass a `client`, which it mounts.
  *
  * - **While the session is restored**, and until `ready`, it renders
  *   nothing, so the splash screen stays up, and hides the splash screen once
@@ -151,8 +161,8 @@ function useAccountKey(sessionId: string | null): number {
  *   `rememberDeepLink` kept, with `router.replace`, once `ready`.
  * - **When one account replaces another** without a sign-out between them, it
  *   remounts the navigator, so no screen keeps the previous account's
- *   component state. The screens that were open stay open, as the URL does
- *   on the web. A sign-out already removes the guarded screens.
+ *   component state. The screens that were open stay open. A sign-out
+ *   already removes the guarded screens.
  *
  * @example
  * ```tsx

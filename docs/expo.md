@@ -401,8 +401,9 @@ keychain, and encrypted with an Android Keystore key.
   `SplashScreen.preventAutoHideAsync()` at the top of the root layout, or the
   splash screen hides before the session is restored. The navigator mounts
   only then, so a cold-start deep link isn't sent to the sign-in screen
-  first. `ready` defaults to `true`, and counts only until the splash screen
-  is first hidden: setting it to `false` later changes nothing on screen.
+  first. `ready` defaults to `true`, and holds the splash screen only the
+  first time. Setting it to `false` later changes nothing on screen, but a
+  deep link kept for after sign-in still waits for it.
 - **While access is unavailable** it renders `unavailable({ error, retry })`
   instead of the navigator.
 - **When the app returns to the foreground** it re-checks the session, because

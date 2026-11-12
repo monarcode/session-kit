@@ -902,9 +902,11 @@ state, and the refresh token never reaches the browser.
   session the server rendered. `AuthProvider`, the hooks, and the router
   guards work with it, and sign-ins and sign-outs reach every tab.
 - **Your server code** signs in and out with your backend and calls your API
-  with the access token. To call it from the browser too, with
-  `createAuthFetch` or `sessionBearer`, opt in with `clientCredentials`: page
-  scripts then get the access token in memory, never the refresh token.
+  with the access token. `serverAuth.forRequest(jar)` gives code written for
+  a client, such as `createAuthFetch` or Effect's `Auth`, one request's
+  session. To call your API from the browser too, opt in with
+  `clientCredentials`: page scripts then get the access token in memory,
+  never the refresh token.
 
 The engine is the same call in every framework. This one is from the TanStack
 Start guide:
@@ -1031,11 +1033,6 @@ export const SessionTokens = Schema.Struct({
   refreshToken: Schema.String,
 });
 
-const refreshEndpoint = Fetch.endpoint("POST /auth/refresh", {
-  input: Schema.Struct({ refreshToken: Schema.String }),
-  output: SessionTokens,
-});
-
 // Not the app's API client: its session plugin waits for this refresh.
 const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 
@@ -1043,7 +1040,10 @@ const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 const refreshSession = (refreshToken: string) =>
   Effect.gen(function* () {
     const client = yield* makeRefreshClient;
-    return yield* client.bind(refreshEndpoint)({ body: { refreshToken } });
+    return yield* client.post("/auth/refresh", {
+      body: { refreshToken },
+      output: SessionTokens,
+    });
   }).pipe(
     Effect.catchTag("HttpError", (error) =>
       error.status === 401 || error.status === 403
@@ -1248,8 +1248,9 @@ session from the `Auth` service, as `Auth.session`, and fail with a tagged
 A complete app is in
 [`examples/tanstack-start-spa-effetch`](./examples/tanstack-start-spa-effetch).
 The [Effect guide](./docs/effect.md) covers the `Auth` service: reading the
-session, handling its failures, signing in and out, updating the user, and
-watching the session as a `Stream`.
+session, handling its failures, signing in and out, updating the user,
+watching the session as a `Stream`, and using it on the server, one request
+at a time.
 
 ## Using the client
 
@@ -1749,9 +1750,9 @@ throwing.
 
 A refresh runs at one of three moments:
 
-- **Early.** While the client is mounted, at the earlier of 60 seconds before
-  expiry or halfway through the token's lifetime, once per token. If it fails,
-  access stays usable until expiry.
+- **Early.** While the client is mounted, 60 seconds before expiry, or
+  halfway through for a token with under two minutes left, once per token. If
+  it fails, access stays usable until expiry.
 - **At expiry, or after a 401.** `status` is `refreshing` while it runs, with
   the user still on screen.
 - **On request.** `auth.refresh()` runs one now.
@@ -1985,7 +1986,7 @@ tokens it answers with. See [What it doesn't do](#what-it-doesnt-do).
 | `@monarcode/session-kit/tanstack-start`        | `sessionHydration`, `loadSession`, types                                                                               |
 | `@monarcode/session-kit/tanstack-start/server` | `startJar`                                                                                                             |
 | `@monarcode/session-kit/next`                  | `nextJar`, `proxyJar`, types                                                                                           |
-| `@monarcode/session-kit/http`                  | `createAuthFetch`                                                                                                      |
+| `@monarcode/session-kit/http`                  | `createAuthFetch`, types                                                                                               |
 | `@monarcode/session-kit/effect`                | `Auth`, `AuthFailure`, `Register`, types                                                                               |
 | `@monarcode/session-kit/effetch`               | `sessionBearer`, types                                                                                                 |
 

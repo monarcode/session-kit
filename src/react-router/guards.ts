@@ -31,18 +31,24 @@ import type { Session } from "../core/types.js";
  * @since 0.1.0
  */
 export type RequireSessionOptions = {
-	/** The loader's `request`, whose URL signed-out users come back to. */
+	/**
+	 * The loader's `request`. Signed-out users come back to its URL after
+	 * signing in.
+	 */
 	request: Request;
-	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
+	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
 	loginPath: string;
 	/**
 	 * The router's `basename`, if it has one. Loaders see URLs that include
 	 * it, but redirects add it again, so `redirectTo` must leave it out.
+	 * Default: none.
 	 */
 	basename?: string | undefined;
 };
 
-/** `pathname` without `basename`, matched ignoring case as React Router does. */
+/**
+ * `pathname` without `basename`, matched ignoring case as React Router does.
+ */
 function stripBasename(pathname: string, basename = "/"): string {
 	if (!basename.startsWith("/"))
 		throw new AuthError(
@@ -60,15 +66,18 @@ function stripBasename(pathname: string, basename = "/"): string {
 }
 
 /**
- * Guards a route in its loader, in data or framework mode. Signed-out users
- * are redirected to `loginPath` with `?redirectTo=` set to the requested URL;
- * so are users of a locked session, since locking is for native apps. Pass
- * the router's `basename`, if any, so `redirectTo` leaves it out. Signed-in
- * users get `{ session }`, which holds no tokens. Errors from `getSession`,
- * such as `REFRESH_FAILED` from a failed refresh or `PERSISTENCE_FAILED` from
- * a failed restore, are rethrown for the route's error element, which can
- * offer `auth.retry()`. Render the route's element as `SessionOutlet`, and
- * call `useAuthRevalidation` so the loader runs again when auth changes.
+ * Guards a route in its loader, in data or framework mode, so only
+ * signed-in users get through. They get `{ session }`, which holds no tokens.
+ *
+ * Signed-out users go to `loginPath`, with `?redirectTo=` set to the URL they
+ * asked for. A locked session counts as signed out, as locking is for native
+ * apps and the router adapters don't unlock.
+ *
+ * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
+ * rethrown to the route's error element, which can offer `auth.retry()`.
+ *
+ * Use `SessionOutlet` as the route's element, and call
+ * `useAuthRevalidation`, so the loader runs again when the session changes.
  *
  * @example
  * ```tsx
@@ -132,17 +141,24 @@ export async function requireSession<U>(
  * @since 0.1.0
  */
 export type RedirectIfSignedInOptions = {
-	/** Where to send a signed-in user, usually the `redirectTo` search param. */
+	/**
+	 * Where to send a signed-in user, usually the `redirectTo` search param.
+	 * It's checked with `safeReturnTo`.
+	 */
 	redirectTo: unknown;
-	/** The sign-in path, never returned to. Default: `"/login"`. */
+	/**
+	 * Your sign-in page's path, or several. `redirectTo` never sends the user
+	 * back to one. Default: `"/login"`.
+	 */
 	loginPath?: string | readonly string[] | undefined;
 };
 
 /**
- * Guards the sign-in route in its loader: a signed-in user is redirected to
- * `redirectTo`, checked with `safeReturnTo`. If the session cannot be
- * resolved, for example after a failed refresh or while locked, the sign-in
- * page shows so the user can sign in again.
+ * Guards your sign-in page in its loader, so a signed-in user goes straight
+ * to `redirectTo`, made safe with `safeReturnTo`.
+ *
+ * If the session can't be read, such as after a failed refresh or while
+ * locked, the sign-in page shows, so the user can sign in again.
  *
  * @example
  * ```ts

@@ -30,18 +30,18 @@ import type { AuthStorage } from "../core/storage.js";
 export type SecureStorageOptions = {
 	/**
 	 * When iOS lets the app read the session: one of SecureStore's constants,
-	 * such as `AFTER_FIRST_UNLOCK`. Passed to SecureStore unchanged, whose
-	 * default is `WHEN_UNLOCKED`. An app that refreshes in a background task
-	 * before the device's first unlock needs `AFTER_FIRST_UNLOCK`. While the
-	 * keychain can't be read, the session is `unavailable`; it is never signed
-	 * out for that.
+	 * such as `AFTER_FIRST_UNLOCK`. An app that refreshes in a background task
+	 * before the device's first unlock needs `AFTER_FIRST_UNLOCK`. Passed to
+	 * SecureStore unchanged.
+	 *
+	 * While the keychain can't be read, the session is `unavailable`, not
+	 * signed out. Default: `WHEN_UNLOCKED`, SecureStore's own.
 	 */
 	keychainAccessible?: KeychainAccessibilityConstant | undefined;
 	/**
-	 * iOS keeps keychain items after the app is deleted. By default, a session
-	 * an earlier install left there is removed before it is read, so a
-	 * reinstalled app starts signed out. `false` restores it instead.
-	 * Default: `true`.
+	 * Whether a reinstalled app starts signed out. iOS keeps keychain items
+	 * after the app is deleted, so a session an earlier install left is
+	 * removed before it's read. `false` restores it instead. Default: `true`.
 	 */
 	clearOnReinstall?: boolean | undefined;
 };
@@ -56,9 +56,9 @@ type Layout = { slot: Slot; count: number };
 
 /**
  * A SecureStore key for `key`. SecureStore accepts only letters, digits, `.`,
- * `-`, and `_`, and auth's keys contain colons. Every other character becomes
- * `_` and its UTF-8 bytes in hex, `my-app:auth:session` becomes
- * `my-app_3Aauth_3Asession`, and `.` stays free to mark chunk keys.
+ * `-` and `_`, and auth's keys contain colons. Every other character becomes
+ * `_` and its UTF-8 bytes in hex: `my-app:auth:session` becomes
+ * `my-app_3Aauth_3Asession`. `.` is kept free to mark chunk keys.
  */
 function encodeKey(key: string): string {
 	return encodeURIComponent(key)
@@ -81,7 +81,9 @@ function utf8Length(text: string): number {
 	return bytes;
 }
 
-/** Splits `value` into pieces of at most `MAX_BYTES`, never inside a character. */
+/**
+ * Splits `value` into pieces of at most `MAX_BYTES`, never inside a character.
+ */
 function split(value: string): string[] {
 	const chunks: string[] = [];
 	let chunk = "";
@@ -112,15 +114,13 @@ const undecryptable = (error: unknown) =>
 	error.code === "ERR_DECRYPT";
 
 /**
- * An {@link AuthStorage} that saves the session with `expo-secure-store`: in
- * the iOS keychain, and encrypted with an Android Keystore key. For Expo apps
- * on iOS and Android; pass it as `createAuth`'s `storage`. See
- * {@link SecureStorageOptions}.
+ * Saves the session with `expo-secure-store`: in the iOS keychain, and
+ * encrypted with an Android Keystore key on Android. Pass it as
+ * `createAuth`'s `storage` in Expo apps.
  *
- * - Values longer than SecureStore's 2048-byte limit are split across keys.
- *   The value is replaced only once every piece of the new one is written, so
- *   a write cut short, for example when the app is killed, keeps the previous
- *   value whole.
+ * - Values over SecureStore's 2048-byte limit are split across keys. A write
+ *   cut short, for example when the app is killed, keeps the previous value
+ *   whole.
  * - Reads are synchronous, so with a synchronous user schema the session is
  *   restored before the first render. Writes and removals are asynchronous.
  * - On iOS, a session left in the keychain by an earlier install is removed
@@ -130,9 +130,8 @@ const undecryptable = (error: unknown) =>
  *   another device, reads as signed out and is removed. Other read failures,
  *   such as a locked iOS keychain, make the session `unavailable`.
  *
- * There is one JavaScript context in an app, so it has no `subscribe` or
- * `lock`: there are no tabs to follow, and the client runs one refresh at a
- * time itself.
+ * Unlike `webStorage`, it has no `subscribe` or `lock`, because an app has
+ * no other tabs to follow or to share refreshes with.
  *
  * @example
  * ```ts
@@ -146,6 +145,8 @@ const undecryptable = (error: unknown) =>
  * 	storage: secureStorage(),
  * });
  * ```
+ *
+ * @see {@link SecureStorageOptions} for iOS keychain access and reinstalls
  *
  * @since 0.1.0
  */
@@ -168,11 +169,13 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 		data?: Record<string, unknown>,
 	) => reporters.get(base)?.(message, { entry: base, ...data });
 
-	// Auth runs storage operations one at a time, in order, and waits for a
-	// read that returns a promise. So cleanup this adapter needs is returned
-	// from the operation that finds it, never left running beside the next.
+	// Auth runs storage operations one at a time and waits for each. So an
+	// operation that finds cleanup to do finishes it before it returns, rather
+	// than leaving it to run beside the next one.
 
-	/** An item, `null` when absent, or `undefined` when it can't be decrypted. */
+	/**
+	 * An item, `null` when absent, or `undefined` when it can't be decrypted.
+	 */
 	function readItem(key: string): string | null | undefined {
 		try {
 			return getItem(key, store);
@@ -196,10 +199,10 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 	}
 
 	/**
-	 * Removes chunks of `slot` from `from` on. A slot's chunks are written
-	 * first to last and removed last to first, so the ones present always
-	 * start at index 0 with no gap, and whatever a write or removal cut short
-	 * left behind, the scan up to the first missing one finds.
+	 * Removes chunks of `slot` from `from` on. Chunks are written first to
+	 * last and removed last to first, so the ones present always start at 0
+	 * with no gap. Scanning up to the first missing one finds whatever a write
+	 * or removal cut short left behind.
 	 */
 	async function removeChunks(base: string, slot: Slot, from: number) {
 		let end = from;
@@ -253,6 +256,7 @@ export function secureStorage(options: SecureStorageOptions = {}): AuthStorage {
 
 	async function writeValue(base: string, value: string) {
 		const previous = layoutOf(readItem(base));
+		// 2 for the `0:` prefix.
 		if (utf8Length(value) + 2 <= MAX_BYTES) {
 			await setItemAsync(base, `0:${value}`, store);
 		} else {

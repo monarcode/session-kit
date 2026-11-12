@@ -58,7 +58,7 @@ type RefreshOutcome<U> =
 	| { kind: "signedOut" }
 	| { kind: "installed"; session: InternalSession<U> };
 
-/** Statuses that expose `user`. Adding a status will not compile until it is listed. */
+/** Statuses that expose `user`. A new status won't compile until listed. */
 const SIGNED_IN = {
 	initializing: false,
 	authenticated: true,
@@ -84,18 +84,25 @@ const GUARD_STATUS = {
 /** A saved session as the client restored it, tokens included. */
 export type SavedSession<U> = SessionTokens & { id: string; user: U };
 
-// The server engine reads a cookie's session without refreshing it: for a
-// jar that can't save new tokens, and before ending the session.
+// Lets the server read a cookie's session without refreshing it: for a
+// read-only cookie jar, which can't save new tokens, and before signing out.
 const restorers = new WeakMap<
 	object,
-	() => Promise<SavedSession<unknown> | null>
+	(publish: boolean) => Promise<SavedSession<unknown> | null>
 >();
 
-/** Restores `client`'s saved session, as `getSession` does, without refreshing it. */
+/**
+ * Restores `client`'s saved session, as `getSession` does, without refreshing
+ * it. With `publish`, an expired session shows as `unavailable` rather than
+ * staying `initializing`, since no refresh will follow to publish it.
+ */
 export function restoreSaved<U, I>(
 	client: AuthClient<U, I>,
+	options: { publish?: boolean | undefined } = {},
 ): Promise<SavedSession<U> | null> {
-	return restorers.get(client)!() as Promise<SavedSession<U> | null>;
+	return restorers.get(client)!(
+		options.publish === true,
+	) as Promise<SavedSession<U> | null>;
 }
 
 /** Whether `error` means the saved session itself is unusable, not storage. */
@@ -106,7 +113,6 @@ function rejectsSaved(error: AuthError) {
 	);
 }
 
-/** Whether two saved entries hold the same access token and user. */
 function sameSaved(a: StoredSession, b: StoredSession) {
 	return a.accessToken === b.accessToken && sameUser(a.user, b.user);
 }
@@ -131,51 +137,46 @@ function toCredentials<U>(
 }
 
 /**
- * Creates the auth client ({@link AuthClient}) from {@link AuthOptions}. Put
- * one in Router context per auth `name` per tab. Throws `INVALID_OPTIONS` for
- * options it can't use.
+ * Creates an auth client. It keeps the session your backend issued, saves
+ * it, refreshes its tokens, and tells your app when it changes.
  *
- * The saved session is restored by the first `mount()`, which `AuthProvider`
- * and the router adapters call, or the first method that needs it, such as
- * `getSession()`. Until then, `state` is `initializing`.
+ * Create one client per `name`. Throws `INVALID_OPTIONS` for options it
+ * can't use. To keep sessions on your server instead, in a cookie, use
+ * `createServerAuth` from `@monarcode/session-kit/server`.
  *
- * Token expiry comes from `expiresAt`, `expiresIn`, or JWT claims; see
- * `Tokens`. Prefer `expiresIn` so a wrong browser clock cannot expire
- * tokens early.
+ * The saved session is read on the first `mount()`, which `AuthProvider` and
+ * the router adapters call, or by the first method that needs it, such as
+ * `getSession()`. Until then, `state.status` is `initializing`.
  *
  * @example
  * ```ts
- * import { createAuth, webStorage } from "@monarcode/session-kit";
+ * import {
+ * 	createAuth,
+ * 	webStorage,
+ * 	type RefreshFn,
+ * } from "@monarcode/session-kit";
  * import { z } from "zod";
  *
- * declare const accessToken: string;
- * declare const refreshToken: string;
+ * declare const refresh: RefreshFn<{ id: string; email: string }>;
  *
  * export const auth = createAuth({
  * 	name: "my-app",
  * 	user: z.object({ id: z.string(), email: z.string() }),
  * 	storage: webStorage(),
- * 	refresh: async ({ refreshToken, signal }) => {
- * 		const response = await fetch("/api/auth/refresh", {
- * 			method: "POST",
- * 			signal,
- * 			headers: { "Content-Type": "application/json" },
- * 			body: JSON.stringify({ refreshToken }),
- * 		});
- * 		if (response.status === 401) return null; // rejected: sign out
- * 		if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
- * 		const body = await response.json();
- * 		return { accessToken: body.access_token, expiresIn: body.expires_in };
- * 	},
+ * 	refresh,
  * });
  *
+ * // After your login endpoint answers:
  * await auth.signIn({
- * 	accessToken,
- * 	refreshToken,
+ * 	accessToken: "eyJhbGciOi…",
+ * 	refreshToken: "r1",
  * 	expiresIn: 900,
  * 	user: { id: "1", email: "ada@example.com" },
  * });
  * ```
+ *
+ * @see {@link AuthOptions} for every option
+ * @see {@link AuthClient} for what the client does
  *
  * @since 0.1.0
  */
@@ -213,11 +214,10 @@ export function createAuth<Src extends UserSource>(
 		version: 0,
 		error: null,
 	});
-	// Lifecycle. `epoch` increments whenever the session is replaced; async
-	// work captures it and stops once it changes, and `controller` aborts that
-	// work. Timers and the storage watch run only while `mounts.count`, the
-	// number of connections, is above zero. Unmounting cancels neither: a restore or
-	// refresh already started finishes, and a remount joins it.
+	// Lifecycle. `epoch` counts session replacements. Async work notes it and
+	// stops once it changes, and `controller` aborts that work. Timers and the
+	// storage watch run only while mounted. Unmounting cancels no work: a
+	// restore or refresh already started finishes, and a remount joins it.
 	let epoch = 0;
 	let controller = new AbortController();
 	const mounts = countMounts(() => {
@@ -358,7 +358,7 @@ export function createAuth<Src extends UserSource>(
 			GUARD_STATUS[previous.status] !== GUARD_STATUS[status] ||
 			previous.user !== user ||
 			previous.sessionId !== sessionId;
-		// `SIGNED_IN` keeps `user` set exactly for the statuses whose type has one.
+		// `SIGNED_IN` sets `user` exactly for the statuses whose type has one.
 		setState(
 			Object.freeze({
 				status,
@@ -426,7 +426,7 @@ export function createAuth<Src extends UserSource>(
 
 	/** Cancels everything in progress for the current session. */
 	function advanceEpoch() {
-		// A cancelled refresh never finished, so it does not use up the token's attempt.
+		// A cancelled refresh never finished, so it doesn't use up the attempt.
 		if (flight) refreshAttempted = false;
 		epoch++;
 		controller.abort(sessionChanged());
@@ -448,7 +448,9 @@ export function createAuth<Src extends UserSource>(
 		publish(error);
 	}
 
-	/** Signs out every tab because the saved session cannot be used, then clears it. */
+	/**
+	 * Signs out every tab, as the saved session can't be used, and clears it.
+	 */
 	async function discardSaved(error: AuthError) {
 		forget(error);
 		const expected = epoch;
@@ -495,7 +497,7 @@ export function createAuth<Src extends UserSource>(
 	async function commit(next: InternalSession<U>) {
 		adopt(next);
 		try {
-			// A user read from the access token is not saved; restoring reads it again.
+			// A user read from the access token isn't saved. Restoring reads it.
 			await persistence.write(
 				users.saved ? next : { ...next, user: undefined },
 			);
@@ -547,7 +549,9 @@ export function createAuth<Src extends UserSource>(
 		return resolveSession();
 	}
 
-	/** Drops this tab's session and restores what storage holds, without writing. */
+	/**
+	 * Drops this tab's session and restores what storage holds, without writing.
+	 */
 	async function reload() {
 		advanceEpoch();
 		session = null;
@@ -664,11 +668,10 @@ export function createAuth<Src extends UserSource>(
 	}
 
 	/**
-	 * Signs out after the backend rejected `accessToken`, session `id`'s token,
-	 * or it expired with no way to refresh it; `reason` says which.
-	 * If another tab has already replaced that session in storage, keeps the
-	 * replacement. Resolves `undefined`, ending nothing, if this tab replaced
-	 * the token while storage was read.
+	 * Signs out because `accessToken`, session `id`'s token, was rejected or
+	 * expired and can't be refreshed. If another tab already replaced the
+	 * session, follows it instead. Resolves `undefined`, ending nothing, if
+	 * this tab got a new token meanwhile.
 	 */
 	async function endSession(
 		id: string,
@@ -738,6 +741,8 @@ export function createAuth<Src extends UserSource>(
 					return discardSaved(error);
 				}
 				debug.log("restore", "failed", undefined, error);
+				// Not `publish()`, which would still say `initializing` with
+				// nothing restored.
 				const previous = store.get();
 				setState({
 					...previous,
@@ -776,7 +781,9 @@ export function createAuth<Src extends UserSource>(
 			if (!session || valid()) publish();
 			schedule();
 		}
-		/** Installs a saved session as locked, once this restore is still current. */
+		/**
+		 * Installs a saved session as locked, if this restore is still current.
+		 */
 		function finishLocked(restoredLock: LockedSession<U>) {
 			assertEpoch(expected);
 			locked = restoredLock;
@@ -918,7 +925,7 @@ export function createAuth<Src extends UserSource>(
 		let revokeFailure: AuthError | undefined;
 		if (ended) {
 			try {
-				// Revoke even if this tab signs in again meanwhile, so no parent abort.
+				// Revoke even after a new sign-in here, so no parent abort.
 				await runTask(
 					(signal) => revokeHandler!({ ...ended, signal }),
 					new AbortController().signal,
@@ -967,7 +974,10 @@ export function createAuth<Src extends UserSource>(
 				cause,
 			);
 		}
-		/** The session to update, unless a newer update or a session change made this one obsolete. */
+		/**
+		 * The session to update, unless a newer update or a session change made
+		 * this one obsolete.
+		 */
 		const target = () => {
 			assertEpoch(expected);
 			if (intent !== profileIntent) throw sessionChanged();
@@ -1010,6 +1020,7 @@ export function createAuth<Src extends UserSource>(
 		if (locked) throw sessionLocked();
 		if (!session) return null;
 		if (session.id !== captured.id) throw sessionChanged();
+		// Already replaced, by this tab or another. Use the current token.
 		if (session.accessToken !== captured.accessToken) return resolveSession();
 		if (reason === "rejected") rejectedToken = captured.accessToken;
 		if (flight) {
@@ -1060,6 +1071,9 @@ export function createAuth<Src extends UserSource>(
 					);
 					assertEpoch(expected);
 					if (result === null) {
+						// Another tab may have signed out, or saved new tokens and so
+						// spent the old refresh token first. Follow storage then,
+						// rather than sign out.
 						const after = await latest(current.id);
 						assertEpoch(expected);
 						if (
@@ -1092,9 +1106,9 @@ export function createAuth<Src extends UserSource>(
 					const saved = await latest(current.id);
 					assertEpoch(expected);
 					if (saved === null) return { kind: "stale" };
-					// Decide the user only now, after the last read: a profile update
-					// committed meanwhile must win over the user the refresh returned.
-					// A user read from the token always follows the new token.
+					// Decide the user only now, after the last read, so a profile
+					// update committed meanwhile wins over the refresh's user. A
+					// user read from the token always follows the new token.
 					const user =
 						!users.saved || profile === profileVersion
 							? (result.user ?? session!.user)
@@ -1139,6 +1153,9 @@ export function createAuth<Src extends UserSource>(
 				}
 			} catch (cause) {
 				if (epoch !== expected) {
+					// The session changed meanwhile, so report that. A storage
+					// failure still surfaces: `signOut` above changes the session
+					// before it can fail to clear storage.
 					if (
 						cause instanceof AuthError &&
 						cause.code === "PERSISTENCE_FAILED"
@@ -1169,6 +1186,7 @@ export function createAuth<Src extends UserSource>(
 			if (flight === promise) flight = undefined;
 		};
 		void promise.then(clearFlight, clearFlight);
+		// Shows `refreshing` while the access token can't be used.
 		if (!valid()) publish(store.get().error);
 		return promise;
 	}
@@ -1176,6 +1194,7 @@ export function createAuth<Src extends UserSource>(
 	async function resume(retry: boolean): Promise<InternalSession<U> | null> {
 		const expected = epoch;
 		await initialize();
+		// The session was replaced meanwhile. A sign-out resolves `null` below.
 		if (epoch !== expected && session) throw sessionChanged();
 		if (locked) throw sessionLocked();
 		if (!session) return null;
@@ -1394,8 +1413,11 @@ export function createAuth<Src extends UserSource>(
 		users.saved ? { ...client, updateUser } : client
 	) as AuthClient<U, I>;
 	registerDebugger(result, debug);
-	restorers.set(result, async () => {
+	restorers.set(result, async (show) => {
 		await initialize();
+		// An expired session publishes when its refresh starts. A read that
+		// won't refresh shows it as it stands instead.
+		if (show && store.get().status === "initializing") publish();
 		return (
 			session && { ...tokensOf(session), id: session.id, user: session.user }
 		);

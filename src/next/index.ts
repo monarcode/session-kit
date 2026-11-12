@@ -5,8 +5,8 @@ import {
 } from "../server/cookies.js";
 
 /**
- * A request's cookie store, as `cookies()` from `next/headers` resolves it:
- * what {@link nextJar} reads and writes. Next's own store fits.
+ * A request's cookie store, as `cookies()` from `next/headers` resolves it.
+ * {@link nextJar} reads and writes it, and Next's own store fits.
  *
  * @example
  * ```ts
@@ -29,7 +29,7 @@ export type NextCookies = {
 };
 
 /**
- * What {@link proxyJar} reads from in Proxy: a `NextRequest` fits.
+ * The request {@link proxyJar} reads cookies from. A `NextRequest` fits.
  *
  * @example
  * ```ts
@@ -44,7 +44,7 @@ export type NextCookies = {
 export type ProxyRequest = { cookies: Pick<NextCookies, "get"> };
 
 /**
- * What {@link proxyJar} sets cookies on in Proxy: a `NextResponse` fits.
+ * The response {@link proxyJar} sets cookies on. A `NextResponse` fits.
  *
  * @example
  * ```ts
@@ -72,10 +72,9 @@ export type ProxyResponse = { cookies: Pick<NextCookies, "set" | "delete"> };
  */
 export type NextJarOptions = {
 	/**
-	 * Whether the jar sets cookies: `true` in a Server Function (an action) or
-	 * a Route Handler. Default: `false`, for Server Components, where Next
-	 * refuses writes. A read-only jar never refreshes, so it can't spend a
-	 * refresh token whose replacement it couldn't save.
+	 * Whether the jar can set cookies. Pass `true` in a Server Function (an
+	 * action) or a Route Handler. Server Components can't set cookies, so
+	 * there the jar is read-only and never refreshes. Default: `false`.
 	 */
 	writable?: boolean | undefined;
 };
@@ -104,13 +103,17 @@ const jars = new WeakMap<
 >();
 
 /**
- * The {@link CookieJar} of `cookies()` from `next/headers`, for `serverAuth`
- * from `@monarcode/session-kit/server`. It is read-only unless `writable` is
- * `true`, which only a Server Function or a Route Handler may pass: Next
- * throws when a Server Component sets a cookie, and a refresh there would
- * lose its new tokens. Refresh before rendering with {@link proxyJar}
- * instead. Every call with the same store and `writable` returns the same
- * jar.
+ * The {@link CookieJar} for `cookies()` from `next/headers`, to pass to
+ * `serverAuth` from `@monarcode/session-kit/server`.
+ *
+ * It's read-only unless you pass `writable: true`, which only a Server
+ * Function or a Route Handler may do, as Next throws when a Server Component
+ * sets a cookie. A read-only jar can't refresh, so refresh before rendering,
+ * in Proxy, with {@link proxyJar}.
+ *
+ * The read-only jar follows the writable jar for the same store, so a
+ * sign-in, sign-out or refresh through the writable one shows in it. The
+ * same store and `writable` always give the same jar.
  *
  * @example
  * ```ts
@@ -160,6 +163,7 @@ export function nextJar(
 		(name) => store.get(name)?.value,
 		writable ? store : undefined,
 	));
+	// Paired, so a sign-in through the writable jar shows in the read-only one.
 	if (cached.readOnly && cached.writable)
 		pairJars(cached.readOnly, cached.writable);
 	return jar;
@@ -168,14 +172,14 @@ export function nextJar(
 const proxyJars = new WeakMap<object, CookieJar>();
 
 /**
- * The {@link CookieJar} of a request in Next's Proxy (`proxy.ts`), for
- * `serverAuth.refreshIfDue`: it reads `request`'s cookies and sets them on
- * `response`. Next passes cookies set there to the Server Components that
- * render the same request on the Node.js runtime, the default, so refreshing
- * in Proxy keeps the access token current for {@link nextJar}'s read-only
- * jars; pages on the Edge runtime may read the old cookie. Return `response`
- * from Proxy, or the cookies are lost. Every call with the same `response`
- * returns the same jar.
+ * The {@link CookieJar} for a request in Next's Proxy (`proxy.ts`). It reads
+ * `request`'s cookies and sets new ones on `response`. Use it with
+ * `serverAuth.refreshIfDue`, so the pages that render the request see a fresh
+ * token through {@link nextJar}.
+ *
+ * Return `response` from Proxy, or the new cookies are lost. Pages on the
+ * Edge runtime may still read the old cookie. Every call with the same
+ * `response` returns the same jar.
  *
  * @example
  * ```ts
@@ -188,7 +192,9 @@ const proxyJars = new WeakMap<object, CookieJar>();
  *
  * export async function proxy(request: NextRequest) {
  * 	const response = NextResponse.next();
- * 	await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
+ * 	// If the refresh fails, the page still renders with the cookie as it is.
+ * 	const jar = proxyJar(request, response);
+ * 	await serverAuth.refreshIfDue(jar).catch(() => {});
  * 	return response;
  * }
  * ```

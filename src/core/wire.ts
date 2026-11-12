@@ -7,7 +7,7 @@ import { toUser } from "./user.js";
 // What passes between `createServerAuth` and `createMirrorAuth` through the
 // app's own functions: the session, and the access token for page scripts.
 
-/** Checks a session from the app's function, returning a frozen copy. */
+/** Checks a session a server function returned, and returns a frozen copy. */
 export function readSession<U>(value: unknown): Session<U> | null {
 	if (value === null) return null;
 	if (
@@ -26,7 +26,10 @@ export function readSession<U>(value: unknown): Session<U> | null {
 	});
 }
 
-/** `credentials` for page scripts: seconds left rather than a time, since clocks differ. */
+/**
+ * `credentials` for page scripts: seconds left rather than a time, since clocks
+ * differ.
+ */
 export function toClientCredentials(
 	credentials: Credentials | null,
 ): ClientCredentials | null {

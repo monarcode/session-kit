@@ -11,13 +11,16 @@ type AuthRouter = {
 const connections = new WeakMap<object, () => void>();
 
 /**
- * Starts auth for a Router whose context holds the client as `auth`: restores
- * the session, runs expiry timers and tab sync, and re-runs guards such as
- * `requireSession` when auth changes. Call it once, beside the Router;
- * it returns a function that stops, and calling it again for the same Router
- * returns that same function. On a server, such as TanStack Start rendering
- * its SPA shell, it does nothing: there is no browser storage to restore
- * from, and the shell keeps the `initializing` state, which renders your
+ * Starts auth for a Router whose context holds the client as `auth`. It
+ * restores the session, runs expiry timers, follows other tabs, and runs
+ * guards such as `requireSession` again when the session changes. Call it
+ * once, beside the Router.
+ *
+ * It returns a function that stops. Calling it again for the same Router
+ * returns that same function.
+ *
+ * On a server, such as when TanStack Start renders its SPA shell, it does
+ * nothing. The shell keeps the `initializing` state, which shows your
  * pending UI.
  *
  * @example
@@ -51,6 +54,8 @@ export function connectAuth(router: AuthRouter): () => void {
 	if (existing) return existing;
 	const auth = router.options.context.auth;
 	let active = true;
+	// The cache clears at once, so the last account's preloaded data never
+	// shows; guards then run again in one batch.
 	const unwatch = watchVersion(
 		auth,
 		() => router.invalidate(),

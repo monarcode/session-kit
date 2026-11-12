@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.1.0-alpha.8
+
+### Added
+
+- `AuthFetch` in `@monarcode/session-kit/http`: the type of the function
+  `createAuthFetch` returns, to type a prop, a context or a test fake.
+  `createAuthFetch` now declares it as its return type: the signature is the
+  same, and hovers show `AuthFetch`.
+- `serverAuth.forRequest(jar)` in `@monarcode/session-kit/server`: one
+  request's session shaped like a client's read side (`RequestAuth`), with
+  `getSession`, `signOut`, `credentials`, `isCurrent` and `state`. With it,
+  `createAuthFetch` runs on the server: it sends the cookie's token and saves
+  a renewed one after a 401. A read-only jar can't renew, so there a 401
+  rejects with `REFRESH_FAILED`, unless the writable jar of the same request
+  already renewed it, and `credentials.reject` resolves without signing out.
+- `Auth.layer` in `@monarcode/session-kit/effect` also takes a request's
+  session, `serverAuth.forRequest(jar)`, whose user is the registered one.
+  `Auth.session`, `Auth.credentials`, `Auth.renew`, `Auth.signOut` and
+  effetch's `sessionBearer` then work in server functions, actions and route
+  handlers, refreshing and saving the cookie. Provide it per request, with
+  the services that use it. `Auth.signIn` and `Auth.updateUser` die there:
+  call `serverAuth.signIn(jar, …)` and `serverAuth.updateUser(jar, …)`.
+- The Effect guide's "On the server" section replaces "With server
+  rendering": a runtime for what belongs to no user, the API client and the
+  session built per request, signing in through `serverAuth`, and what to
+  know about typing, memo maps and read-only jars. The server sessions guide
+  and the README point to `forRequest`.
+
+### Fixed
+
+- A server session read with a read-only jar whose access token had expired
+  left the client's `state` at `initializing`. It is now `unavailable`, with
+  the session ID.
+
+### Changed
+
+- The JSDoc across every entry point is rewritten for app developers: each
+  hover says what the export does first, then its errors and platform
+  differences, with shorter examples. Several statements that no longer
+  matched the code are corrected, in the JSDoc, the README and the guides:
+  when the early refresh runs, which jar `nextJar` returns, and what
+  `createServerAuth` accepts.
+- The README's Effect example and `examples/tanstack-start-spa-effetch`
+  refresh the session with a client method (`client.post`) instead of binding
+  an endpoint on every call, as effetch's README recommends.
+
 ## 0.1.0-alpha.7
 
 ### Added

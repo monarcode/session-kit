@@ -39,7 +39,9 @@ function setCookieLine(
 	].join("; ");
 }
 
-/** The `Cookie` header's values by name, the first of each as servers read them. */
+/**
+ * The `Cookie` header's values by name, the first of each as servers read them.
+ */
 function parseCookies(header: string | null): Map<string, string> {
 	const cookies = new Map<string, string>();
 	for (const pair of header?.split(";") ?? []) {
@@ -65,7 +67,9 @@ function withCookies(response: Response, lines: string[]): Response {
 	}
 }
 
-/** The cookie jar of `request`, whose cookies `respond` sets on its response. */
+/**
+ * The cookie jar of `request`, whose cookies `respond` sets on its response.
+ */
 export function requestJar(request: Request): RequestJar {
 	let sent: Map<string, string> | undefined;
 	const written = new Map<string, string>();
@@ -74,6 +78,8 @@ export function requestJar(request: Request): RequestJar {
 		get writable() {
 			return !committed;
 		},
+		// The request's cookies only, never those written since. `jarStorage`
+		// keeps its own copy of what it writes.
 		get: (name) =>
 			(sent ??= parseCookies(request.headers.get("cookie"))).get(name),
 		set(name, value, options) {
@@ -94,6 +100,8 @@ export function requestJar(request: Request): RequestJar {
 			try {
 				response = await respond();
 			} finally {
+				// Even when `respond` throws: no response will carry later writes,
+				// so the jar turns read-only and calls that would write reject.
 				await refreshesSettled(jar);
 				committed = true;
 			}

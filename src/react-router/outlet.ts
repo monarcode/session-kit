@@ -46,17 +46,17 @@ import {
  * @since 0.1.0
  */
 export type SessionOutletProps = {
-	/** Where signed-out users go. A same-origin path, such as `"/login"`. */
+	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
 	loginPath: string;
 	/**
-	 * Shown while the saved session is being restored and, in data mode,
-	 * while the loader has yet to accept a new session. Default: nothing.
+	 * Shown while the saved session is read and, in data mode, until the
+	 * loader has accepted a new session. Default: nothing.
 	 */
 	pending?: ReactNode | undefined;
 	/**
-	 * Shown when access is unavailable, such as after a failed refresh. `retry`
-	 * tries again; a repeated failure stays in `state.error`. Without it, the
-	 * error is thrown to the nearest error boundary or error element.
+	 * Shown when the session is `unavailable`, such as after a failed
+	 * refresh ({@link UnavailableProps}). Without it, the error is thrown to
+	 * the nearest error boundary or error element. Default: none.
 	 */
 	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */
@@ -84,20 +84,22 @@ function useGuardedSessionId(): string | undefined {
 }
 
 /**
- * Renders child routes only while someone is signed in, in any mode. In
- * declarative mode it is the guard: signed-out users are sent to `loginPath`
- * with `?redirectTo=` set to the current location, and so are users of a
- * locked session, since locking is for native apps. In data mode, render it
- * as the element of the route whose loader returns `requireSession`'s
- * result: child routes then render only while that session is still the
- * signed-in one, and `pending` shows until `useAuthRevalidation` has
- * re-run the loader for a new one, so no child sees the previous account's
- * loader data. Child routes are keyed by session, so nothing from one account
- * stays mounted for the next. Profile updates and token refreshes keep them
- * mounted. Only what it renders is guarded this way: UI the route renders
- * around it, such as a sidebar, stays mounted until the redirect, so read the
- * user there from state, where it may be `null`. Needs an `AuthProvider`
- * above it, or a `client`.
+ * Renders child routes only while someone is signed in, in any mode. It
+ * needs an `AuthProvider` above it, or a `client`.
+ *
+ * Signed-out users, and a locked session, go to `loginPath`, with
+ * `?redirectTo=` set to where they were. In declarative mode, that makes it
+ * the guard.
+ *
+ * In data mode, use it as the element of a route whose loader returns
+ * `requireSession`'s result. When the account changes, it shows
+ * `pending` until the loader has run again, so no child sees the last
+ * account's data.
+ *
+ * Child routes remount for each account, but not on token refreshes or
+ * profile updates. UI the route renders around the outlet, such as a
+ * sidebar, isn't guarded this way. Read the user there from state, where it
+ * may be `null`.
  *
  * @example
  * ```tsx
@@ -133,8 +135,6 @@ export function SessionOutlet({
 			if (guarded !== undefined && guarded !== state.sessionId)
 				return createElement(Fragment, null, pending);
 			return createElement(Outlet, { key: state.sessionId });
-		// Locking is for native apps: a locked session goes to the sign-in
-		// page, as a signed-out one does.
 		case "locked":
 		case "unauthenticated":
 			return createElement(Navigate, {

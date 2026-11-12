@@ -1,8 +1,8 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
 
 /**
- * What went wrong, on every {@link AuthError}. Match on it rather than on the
- * message, which may change in any release.
+ * What went wrong: the `code` of every {@link AuthError}. Match on it rather
+ * than on the message, which may change in any release.
  *
  * @example
  * ```ts
@@ -18,60 +18,78 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
  */
 export type AuthErrorCode =
 	/**
-	 * The user schema rejected the user, and `issues` holds its issues. From
-	 * `signIn` and `updateUser`, also any other failure to accept the user, such
-	 * as the `updateUser` input function rejecting or timing out: then there
-	 * are no `issues`; see `cause`.
+	 * The user couldn't be accepted. `issues` holds the schema's issues when
+	 * it rejected the user, and `cause` holds the error when something else
+	 * failed, such as an `updateUser` function. Otherwise `message` says why,
+	 * such as a user that isn't a plain JSON object.
 	 */
 	| "USER_VALIDATION_FAILED"
-	/** Tokens or a saved session that can't be used, such as an expired access token at sign-in. */
+	/**
+	 * Tokens or a saved session that can't be used, such as an access token
+	 * that already expired at sign-in.
+	 */
 	| "INVALID_SESSION"
-	/** Storage could not be read, written, or cleared. */
+	/** Storage couldn't be read, written or cleared. */
 	| "PERSISTENCE_FAILED"
-	/** The refresh callback threw, or a refresh had no callback or refresh token to use. */
+	/**
+	 * The refresh failed: your refresh callback threw, or there was no
+	 * `refresh` option or refresh token to use.
+	 */
 	| "REFRESH_FAILED"
-	/** The `revoke` callback failed. Published to `state.error`; `signOut()` still resolves. */
+	/**
+	 * Your `revoke` callback failed. It shows in `state.error`, and `signOut()`
+	 * still resolves.
+	 */
 	| "REVOKE_FAILED"
-	/** A newer sign-in, sign-out, or another tab replaced the session while the operation ran. */
+	/**
+	 * The session changed while the call ran: a newer sign-in, a sign-out, or
+	 * another tab replaced it.
+	 */
 	| "SESSION_CHANGED"
-	/** The operation needs a signed-in session, and there is none. */
+	/** The call needs someone signed in, and no one is. */
 	| "UNAUTHENTICATED"
-	/** The session is locked: `unlock()` it first. */
+	/** The session is locked. Call `unlock()` first. */
 	| "LOCKED"
 	/** `locking.open` failed, so the session stays locked. */
 	| "UNLOCK_FAILED"
-	/** An option or argument session-kit can't use, or a method used without the option it needs. */
+	/**
+	 * An option or argument session-kit can't use, or a method called without
+	 * the option it needs.
+	 */
 	| "INVALID_OPTIONS";
 
 /**
- * Options for the {@link AuthError} constructor: the standard `cause`, plus
- * schema `issues`.
+ * Options for creating an {@link AuthError} yourself, such as in a test or a
+ * custom storage adapter: the standard `cause`, plus schema `issues`.
  *
  * @example
  * ```ts
  * import { AuthError } from "@monarcode/session-kit";
  *
- * declare const response: Response;
+ * declare const cause: unknown;
  *
- * throw new AuthError("REFRESH_FAILED", "Refresh failed", {
- * 	cause: new Error(`HTTP ${response.status}`),
+ * // A storage adapter's read that failed.
+ * export const failure = new AuthError("PERSISTENCE_FAILED", "Read failed", {
+ * 	cause,
  * });
  * ```
  *
  * @since 0.1.0
  */
 export type AuthErrorOptions = ErrorOptions & {
-	/** Schema issues behind a `USER_VALIDATION_FAILED` error. */
+	/**
+	 * The schema's issues, for a `USER_VALIDATION_FAILED` error. Default:
+	 * none.
+	 */
 	issues?: readonly StandardSchemaV1.Issue[] | undefined;
 };
 
 /**
- * An error from session-kit's own logic, whether thrown, rejected with, or
- * published in `state.error`. `code` says what went wrong (see
- * {@link AuthErrorCode}), `cause` holds whatever failed underneath, which can
- * be anything, and `issues` the schema's issues when validation failed.
- * `authFetch` lets `fetch`'s and `Request`'s own failures, such as a network
- * error, through unchanged.
+ * The error session-kit throws, rejects with, or shows in `state.error`.
+ *
+ * `code` says what went wrong ({@link AuthErrorCode}). `cause` holds what
+ * failed underneath, such as your refresh callback's error, and `issues`
+ * holds the schema's issues when the user was rejected.
  *
  * @example
  * ```ts
@@ -85,7 +103,7 @@ export type AuthErrorOptions = ErrorOptions & {
  * 	await auth.signIn({ accessToken, user: { id: "1", name: "Ada" } });
  * } catch (error) {
  * 	if (error instanceof AuthError && error.code === "USER_VALIDATION_FAILED")
- * 		console.warn(error.issues ?? error.cause);
+ * 		console.warn(error.issues ?? error.message);
  * 	else throw error;
  * }
  * ```
@@ -109,8 +127,8 @@ export class AuthError extends Error {
 }
 
 /**
- * Returns `cause` unchanged when it is already an `AuthError`; otherwise wraps
- * it with `code`. The code is a fallback, not a guarantee.
+ * Wraps `cause` in an `AuthError` with `code`, or returns it unchanged when
+ * it already is one, so the innermost code wins.
  */
 export function toAuthError(
 	code: AuthErrorCode,

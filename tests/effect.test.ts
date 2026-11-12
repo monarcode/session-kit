@@ -7,6 +7,7 @@ import {
 	fromAccessToken,
 } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
+import type { CookieJar } from "@monarcode/session-kit/server";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -23,6 +24,8 @@ import {
 	flush,
 	input,
 	jwt,
+	serverSide,
+	tokens,
 	user,
 	useBrowserMocks,
 	type TestClient,
@@ -387,4 +390,98 @@ test("fromAuthError fails with an AuthFailure, and dies on anything else", async
 	assert.equal((misuse as AuthError).code, "INVALID_OPTIONS");
 	const plain = new TypeError("not an AuthError");
 	assert.equal(await defect(auth, Auth.fromAuthError(plain)), plain);
+});
+
+test("a request's server session is the Auth service", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const { serverAuth, request, cookies, cookie } = serverSide("effect-server");
+	const signedIn = await serverAuth.signIn(request(), tokens());
+	const runOn = <A, E>(jar: CookieJar, effect: Effect.Effect<A, E, Auth>) =>
+		Effect.runPromise(
+			Effect.provide(effect, Auth.layer(serverAuth.forRequest(jar))),
+		);
+
+	assert.deepEqual(await runOn(request(), Auth.session), signedIn);
+	assert.deepEqual(
+		await runOn(request(), Auth.sessionOption),
+		Option.some(signedIn),
+	);
+	const first = await runOn(request(), Auth.credentials);
+	assert.equal(first.accessToken, "access-1");
+
+	// Expired access is refreshed, and the cookie keeps the new token.
+	t.mock.timers.tick(901_000);
+	assert.equal(
+		(await runOn(request(), Auth.credentials)).accessToken,
+		"access-2",
+	);
+	assert.equal(
+		(await serverAuth.credentials.get(request()))?.accessToken,
+		"access-2",
+	);
+	const current = await runOn(request(), Auth.credentials);
+	assert.equal(
+		(await runOn(request(), Auth.renew(current))).accessToken,
+		"access-3",
+	);
+
+	// One request's view: its state now, then the sign-out.
+	const jar = request();
+	const statuses = await runOn(
+		jar,
+		Effect.gen(function* () {
+			yield* Auth.session;
+			const fiber = yield* Effect.forkChild(
+				Stream.runCollect(Stream.take(Auth.changes, 2)),
+			);
+			yield* Effect.yieldNow;
+			yield* Auth.signOut;
+			return yield* Fiber.join(fiber);
+		}),
+	);
+	assert.deepEqual(
+		Array.from(statuses, (state) => [state.status, state.sessionId]),
+		[
+			["authenticated", signedIn.sessionId],
+			["unauthenticated", null],
+		],
+	);
+	await serverAuth.signIn(request(), tokens());
+
+	await runOn(request(), Auth.signOut);
+	assert.equal(cookies.has(cookie), false);
+	const signedOut = await runOn(request(), Effect.flip(Auth.session));
+	assert.ok(signedOut instanceof AuthFailure);
+	assert.equal(signedOut.code, "UNAUTHENTICATED");
+	assert.deepEqual(await runOn(request(), Auth.sessionOption), Option.none());
+});
+
+test("on a request's server session, signIn and updateUser die, and a read-only jar can't refresh", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	const { serverAuth, request } = serverSide("effect-server");
+	const signedIn = await serverAuth.signIn(request(), tokens());
+	for (const effect of [
+		Auth.signIn(tokens() as never),
+		Auth.updateUser(user as never),
+	]) {
+		const died = await defect(
+			serverAuth.forRequest(request()) as never,
+			effect,
+		);
+		assert.ok(died instanceof AuthError);
+		assert.equal(died.code, "INVALID_OPTIONS");
+		assert.match(died.message, /serverAuth\./);
+	}
+
+	t.mock.timers.tick(901_000);
+	const render = Auth.layer(serverAuth.forRequest(request(false)));
+	assert.deepEqual(
+		await Effect.runPromise(Effect.provide(Auth.session, render)),
+		signedIn,
+	);
+	const failed = await Effect.runPromise(
+		Effect.provide(Effect.flip(Auth.credentials), render),
+	);
+	assert.ok(failed instanceof AuthFailure);
+	assert.equal(failed.code, "REFRESH_FAILED");
 });
