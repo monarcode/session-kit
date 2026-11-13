@@ -4,16 +4,23 @@ description: Log what the client does, or send each event to your error reportin
 ---
 
 `createAuth`'s `debug` option reports what the client does: restores,
-refreshes and why they ran, timers, storage operations and how long they took,
-other tabs' changes, state changes, and what ended a session. `debug: true`
-logs each event as one `console.info` line:
+refreshes and why they ran, timers, storage operations and how long they
+took, other tabs' changes, state changes, and what ended a session. Use it to
+find out why a session ended, or why a refresh ran.
+
+## Log to the console
+
+To log each event as one `console.info` line, pass `debug: true`. A refresh
+logs a line like this one:
 
 ```text
 [session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
 ```
 
-A function receives each event instead, for example to leave breadcrumbs in
-your error reporting:
+## Send events to your error reporting
+
+To receive each event instead of logging it, pass a function. For example, to
+leave breadcrumbs in your error reporting:
 
 ```ts title="src/debug.ts"
 import type { AuthDebug } from "@monarcode/session-kit";
@@ -33,15 +40,21 @@ export const debug: AuthDebug = (event) =>
   });
 ```
 
-- **No secrets by default.** Events leave out tokens, saved values, and user
-  fields. A session appears as its `sessionId`, and an error as its code and
-  message, without the cause.
-- **`{ sensitive: true }` puts them in.** Anyone who reads such logs can act
-  as the user, so keep it to development builds. `{ log, sensitive }` sets
-  both.
-- **`type` is stable, the rest isn't.** `type` is one of a fixed set, such as
-  `"refresh"` or `"storage"`. The wording of `message` and the fields in
-  `data` may change in any release.
+## Tokens and user data
+
+Events leave out tokens, saved values and the user's fields. A session
+appears as its `sessionId`, and an error as its code and message, without
+its `cause`.
+
+To include them, pass `{ sensitive: true }`. Anyone who reads such logs can
+act as the user, so keep it to development builds. To set both, pass
+`{ log, sensitive }`, where `log` is your function.
+
+## What stays stable
+
+An event's `type` is one of a fixed set, such as `"refresh"` or `"storage"`,
+so you can filter on it. The wording of `message` and the fields in `data`
+may change in any release.
 
 A storage adapter can add its own events through the optional `debug` member
 of `AuthStorage`, as [`secureStorage()`](/docs/setups/expo#debugging) does.

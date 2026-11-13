@@ -3,12 +3,56 @@ title: Expiry
 description: How the client finds out when the access token expires, and which of your backend's answers to prefer.
 ---
 
-The client needs to know when the access token expires. It reads that from
-`expiresIn` (seconds, as in OAuth), `expiresAt` (Unix milliseconds), or a
-JWT's `exp` and `iat` claims. Prefer `expiresIn` when your backend sends it:
-it is counted from receipt, so a wrong device clock can't expire the token
-early or late. Pass one or the other, not both; the `Tokens` type documents
-how each is read.
+The client refreshes the access token before it expires, so it needs to know
+when that is. This page explains where it reads the expiry from, and which
+field to send.
 
-When the client can't tell, the token is used until a request gets a 401,
-and [`authFetch`](/docs/client/requests) refreshes then.
+## Where the expiry comes from
+
+The client takes the expiry from the first of these that your tokens have:
+
+1. `expiresIn`, in seconds as in OAuth, or `expiresAt`, in Unix
+   milliseconds.
+2. A JWT access token's `exp` and `iat` claims, as a lifetime.
+3. A JWT access token's `exp` claim alone, as a time.
+
+Send `expiresIn` when your backend gives a lifetime, as most do. The client
+counts it from when it receives the tokens, so a wrong device clock doesn't
+matter. A JWT with `iat` works the same way. Send `expiresAt` only when your
+backend gives no lifetime.
+
+Pass `expiresIn` or `expiresAt`, not both: tokens with both are an
+`INVALID_SESSION` error. See [`Tokens`](/docs/reference/core#tokens) for
+each field.
+
+To map an OAuth-style response to `Tokens`, pass `expires_in` as
+`expiresIn`:
+
+```ts title="src/tokens.ts"
+import type { Tokens } from "@monarcode/session-kit";
+
+type TokenResponse = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+};
+
+export const toTokens = (body: TokenResponse): Tokens => ({
+  accessToken: body.access_token,
+  refreshToken: body.refresh_token,
+  expiresIn: body.expires_in,
+});
+```
+
+## Fixed times and device clocks
+
+`expiresAt` and a JWT's `exp` alone are fixed times, which the client
+compares with the device's clock. Device clocks can be minutes off. A clock
+that runs fast makes the token look already expired, and `signIn` rejects
+it with `INVALID_SESSION`.
+
+## Tokens without an expiry
+
+When the client can't tell when the token expires, it uses the token until
+your API rejects it. [`authFetch`](/docs/client/requests) then refreshes after
+the 401.

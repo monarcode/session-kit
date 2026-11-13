@@ -3,31 +3,52 @@ title: Refresh
 description: What the refresh callback's results mean, when a refresh runs, and why an outage never signs anyone out.
 ---
 
-`createAuth`'s `refresh` callback exchanges a refresh token for new tokens.
-It has three outcomes, and the difference between the last two is what keeps
-an outage from signing anyone out:
+`createAuth`'s `refresh` option is a callback that exchanges the refresh
+token for new tokens. This page explains what its results mean and when the
+client calls it. For a callback to start from, see `refresh` in
+[Getting started](/docs/getting-started#1-talk-to-your-backend).
 
-| The refresh callback… | Meaning                                                                               |
-| --------------------- | ------------------------------------------------------------------------------------- |
-| Returns tokens        | Install them. An omitted refresh token or user keeps the current one.                 |
-| Returns `null`        | The backend rejected the refresh token: sign out and clear storage.                   |
-| Throws                | Operational failure: keep the session, report `REFRESH_FAILED`, and wait for a retry. |
+## What the callback returns
 
-To treat every refresh failure as a sign-out, return `null` instead of
-throwing.
+The callback ends in one of three ways, and the client handles each
+differently:
 
-A refresh runs at one of three moments:
+| The callback   | What the client does                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| Returns tokens | Saves them. A refresh token or user it leaves out keeps the current one.                 |
+| Returns `null` | Treats the refresh token as rejected: signs the user out and clears storage.             |
+| Throws         | Treats it as an outage: keeps the session, reports `REFRESH_FAILED`, and waits to retry. |
 
-- **Early.** While the client is mounted, 60 seconds before expiry, or
-  halfway through for a token with under two minutes left, once per token. If
-  it fails, access stays usable until expiry.
-- **At expiry, or after a 401.** `status` is `refreshing` while it runs, with
-  the user still on screen.
+When the client can tell
+[when the new access token expires](/docs/configuration/expiry), the token
+must last at least five seconds. A shorter one is an `INVALID_SESSION` error.
+
+Return `null` only when your backend rejected the refresh token, such as with
+a 401. Throw for anything else, such as a network error or a 500, so that an
+outage doesn't sign anyone out. To sign the user out on every failure, return
+`null` instead of throwing.
+
+## When a refresh runs
+
+The client refreshes at one of three moments:
+
+- **Early.** While the client is mounted, 60 seconds before the access token
+  expires, or halfway through when the token lasts under two minutes. It
+  tries once per token. If that fails, the token stays usable until it
+  expires.
+- **At expiry, or after a 401.** `status` is `refreshing` while it runs, and
+  the user stays on screen.
 - **On request.** `auth.refresh()` runs one now.
 
-If a refresh that was needed fails, access becomes `unavailable`, and
-`getSession()` rethrows the failure until `auth.retry()`, a sign-in, or a
-sign-out. Guards that run again therefore can't start a refresh loop.
+## When a refresh fails
 
-Validation and refresh each have a 15-second deadline. The callback's
-`signal` aborts when it passes, or when the session changes.
+If a refresh the session needed fails, `status` becomes `unavailable`.
+`getSession()` then rejects with the same error until you call `auth.retry()`,
+or the user signs in or out. Guards that run again therefore can't start a
+refresh loop.
+
+## Deadlines
+
+The client gives each refresh, and each check of a user, 15 seconds. The
+callback's `signal` aborts when that time runs out or when the session
+changes, such as on sign-out. Pass it to `fetch`.

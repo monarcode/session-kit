@@ -272,6 +272,8 @@ export const documents = [
 	clientPage("client/other-http-clients"),
 	clientPage("client/users-from-tokens"),
 	clientPage("client/locking"),
+	clientPage("configuration/expiry"),
+	clientPage("configuration/storage"),
 	clientPage("configuration/errors"),
 	clientPage("configuration/debugging"),
 	{

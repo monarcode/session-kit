@@ -3,7 +3,13 @@ title: Storage
 description: Where the client saves the session, from localStorage to the device's secure store or your own.
 ---
 
-`createAuth`'s `storage` option chooses where the session is saved:
+`createAuth`'s `storage` option chooses where the client saves the session.
+This page helps you pick a built-in store, or write your own.
+
+## Built-in stores
+
+The `storage` option takes one of Session kit's stores, or any object that
+implements `AuthStorage`:
 
 | Storage                           | Saved in                                  | Use it for                                           |
 | --------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
@@ -13,18 +19,51 @@ description: Where the client saves the session, from localStorage to the device
 | `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
 | Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
 
-- **Prefer `localStorage` with rotating refresh tokens.** Browsers copy
-  `sessionStorage` into a duplicated tab and into windows opened with
-  `window.open`, so both start with the same refresh token but never see each
-  other's saves. Whichever refreshes second sends a spent token and is signed
-  out, or, with reuse detection, both are.
-- **`secureStorage()`** splits sessions over SecureStore's 2048-byte limit
-  across keys and reads synchronously; see the
-  [Expo guide](/docs/setups/expo#secure-storage).
-- **Custom storage** is applied one operation at a time, in the order the
-  client issued them.
+For Expo, `secureStorage()` splits a session larger than SecureStore's
+2048-byte limit across several keys. See
+[Secure storage](/docs/setups/expo#secure-storage) in the Expo guide.
 
-Tokens and the user share one `<name>:auth:session` entry, so every save is a
-single write that other tabs see whole. A user read from the access token is
-not saved. Sessions saved by 0.1.0-alpha.3 or earlier are not restored, so
-users of those versions sign in once after upgrading.
+## Rotating refresh tokens
+
+If your backend rotates refresh tokens, use `localStorage`, not
+`sessionStorage`. A browser copies `sessionStorage` into a duplicated tab, and
+into a window opened with `window.open`. Both then start with the same
+refresh token but never see each other's saves. The second to refresh sends a
+spent token and is signed out. With reuse detection on the backend, both are.
+
+## Write your own store
+
+An `AuthStorage` has three operations: `get`, `set` and `remove`. Each can
+return a promise. For example, to save the session in a key-value store your
+app already has:
+
+```ts title="src/storage.ts"
+import type { AuthStorage } from "@monarcode/session-kit";
+
+declare const store: {
+  get(key: string): Promise<string | undefined>;
+  put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+};
+
+export const kvStorage: AuthStorage = {
+  get: async (key) => (await store.get(key)) ?? null,
+  set: (key, value) => store.put(key, value),
+  remove: (key) => store.delete(key),
+};
+```
+
+The client runs your store's operations one at a time, in the order it
+issued them. A store that several tabs share also needs `subscribe` and
+`lock`, so that [tabs follow each other](/docs/configuration/tabs). See
+[`AuthStorage`](/docs/reference/core#authstorage) for each member.
+
+## What the client saves
+
+The client saves the tokens and the user in one `<name>:auth:session` entry.
+Each save is then a single write, which other tabs see whole. A
+[user read from the access token](/docs/client/users-from-tokens) isn't
+saved: the client reads it from the token again on restore.
+
+Sessions saved by 0.1.0-alpha.3 or earlier aren't restored. Users of those
+versions sign in once after upgrading.
