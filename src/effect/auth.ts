@@ -7,7 +7,7 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 
-import { AuthError } from "../core/errors.js";
+import { AuthError, toAuthError } from "../core/errors.js";
 import type { AuthClient, Credentials } from "../core/types.js";
 import type { RequestAuth } from "../server/auth.js";
 import {
@@ -388,7 +388,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * example after a login request.
 	 *
 	 * Fails with `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
-	 * `PERSISTENCE_FAILED` or `SESSION_CHANGED`.
+	 * `PERSISTENCE_FAILED` or `SESSION_CHANGED`. With a `createMirrorAuth`
+	 * client, an error your `signIn` option throws, such as a wrong password,
+	 * fails with `USER_VALIDATION_FAILED`, and is its `AuthError`'s `cause`.
 	 *
 	 * Dies when the client has no `signIn`. That's a `createMirrorAuth` client
 	 * made without one, or a request's view on the server, where you call
@@ -402,7 +404,19 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				client as { signIn?: (input: unknown) => Promise<unknown> }
 			).signIn;
 			return signIn
-				? Effect.asVoid(fromPromise(() => signIn.call(client, input)))
+				? fromPromise(async () => {
+						try {
+							await signIn.call(client, input);
+						} catch (cause) {
+							// A mirror client rejects with the app's own error. An Effect
+							// gets it as a typed failure rather than a defect.
+							throw toAuthError(
+								"USER_VALIDATION_FAILED",
+								"Could not sign in",
+								cause,
+							);
+						}
+					})
 				: Effect.die(
 						new AuthError(
 							"INVALID_OPTIONS",

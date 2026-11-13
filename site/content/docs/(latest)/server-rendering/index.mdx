@@ -42,7 +42,7 @@ how the session reaches the browser:
 
 | Framework                             | On the server                                   | In the browser                                      | Setup                                                               |
 | ------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
-| TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                   | [TanStack Start](/docs/setups/tanstack-start)                       |
+| TanStack Start                        | `startJar()`, refreshing in request middleware  | `connectSession`, `loadSession`                     | [TanStack Start](/docs/setups/tanstack-start)                       |
 | Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
 | React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
 

@@ -337,7 +337,11 @@ export function Layout({ children }: { children: ReactNode }) {
 export default function App() {
   const { session } = useLoaderData<typeof loader>();
   const { revalidate } = useRevalidator();
-  const auth = useMirrorAuth(createAppAuth, session, revalidate);
+  const auth = useMirrorAuth({
+    create: createAppAuth,
+    session,
+    onChange: revalidate,
+  });
   return (
     <AuthProvider client={auth}>
       <Outlet />

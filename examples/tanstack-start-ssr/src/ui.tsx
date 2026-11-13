@@ -26,10 +26,7 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 			await onSignedIn();
 		} catch (cause) {
 			// The server function's own message, such as a wrong password.
-			const reason = cause instanceof Error ? cause.cause : undefined;
-			setError(
-				reason instanceof Error ? reason.message : "Could not sign in",
-			);
+			setError(cause instanceof Error ? cause.message : "Could not sign in");
 		} finally {
 			setPending(false);
 		}

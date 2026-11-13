@@ -1,7 +1,7 @@
 import { watchVersion } from "../core/revalidate.js";
 import type { AuthSource } from "../react/context.js";
 
-type AuthRouter = {
+export type AuthRouter = {
 	options: { context: { auth: AuthSource } };
 	invalidate: () => Promise<unknown>;
 	clearCache: () => void;

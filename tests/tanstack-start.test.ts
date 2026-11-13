@@ -5,12 +5,13 @@ import {
 	createAuth,
 	createMirrorAuth,
 	memoryStorage,
+	type MirrorAuth,
 	type Session,
 } from "@monarcode/session-kit";
 import { createServerAuth } from "@monarcode/session-kit/server";
 import {
+	connectSession,
 	loadSession,
-	sessionHydration,
 } from "@monarcode/session-kit/tanstack-start";
 import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 import {
@@ -121,7 +122,47 @@ test("startJar sets and deletes every chunk of a large session", async () => {
 	);
 });
 
-test("sessionHydration carries the session without running guards again", async (t) => {
+/** The app's own data, beside the session, as TanStack Query's would be. */
+type Own = { theme: string };
+
+/**
+ * A router as Start's `getRouter` makes it, connected, with the calls Start
+ * makes to send its data with the page and to read it in the browser.
+ */
+async function startRouter(
+	t: TestContext,
+	auth: MirrorAuth<User>,
+	isServer: boolean,
+	own: Partial<{
+		dehydrate: () => Own;
+		hydrate: (data: Own) => void;
+	}> = {},
+) {
+	const { createRouter, createRootRouteWithContext, createMemoryHistory } =
+		await import("@tanstack/react-router");
+	const router = createRouter({
+		routeTree: createRootRouteWithContext<{ auth: MirrorAuth<User> }>()(),
+		context: { auth },
+		history: createMemoryHistory(),
+		origin: "https://app.test",
+		isServer,
+		...own,
+	});
+	t.after(connectSession(router));
+	const { options } = router;
+	return {
+		router,
+		dehydrate: async () => options.dehydrate?.call(options),
+		// A copy, as the page carries it.
+		hydrate: async (data: unknown) =>
+			(options.hydrate as ((data: unknown) => unknown) | undefined)?.call(
+				options,
+				structuredClone(data),
+			),
+	};
+}
+
+test("connectSession carries the session without running guards again", async (t) => {
 	const reads: string[] = [];
 	const otherTab = createMirrorAuth({
 		name: "hydration",
@@ -135,32 +176,82 @@ test("sessionHydration carries the session without running guards again", async 
 	t.after(otherTab.mount());
 
 	const server = createMirrorAuth({ ...options(), session: null });
+	const page = await startRouter(t, server, true);
 	await loadSession(server);
-	const dehydrated = sessionHydration(server).dehydrate();
-	assert.deepEqual(dehydrated, { loaded: true, session: alice });
+	const sent = await page.dehydrate();
+	// The page carries the session and nothing else: no tokens.
+	assert.deepEqual(sent, {
+		sessionKit: { loaded: true, session: alice },
+		app: undefined,
+	});
 
 	const browser = createMirrorAuth({ ...options(), session: null });
 	const before = browser.state.get().version;
-	sessionHydration(browser).hydrate(structuredClone(dehydrated));
+	await (await startRouter(t, browser, false)).hydrate(sent);
 	assert.equal(browser.state.get().status, "authenticated");
 	assert.deepEqual(browser.state.get().user, user);
 	assert.equal(browser.state.get().version, before);
 	await new Promise((resolve) => setImmediate(resolve));
 	await new Promise((resolve) => setImmediate(resolve));
 	assert.deepEqual(reads, []);
+});
 
+test("connectSession keeps the router's own dehydrate and hydrate", async (t) => {
+	const server = createMirrorAuth({ ...options(), session: null });
+	const page = await startRouter(t, server, true, {
+		dehydrate: () => ({ theme: "dark" }),
+	});
+	await loadSession(server);
+	const sent = await page.dehydrate();
+	assert.deepEqual(sent, {
+		sessionKit: { loaded: true, session: alice },
+		app: { theme: "dark" },
+	});
+
+	const received: Own[] = [];
+	const browser = createMirrorAuth({ ...options(), session: null });
+	const app = await startRouter(t, browser, false, {
+		hydrate: (data) => received.push(data),
+	});
+	await app.hydrate(sent);
+	assert.deepEqual(received, [{ theme: "dark" }]);
+	assert.equal(browser.state.get().sessionId, "s1");
+
+	// Connecting again neither wraps the options twice nor connects twice.
+	const disconnect = connectSession(app.router);
+	assert.equal(connectSession(app.router), disconnect);
+	await app.hydrate(sent);
+	assert.deepEqual(received, [{ theme: "dark" }, { theme: "dark" }]);
+});
+
+test("connectSession throws INVALID_OPTIONS without a browser client of a server-rendered app", async (t) => {
+	const { createRouter, createRootRouteWithContext } =
+		await import("@tanstack/react-router");
 	const client = createAuth({
 		name: "hydration",
 		user: userSchema,
 		storage: memoryStorage(),
 	});
-	for (const loaded of [true, false])
-		assert.throws(
-			() =>
-				// @ts-expect-error The types refuse it too, but JavaScript doesn't.
-				sessionHydration(client).hydrate({ loaded, session: null }),
-			code("INVALID_OPTIONS"),
-		);
+	const router = createRouter({
+		routeTree: createRootRouteWithContext<{ auth: typeof client }>()(),
+		context: { auth: client },
+		isServer: true,
+	});
+	// @ts-expect-error The types refuse it too, but JavaScript doesn't.
+	assert.throws(() => connectSession(router), code("INVALID_OPTIONS"));
+	// Nothing was changed.
+	assert.equal(router.options.dehydrate, undefined);
+
+	const withoutContext = createRouter({
+		routeTree: createRootRouteWithContext<object>()(),
+		isServer: true,
+	});
+	assert.throws(
+		// @ts-expect-error No context, so no client.
+		() => connectSession(withoutContext),
+		code("INVALID_OPTIONS"),
+	);
+	void t;
 });
 
 function options() {
@@ -196,25 +287,37 @@ test("the browser reads a session the server didn't load", async (t) => {
 			},
 		});
 	const failed = make();
+	const failedPage = await startRouter(t, failed, true);
 	await assert.rejects(loadSession(failed));
 	const skipped = make();
-	for (const server of [failed, skipped])
-		assert.deepEqual(sessionHydration(server).dehydrate(), {
-			loaded: false,
-			session: null,
-		});
+	const skippedPage = await startRouter(t, skipped, true);
+	const sent = await failedPage.dehydrate();
+	assert.deepEqual(sent, {
+		sessionKit: { loaded: false, session: null },
+		app: undefined,
+	});
+	for (const page of [failedPage, skippedPage])
+		assert.deepEqual(await page.dehydrate(), sent);
 
+	// Made before `document` exists: the router reads more of the browser's
+	// globals when it does.
+	const browser = make();
+	const browserPage = await startRouter(t, browser, false);
+	const nothing = make();
+	const nothingPage = await startRouter(t, nothing, false);
 	inBrowser(t);
 	down = false;
-	const browser = make();
-	sessionHydration(browser).hydrate(
-		structuredClone(sessionHydration(failed).dehydrate()),
-	);
+	await browserPage.hydrate(sent);
 	assert.equal(browser.state.get().sessionId, null);
 	await loadSession(browser);
 	await loadSession(browser);
 	assert.equal(reads, 2);
 	assert.equal(browser.state.get().sessionId, "s1");
+
+	// Nothing sent at all, as from a root route that didn't render on the
+	// server: the client is left as it is.
+	await nothingPage.hydrate(undefined);
+	assert.equal(nothing.state.get().sessionId, null);
 });
 
 test("loadSession reads on the server every time, in the browser only without hydration", async (t) => {
@@ -234,9 +337,13 @@ test("loadSession reads on the server every time, in the browser only without hy
 	assert.equal(reads, 2);
 	assert.equal(server.state.get().sessionId, "s1");
 
-	inBrowser(t);
+	const page = await startRouter(t, server, true);
+	const sent = await page.dehydrate();
+
 	const hydrated = make();
-	sessionHydration(hydrated).hydrate({ loaded: true, session: alice });
+	const hydratedPage = await startRouter(t, hydrated, false);
+	inBrowser(t);
+	await hydratedPage.hydrate(sent);
 	await loadSession(hydrated);
 	assert.equal(reads, 2);
 

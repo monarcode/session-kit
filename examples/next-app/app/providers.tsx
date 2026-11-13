@@ -11,8 +11,8 @@ import { AuthProvider } from "./hooks";
 /**
  * Gives Client Components the session the layout read. `useMirrorAuth`
  * follows the server's session when the page renders again, and renders it
- * again with `router.refresh()` when the session changes in the browser, as after a sign-out here
- * or in another tab, so the pages' redirects run.
+ * again with `router.refresh()` when the session changes in the browser, as
+ * after a sign-out here or in another tab, so the pages' redirects run.
  */
 export function Providers({
 	session,
@@ -22,6 +22,10 @@ export function Providers({
 	children: ReactNode;
 }) {
 	const router = useRouter();
-	const auth = useMirrorAuth(createAppAuth, session, () => router.refresh());
+	const auth = useMirrorAuth({
+		create: createAppAuth,
+		session,
+		onChange: () => router.refresh(),
+	});
 	return <AuthProvider client={auth}>{children}</AuthProvider>;
 }

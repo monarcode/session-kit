@@ -11,7 +11,7 @@ import {
 /**
  * The client the routes and components use. It mirrors the session the
  * server keeps in its cookie: `loadSession` fills it on the server, and
- * `sessionHydration` carries that to the browser. Create one per router: on
+ * `connectSession` carries that to the browser. Create one per router: on
  * the server, that is one per request.
  */
 export function createAppAuth() {

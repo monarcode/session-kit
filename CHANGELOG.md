@@ -12,6 +12,7 @@
   page shows ky, axios with its `fetch` adapter, and openapi-fetch. It
   replaces the ky recipe built on hooks, and keeps the axios interceptors for
   an instance on axios's default adapter.
+- `UseMirrorAuthOptions`, the type of `useMirrorAuth`'s options.
 
 ### Changed
 
@@ -36,6 +37,53 @@
 - `authFetch` asks for the credentials before it builds the request. Signed
   out or locked, a call with an `init` that `Request` refuses now rejects
   with `UNAUTHENTICATED` or `LOCKED`, not with `Request`'s `TypeError`.
+- **Breaking:** the `signIn` of a `createMirrorAuth` client rejects with what
+  your `signIn` option threw, unchanged, as a sign-in in a single-page app
+  does. It used to wrap it in a `USER_VALIDATION_FAILED` `AuthError`, so a
+  sign-in form had to read the message from `cause`. A result that isn't a
+  session still rejects with `INVALID_SESSION`.
+
+  ```ts
+  // Before
+  const reason = error instanceof Error ? error.cause : undefined;
+  setError(reason instanceof Error ? reason.message : "Could not sign in");
+  // After
+  setError(error instanceof Error ? error.message : "Could not sign in");
+  ```
+
+- **Breaking:** `useMirrorAuth` takes one options object, and throws
+  `INVALID_OPTIONS` without `create` or `onChange`.
+
+  ```ts
+  // Before
+  useMirrorAuth(createAppAuth, session, () => router.refresh());
+  // After
+  useMirrorAuth({
+    create: createAppAuth,
+    session,
+    onChange: () => router.refresh(),
+  });
+  ```
+
+- **Breaking:** TanStack Start's `connectSession(router)` replaces
+  `sessionHydration(auth)` and the `connectAuth(router)` beside it. It keeps
+  the router's own `dehydrate` and `hydrate`, which `...sessionHydration(auth)`
+  replaced, or was replaced by, depending on the order of the spread.
+  `sessionHydration`, `SessionHydration` and `DehydratedSession` are removed.
+
+  ```ts
+  // Before
+  const router = createRouter({
+    routeTree,
+    context: { auth },
+    ...sessionHydration(auth),
+  });
+  connectAuth(router);
+  // After
+  const router = createRouter({ routeTree, context: { auth } });
+  connectSession(router);
+  ```
+
 - The guides moved to the documentation site,
   [session-kit.pages.dev](https://session-kit.pages.dev), with an API
   reference for every entry point and every error code. The README is now a
@@ -54,10 +102,9 @@
   `defaultError` to effetch-query's `endpoints`. `sessionBearer`'s example
   calls the client's methods too.
 - `AuthErrorCode`'s docs say which codes the browser client of a
-  server-rendered app rejects with: `USER_VALIDATION_FAILED` when signing in
-  on the server fails, `PERSISTENCE_FAILED` when signing out there fails, and
-  `REFRESH_FAILED` when reading the session or the access token from the
-  server fails.
+  server-rendered app rejects with: `PERSISTENCE_FAILED` when signing out on
+  the server fails, and `REFRESH_FAILED` when reading the session or the
+  access token from the server fails.
 - The setup guides are corrected against the code and the example apps. The
   TanStack Start guard renders `SessionOutlet`, the Next.js guard sends users
   back to the page they asked for after sign-in, and the React Router layout

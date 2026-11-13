@@ -29,10 +29,7 @@ export function LoginForm() {
 			});
 		} catch (cause) {
 			// The Server Function's own message, such as a wrong password.
-			const reason = cause instanceof Error ? cause.cause : undefined;
-			setError(
-				reason instanceof Error ? reason.message : "Could not sign in",
-			);
+			setError(cause instanceof Error ? cause.message : "Could not sign in");
 			setPending(false);
 		}
 	}

@@ -20,9 +20,8 @@ export type AuthErrorCode =
 	/**
 	 * The user couldn't be accepted. `issues` holds the schema's issues when
 	 * it rejected the user, and `cause` holds the error when something else
-	 * failed, such as an `updateUser` function or, in the browser of a
-	 * server-rendered app, signing in on the server. Otherwise `message` says
-	 * why, such as a user that isn't a plain JSON object.
+	 * failed, such as an `updateUser` function. Otherwise `message` says why,
+	 * such as a user that isn't a plain JSON object.
 	 */
 	| "USER_VALIDATION_FAILED"
 	/**

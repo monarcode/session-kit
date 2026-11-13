@@ -268,9 +268,11 @@ export function Providers(props: {
   children: ReactNode;
 }) {
   const router = useRouter();
-  const auth = useMirrorAuth(createAppAuth, props.session, () =>
-    router.refresh(),
-  );
+  const auth = useMirrorAuth({
+    create: createAppAuth,
+    session: props.session,
+    onChange: () => router.refresh(),
+  });
   return <AuthProvider client={auth}>{props.children}</AuthProvider>;
 }
 ```
@@ -354,9 +356,8 @@ export function SignInForm() {
         password: String(form.get("password")),
       });
     } catch (failure) {
-      // An AuthError; its cause is what signInAction returned.
-      const cause = failure instanceof Error ? failure.cause : undefined;
-      setError(cause instanceof Error ? cause.message : "Sign-in failed");
+      // What the client's signIn option threw, from signInAction's error.
+      setError(failure instanceof Error ? failure.message : "Sign-in failed");
     }
   }
 

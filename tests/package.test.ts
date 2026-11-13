@@ -33,8 +33,8 @@ import {
 	useRouterAuth,
 } from "@monarcode/session-kit/tanstack-router";
 import {
+	connectSession,
 	loadSession,
-	sessionHydration,
 } from "@monarcode/session-kit/tanstack-start";
 import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 
@@ -49,7 +49,7 @@ test("all public entry points import without browser globals", () => {
 		webStorage,
 		createServerAuth,
 		loadSession,
-		sessionHydration,
+		connectSession,
 		startJar,
 		nextJar,
 		proxyJar,

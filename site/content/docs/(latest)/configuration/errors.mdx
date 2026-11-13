@@ -17,7 +17,7 @@ Match on an error's `code`, not its message, which may change in any release:
 | `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                                                                                                          |
 | `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use. With server rendering, reading the session or the access token from the server failed. |
 | `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.                                                                                     |
-| `USER_VALIDATION_FAILED` | The user couldn't be accepted: the schema rejected it (`issues`), or, with server rendering, signing in on the server failed (`cause`).                              |
+| `USER_VALIDATION_FAILED` | The user couldn't be accepted: the schema rejected it (`issues`), or an `updateUser` function failed (`cause`).                                                      |
 | `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.                                                                                   |
 | `PERSISTENCE_FAILED`     | Storage couldn't be read, written, or cleared. With server rendering, signing out on the server failed.                                                              |
 | `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves.                                                                                |
@@ -49,8 +49,9 @@ export function errorMessage(error: unknown): string {
 ```
 
 `authFetch` lets the failures of `fetch` and `Request`, such as a network
-error, through unchanged. They aren't `AuthError`s, so `errorMessage` shows
-their own message.
+error, through unchanged. So does the `signIn` of a server-rendered app's
+browser client, for what your sign-in function threw. They aren't
+`AuthError`s, so `errorMessage` shows their own message.
 
 ## Handle storage failures
 

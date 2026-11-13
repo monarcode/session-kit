@@ -74,7 +74,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
   with DummyJSON from a server function, and refreshes in request middleware
   (`src/start.ts`). `createMirrorAuth` gives the routes and components a
-  client, filled by `loadSession` on the server and `sessionHydration` in the
+  client, filled by `loadSession` on the server and `connectSession` in the
   browser. `auth/me` is called both from a server function and, with
   `clientCredentials`, from the browser. Set `SESSION_SECRET` (32 or more
   random characters) to run `vite preview`; `vite dev` uses a development

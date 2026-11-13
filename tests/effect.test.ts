@@ -284,6 +284,27 @@ test("a createMirrorAuth client is the Auth service, without updateUser", async 
 	assert.deepEqual(posted, [{ username: "alice" }]);
 	assert.equal(session.sessionId, "s1");
 
+	// The app's own sign-in error is a typed failure, not a defect.
+	const wrongPassword = new Error("Wrong password");
+	const refusing = createMirrorAuth({
+		name: "effect-mirror",
+		session: null,
+		revalidate: async () => null,
+		signIn: async (_data: { username: string }) => {
+			throw wrongPassword;
+		},
+		signOut: async () => {},
+	});
+	const refused = await Effect.runPromise(
+		Effect.provide(
+			Effect.flip(Auth.signIn({ username: "alice" } as never)),
+			Auth.layer(refusing),
+		),
+	);
+	assert.ok(refused instanceof AuthFailure);
+	assert.equal(refused.code, "USER_VALIDATION_FAILED");
+	assert.equal(refused.cause.cause, wrongPassword);
+
 	const plain = createMirrorAuth({
 		name: "effect-mirror",
 		session: null,

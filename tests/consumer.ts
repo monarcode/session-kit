@@ -50,7 +50,11 @@ import {
 	routerJar,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
-import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
+import {
+	createAuthHooks,
+	useMirrorAuth,
+	type UseMirrorAuthOptions,
+} from "../dist/react/index.js";
 import {
 	createServerAuth,
 	type CookieJar,
@@ -62,12 +66,7 @@ import {
 	SessionOutlet,
 	useRouterAuth,
 } from "../dist/tanstack-router/index.js";
-import {
-	loadSession,
-	sessionHydration,
-	type DehydratedSession,
-	type SessionHydration,
-} from "../dist/tanstack-start/index.js";
+import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
 import { startJar } from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
@@ -569,11 +568,24 @@ void plainMirror.signIn;
 void plainMirror.lock;
 
 // TanStack Start: hydration and the request's jar.
-const hydration: SessionHydration<z.output<typeof userSchema>> =
-	sessionHydration(mirror);
-const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
-	hydration.dehydrate();
-hydration.hydrate(dehydrated);
+const startRoot = createRootRouteWithContext<{ auth: typeof mirror }>()({});
+const startRouter = createRouter({
+	routeTree: startRoot,
+	context: { auth: mirror },
+	// The app's own, beside the session.
+	dehydrate: () => ({ theme: "dark" }),
+	hydrate: (data: { theme: string }) => void data.theme,
+});
+const disconnectSession: () => void = connectSession(startRouter);
+void disconnectSession;
+void connectSession(
+	createRouter({
+		routeTree: createRootRouteWithContext<{ auth: typeof plainMirror }>()({}),
+		context: { auth: plainMirror },
+	}),
+);
+// @ts-expect-error Only a mirror client holds the server's session.
+connectSession(router);
 void loadSession(mirror);
 void loadSession(plainMirror);
 // @ts-expect-error Only a mirror client holds the server's session.
@@ -593,26 +605,39 @@ void proxyJar(nextRequest, NextResponse.next());
 
 // The mirror hook, for any server-rendering framework.
 declare const renderAgain: () => void;
-const synced = useMirrorAuth(
-	(session) =>
+const synced = useMirrorAuth({
+	create: (session) =>
 		createMirrorAuth({
 			name: "type-test",
 			session,
 			revalidate: async () => session,
 			signOut: async () => {},
 		}),
-	initial,
-	renderAgain,
-);
+	session: initial,
+	onChange: renderAgain,
+});
 const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
 void syncedUser;
-// @ts-expect-error The client must hold the server session's user.
-useMirrorAuth(() => plainMirror, initial, renderAgain);
-void useMirrorAuth(() => mirror, initial, renderAgain).signIn({
-	username: "emilys",
+useMirrorAuth({
+	// @ts-expect-error The client must hold the server session's user.
+	create: () => plainMirror,
+	session: initial,
+	onChange: renderAgain,
 });
+void useMirrorAuth({
+	create: () => mirror,
+	session: initial,
+	onChange: renderAgain,
+}).signIn({ username: "emilys" });
 // @ts-expect-error The hook needs to know how to render on the server again.
-useMirrorAuth(() => mirror, initial);
+useMirrorAuth({ create: () => mirror, session: initial });
+// @ts-expect-error The options are one object.
+useMirrorAuth(() => mirror, initial, renderAgain);
+const mirrorOptions: UseMirrorAuthOptions<
+	z.output<typeof userSchema>,
+	typeof mirror
+> = { create: () => mirror, session: initial, onChange: renderAgain };
+void useMirrorAuth(mirrorOptions);
 
 // React Router: the request's jar and its middleware.
 declare const requestContext: RouterContextLike;

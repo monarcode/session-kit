@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+	type AuthDebugEvent,
 	createMirrorAuth,
 	type ClientCredentials,
 	type MirrorAuthOptions,
@@ -113,12 +114,35 @@ test("signIn forwards the input and adopts the session the server returns", asyn
 			throw failure;
 		},
 	});
+	// The app's own error, unchanged, as a single-page app's sign-in form
+	// gets it.
 	await assert.rejects(failing.signIn({ name: "x" }), (error: unknown) => {
-		assert.ok(code("USER_VALIDATION_FAILED")(error));
-		assert.equal((error as Error).cause, failure);
+		assert.equal(error, failure);
 		return true;
 	});
 	assert.equal(failing.state.get().sessionId, "s1");
+	const thrown = mirror({
+		signIn: () => {
+			throw failure;
+		},
+	});
+	await assert.rejects(thrown.signIn({ name: "x" }), (error: unknown) => {
+		assert.equal(error, failure);
+		return true;
+	});
+	const notASession = mirror({
+		signIn: async () => ({ user }) as never,
+	});
+	await assert.rejects(
+		notASession.signIn({ name: "x" }),
+		code("INVALID_SESSION"),
+	);
+	const signedOut = mirror({ signIn: async () => null as never });
+	await assert.rejects(
+		signedOut.signIn({ name: "x" }),
+		code("INVALID_SESSION"),
+	);
+	assert.equal(signedOut.state.get().sessionId, "s1");
 	assert.equal(
 		"signIn" in
 			createMirrorAuth<User>({
@@ -416,6 +440,26 @@ test("end to end: browser sign-in sealed on the server, then authFetch", async (
 	await auth.signOut();
 	assert.equal(cookies.has("app.session"), false);
 	assert.equal(await serverAuth.getSession(jar()), null);
+});
+
+test("a sign-in the app's function refused is reported, with its message only when sensitive", async () => {
+	for (const sensitive of [false, true]) {
+		const events: AuthDebugEvent[] = [];
+		const auth = mirror({
+			debug: { log: (event) => events.push(event), sensitive },
+			signIn: async () => {
+				throw new Error("Wrong password");
+			},
+		});
+		await assert.rejects(auth.signIn({ name: "x" }));
+		const rejected = events.find((event) => event.type === "sign-in");
+		assert.equal(rejected?.message, "rejected by the signIn option");
+		assert.equal(rejected?.error, undefined);
+		assert.deepEqual(
+			rejected?.data,
+			sensitive ? { reason: "Wrong password" } : undefined,
+		);
+	}
 });
 
 test("a failed sign-in leaves a revalidation in flight to apply", async () => {

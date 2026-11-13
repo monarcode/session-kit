@@ -250,10 +250,9 @@ export type MirrorAuth<U, In = never> = MirrorAuthBase<U> &
 				 * Signs in on your server with the `signIn` option, then takes the
 				 * session it resolves and tells other tabs.
 				 *
-				 * If the option fails, it rejects with `USER_VALIDATION_FAILED`,
-				 * whose `cause` is the original error. An `AuthError` passes
-				 * through unchanged. If it resolves anything but a session, it
-				 * rejects with `INVALID_SESSION`.
+				 * If the option throws, it rejects with that error, unchanged, as a
+				 * sign-in in a single-page app does. If it resolves anything but a
+				 * session, it rejects with `INVALID_SESSION`.
 				 */
 				signIn: (input: In) => Promise<Session<U>>;
 			});
@@ -656,13 +655,21 @@ export function createMirrorAuth<U, In = never>(
 						"INVALID_SESSION",
 						"signIn must resolve the new session",
 					);
-			} catch (cause) {
-				const error = toAuthError(
-					"USER_VALIDATION_FAILED",
-					"Could not sign in",
-					cause,
-				);
-				debug.log("sign-in", "rejected", undefined, error);
+			} catch (error) {
+				// Not wrapped: the app's own error, such as a wrong password, is
+				// what its sign-in form shows. A debug event carries only an
+				// `AuthError`.
+				if (error instanceof AuthError)
+					debug.log("sign-in", "rejected", undefined, error);
+				else
+					debug.log(
+						"sign-in",
+						"rejected by the signIn option",
+						debug.secret({
+							reason:
+								error instanceof Error ? error.message : String(error),
+						}),
+					);
 				throw error;
 			}
 			change(next);

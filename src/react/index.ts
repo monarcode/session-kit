@@ -7,3 +7,4 @@ export type {
 	AuthHooksOptions,
 	AuthProviderProps,
 } from "./hooks.js";
+export type { UseMirrorAuthOptions } from "./mirror.js";
