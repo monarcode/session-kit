@@ -44,6 +44,27 @@ export function decodeMarkdownUrl(segments: string[]) {
 export const LATEST = "latest";
 
 /**
+ * The version dropdown's label for a release: `0.1.0` once it's stable, and
+ * `0.1.0 prerelease` for an alpha, beta or release candidate of it.
+ */
+export function versionLabel(release: string): string {
+	const [stable, prerelease] = release.split("-", 2);
+	return prerelease ? `${stable} prerelease` : stable!;
+}
+
+/** Set by `vite.config.ts` from `package.json`. */
+declare const __PACKAGE_VERSION__: string;
+
+/**
+ * The current line's label, from the package's version as the site builds.
+ * A function: the MDX compiler loads `source.ts` outside Vite, which defines
+ * the version.
+ */
+export function latestLabel(): string {
+	return versionLabel(__PACKAGE_VERSION__);
+}
+
+/**
  * The release line a page belongs to: its version folder (`0.1`), or
  * {@link LATEST} for the current line in `(latest)`.
  */

@@ -67,7 +67,8 @@ try {
 	copyPages(pages);
 	copyTypes(types);
 	const count = rewritePages(pages);
-	setTitle(join(pages, "meta.json"), line);
+	// Titled by the release it was taken from, such as 0.1.3.
+	setTitle(join(pages, "meta.json"), typesVersion);
 
 	const target = join(docs, line);
 	const typesTarget = join(root, "site", "versions", line, "types");
@@ -75,7 +76,6 @@ try {
 	rmSync(typesTarget, { recursive: true, force: true });
 	cpSync(pages, target, { recursive: true });
 	cpSync(types, typesTarget, { recursive: true });
-	setTitle(join(docs, LATEST, "meta.json"), current);
 	// Formatted like the rest of the pages, so `check` passes on the result.
 	execFileSync(
 		join(root, "node_modules", ".bin", "oxfmt"),

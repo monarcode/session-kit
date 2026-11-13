@@ -7,7 +7,13 @@ import { transformerTwoslash } from "fumadocs-twoslash";
 import { createGenerator, remarkAutoTypeTable } from "fumadocs-typescript";
 
 import { onTwoslashError, rehypePageApps, twoslashOptions } from "./page-apps";
-import { codeThemes, docsRoute, LATEST, versionOfPath } from "./shared";
+import {
+	codeThemes,
+	docsRoute,
+	LATEST,
+	latestLabel,
+	versionOfPath,
+} from "./shared";
 
 const SHELLS = new Set(["sh", "bash", "shell", "zsh"]);
 // Tags a hover leaves out: the page around it is the example.
@@ -88,7 +94,19 @@ export const docs = defineDocs({
 export const source = loader({
 	source: docs.toFumadocsSource(),
 	baseUrl: docsRoute,
-	plugins: [lucideIconsPlugin()],
+	plugins: [
+		lucideIconsPlugin(),
+		{
+			// The current line is named by the package's version, so the label
+			// moves from "prerelease" to stable when the release ships.
+			transformPageTree: {
+				folder: (node, folderPath) =>
+					node.root && versionOfPath(folderPath) === LATEST
+						? { ...node, name: latestLabel() }
+						: node,
+			},
+		},
+	],
 });
 
 export const docsLlms = llms(source, {

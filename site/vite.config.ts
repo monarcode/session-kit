@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { glob } from "node:fs/promises";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -13,7 +14,13 @@ const docsPages: { path: string }[] = [];
 for await (const entry of glob("**/*.mdx", { cwd: "content/docs" }))
 	docsPages.push({ path: ["/docs", ...getSlugs(entry)].join("/") });
 
+// The package's version, which names the current docs in the version dropdown.
+const { version } = JSON.parse(
+	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
+
 export default defineConfig({
+	define: { __PACKAGE_VERSION__: JSON.stringify(version) },
 	plugins: [
 		fumadocsMdx(),
 		tailwindcss(),

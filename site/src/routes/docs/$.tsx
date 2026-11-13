@@ -21,11 +21,10 @@ import {
 	getPageMarkdownUrl,
 	gitConfig,
 	LATEST,
+	latestLabel,
 	versionOfPath,
 } from "@/lib/shared";
 import { docs, source } from "@/lib/source";
-
-import latest from "../../../content/docs/(latest)/meta.json";
 
 export const Route = createFileRoute("/docs/$")({
 	component: Page,
@@ -104,7 +103,7 @@ function Content({
 					className="mt-0 rounded-none border-buffer-line bg-transparent"
 				>
 					These docs are for Session kit {older.version}. The latest is{" "}
-					{latest.title}:{" "}
+					{latestLabel()}:{" "}
 					<Link to={older.latestUrl} className="font-medium underline">
 						read this page there
 					</Link>
