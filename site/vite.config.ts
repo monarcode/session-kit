@@ -33,6 +33,8 @@ export default defineConfig({
 				{ path: "/api/search" },
 				{ path: "/llms.txt" },
 				{ path: "/llms-full.txt" },
+				// Written to `404.html` at the output's root.
+				{ path: "/404", prerender: { autoSubfolderIndex: false } },
 			],
 		}),
 		react(),
