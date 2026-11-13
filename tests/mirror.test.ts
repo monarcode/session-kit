@@ -407,7 +407,9 @@ test("end to end: browser sign-in sealed on the server, then authFetch", async (
 			status: authorization === "Bearer access-1" ? 401 : 200,
 		});
 	};
-	const authFetch = createAuthFetch(auth, "https://api.example.com/");
+	const authFetch = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
 	assert.equal((await authFetch("me")).status, 200);
 	assert.deepEqual(sent, ["Bearer access-1", "Bearer access-2"]);
 

@@ -102,7 +102,7 @@ export const auth = createAuth({
 export const { AuthProvider, useAuth, useAuthClient } =
   createAuthHooks<typeof auth>();
 
-export const authFetch = createAuthFetch(auth, `${API}/`);
+export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });
 
 export async function signInWithPassword(username: string, password: string) {
   const response = await fetch(`${API}/auth/login`, {

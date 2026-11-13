@@ -3,12 +3,12 @@ title: Authenticated requests
 description: A fetch that sends the access token to one API, refreshes on a 401, and never leaks the token.
 ---
 
-`createAuthFetch(auth, baseUrl)` returns a `fetch` for one API. It's built so
-that a token can't leak and a user can't be signed out by accident:
+`createAuthFetch(auth, { baseUrl })` returns a `fetch` for one API. It's
+built so that a token can't leak and a user can't be signed out by accident:
 
 | When…                                   | `authFetch`…                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------- |
-| The path is on another origin           | Rejects with `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.   |
+| The request is for another origin       | Rejects with `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.   |
 | The response is a redirect              | Rejects rather than following it.                                            |
 | The response is a 401                   | Refreshes once, then sends a GET or HEAD again with the new token.           |
 | A POST, PUT, PATCH or DELETE gets a 401 | Refreshes, and resolves the 401. It never sends a request twice on its own.  |
@@ -16,6 +16,12 @@ that a token can't leak and a user can't be signed out by accident:
 | The session changes during the request  | Rejects with `SESSION_CHANGED` rather than resolve another account's answer. |
 | Nobody is signed in                     | Rejects with `UNAUTHENTICATED`, unless `optional` is `true`.                 |
 | The network fails                       | Rejects as `fetch` does, unchanged.                                          |
+
+Call it with a path, which is resolved against `baseUrl` as a link is
+against a page's address. End `baseUrl` with `/`, so that
+`authFetch("orders")` lands under it. It also takes a `URL` or a `Request`,
+as `fetch` does, so an HTTP client with a `fetch` option can send its
+requests through it: see [Other HTTP clients](/docs/client/other-http-clients).
 
 Because a write is never replayed for you, retry it yourself where sending it
 twice is safe. By then the token has been refreshed:
@@ -41,7 +47,7 @@ export async function addToCart(userId: number, productId: number) {
 }
 ```
 
-Two options change the defaults:
+Two more options change the defaults:
 
 ```ts title="src/public-api.ts"
 import { createAuthFetch } from "@monarcode/session-kit/http";
@@ -49,7 +55,8 @@ import { createAuthFetch } from "@monarcode/session-kit/http";
 import { auth } from "./auth.js";
 import { API } from "./backend.js";
 
-export const publicFetch = createAuthFetch(auth, `${API}/`, {
+export const publicFetch = createAuthFetch(auth, {
+  baseUrl: `${API}/`,
   // One `fetch` for public and private endpoints: signed out, requests are
   // sent without a token instead of rejecting.
   optional: true,

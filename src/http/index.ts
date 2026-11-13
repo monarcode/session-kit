@@ -35,7 +35,8 @@ export type AuthFetchClient = Pick<
  * declare const auth: AuthClient<{ id: number }, { id: number }>;
  *
  * // Some endpoints answer 401 for missing permissions, not a bad token.
- * export const authFetch = createAuthFetch(auth, "https://api.example.com/", {
+ * export const authFetch = createAuthFetch(auth, {
+ * 	baseUrl: "https://api.example.com/",
  * 	signOutOnRepeated401: false,
  * });
  * ```
@@ -43,6 +44,12 @@ export type AuthFetchClient = Pick<
  * @since 0.1.0
  */
 export type AuthFetchOptions = {
+	/**
+	 * Your API's base URL. The access token goes only to requests on its
+	 * origin. A path is resolved against it as a link is against a page's
+	 * address. End it with `/`, so that `"orders"` lands under it.
+	 */
+	baseUrl: string;
 	/**
 	 * Whether a request made while signed out is sent without an
 	 * `Authorization` header, rather than rejecting with `UNAUTHENTICATED`.
@@ -63,8 +70,18 @@ export type AuthFetchOptions = {
 
 /**
  * The `fetch` that {@link createAuthFetch} returns. Call it with a path
- * under your API's base URL, and `init` as you would pass to `fetch`. Use the
- * name to type a prop, a context or a test fake that stands in for it.
+ * under your API's base URL, and `init` as you would pass to `fetch`. It
+ * takes a `URL` or a `Request` too, as `fetch` does.
+ *
+ * A `Request` with a body can be sent once, as with `fetch`. To retry a
+ * write after a 401, send a clone you kept. A call that rejects before
+ * sending anything leaves the `Request` unused.
+ *
+ * `init` takes what `Request` takes. An option that only a runtime's own
+ * `fetch` reads, such as Next.js's `next`, isn't passed on.
+ *
+ * Use the name to type a prop, a context or a test fake that stands in for
+ * it.
  *
  * @example
  * ```ts
@@ -79,7 +96,10 @@ export type AuthFetchOptions = {
  *
  * @since 0.1.0
  */
-export type AuthFetch = (path: string, init?: RequestInit) => Promise<Response>;
+export type AuthFetch = (
+	input: string | URL | Request,
+	init?: RequestInit,
+) => Promise<Response>;
 
 /** Releases a response the caller will never see. */
 async function discard(response: Response) {
@@ -98,13 +118,18 @@ async function discard(response: Response) {
  * changes during a request, it rejects with `SESSION_CHANGED` rather than
  * resolve a response meant for another account.
  *
- * The token never leaves your API. `path` is resolved against `baseUrl`, and
- * a path on another origin, with a username or password in it, or invalid
- * rejects with `INVALID_OPTIONS`. A redirect rejects rather than being
- * followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
+ * The token never leaves your API. A request for another origin, with a
+ * username or password in its URL, or with an invalid URL rejects with
+ * `INVALID_OPTIONS`. A redirect rejects rather than being followed. A
+ * missing or invalid `baseUrl` throws `INVALID_OPTIONS`. While signed in, a
+ * request's own `Authorization` header is replaced.
  *
  * `fetch`'s own failures, such as a network error, and an `init` that
  * `Request` refuses, reject as `fetch` and `Request` do.
+ *
+ * An HTTP client that takes a custom `fetch`, such as ky or openapi-fetch,
+ * can take this one. Its requests are then sent, and sent again after a 401,
+ * as above.
  *
  * @example
  * ```ts
@@ -114,7 +139,9 @@ async function discard(response: Response) {
  * type User = { id: number; name: string };
  * declare const auth: AuthClient<User, User>;
  *
- * const authFetch = createAuthFetch(auth, "https://api.example.com/");
+ * const authFetch = createAuthFetch(auth, {
+ * 	baseUrl: "https://api.example.com/",
+ * });
  *
  * export async function loadOrders(): Promise<unknown> {
  * 	const response = await authFetch("orders");
@@ -123,27 +150,47 @@ async function discard(response: Response) {
  * }
  * ```
  *
- * @see {@link AuthFetchOptions} for `optional` and `signOutOnRepeated401`
+ * @see {@link AuthFetchOptions} for `baseUrl`, `optional` and
+ * `signOutOnRepeated401`
  *
  * @since 0.1.0
  */
 export function createAuthFetch(
 	auth: AuthFetchClient,
-	baseUrl: string,
-	options: AuthFetchOptions = {},
+	options: AuthFetchOptions,
 ): AuthFetch {
-	const base = parseUrl(baseUrl);
+	if (typeof options?.baseUrl !== "string")
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass your API's base URL as the baseUrl option",
+		);
+	const base = parseUrl(options.baseUrl);
 	const optional = options.optional ?? false;
 	const signOutOnRepeated401 = options.signOutOnRepeated401 ?? true;
-	return async function authFetch(path: string, init: RequestInit = {}) {
-		const url = parseUrl(path, base);
+	return async function authFetch(input, init) {
+		if (input == null)
+			throw new AuthError(
+				"INVALID_OPTIONS",
+				"Pass authFetch a path, a URL or a Request",
+			);
+		// Anything but this runtime's own `Request` becomes a string, as `fetch`
+		// makes it, so the URL checked here is the URL that is sent.
+		const given = input instanceof Request ? input : null;
+		const url = parseUrl(given ? given.url : String(input), base);
 		if (url.origin !== base.origin || url.username || url.password) {
 			throw new AuthError(
 				"INVALID_OPTIONS",
 				"Authenticated requests must stay on the configured API origin",
 			);
 		}
-		const request = new Request(url, init);
+
+		const captured = await auth.credentials.get();
+		if (!captured && !optional)
+			throw new AuthError("UNAUTHENTICATED", "Sign in is required");
+
+		// Built once something will be sent: it uses up a `Request`'s body, and
+		// a call that rejects first must leave the caller's `Request` usable.
+		const request = new Request(given ?? url, init);
 		const canReplay = request.method === "GET" || request.method === "HEAD";
 
 		const send = async (session: Credentials) => {
@@ -160,10 +207,7 @@ export function createAuthFetch(
 			return response;
 		};
 
-		const captured = await auth.credentials.get();
 		if (!captured) {
-			if (!optional)
-				throw new AuthError("UNAUTHENTICATED", "Sign in is required");
 			const response = await fetch(
 				new Request(request, { redirect: "error" }),
 			);

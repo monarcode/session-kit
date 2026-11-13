@@ -88,4 +88,4 @@ async function login(username: string, password: string): Promise<unknown> {
  * Sends requests to DummyJSON with the access token. After a 401 it
  * refreshes, then replays a GET or HEAD once.
  */
-export const authFetch = createAuthFetch(auth, `${API}/`);
+export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });

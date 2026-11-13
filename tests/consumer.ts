@@ -96,14 +96,27 @@ declare module "../dist/effect/index.js" {
 }
 
 connectAuth(router);
-createAuthFetch(auth, "https://api.example.com");
-createAuthFetch(auth, "https://api.example.com", { optional: true });
-createAuthFetch(auth, "https://api.example.com", { optional: undefined });
-const authFetch: AuthFetch = createAuthFetch(auth, "https://api.example.com");
+const baseUrl = "https://api.example.com";
+createAuthFetch(auth, { baseUrl });
+createAuthFetch(auth, { baseUrl, optional: true });
+createAuthFetch(auth, { baseUrl, optional: undefined });
+// @ts-expect-error The base URL is an option, not an argument.
+createAuthFetch(auth, baseUrl);
+// @ts-expect-error baseUrl is required.
+createAuthFetch(auth, { optional: true });
+const authFetch: AuthFetch = createAuthFetch(auth, { baseUrl });
 void authFetch("orders", { method: "POST" }).then((response) => response.ok);
+void authFetch(new URL("orders", baseUrl));
+void authFetch(new Request(`${baseUrl}/orders`), { method: "POST" });
 const fakeFetch: AuthFetch = async () => new Response("[]");
 const plainFetch: AuthFetch = fetch;
-void [fakeFetch, plainFetch];
+// It fits wherever a `fetch` is taken: the global's type, and the narrower
+// ones HTTP clients declare (ky's, then openapi-fetch's).
+const asFetch: typeof fetch = authFetch;
+const asKyFetch: (input: Request, init?: RequestInit) => Promise<Response> =
+	authFetch;
+const asOpenApiFetch: (input: Request) => Promise<Response> = authFetch;
+void [fakeFetch, plainFetch, asFetch, asKyFetch, asOpenApiFetch];
 // @ts-expect-error: a path is required.
 void authFetch();
 
@@ -498,8 +511,8 @@ async function requestSide() {
 	return [viewEmail, status, await requestAuth.credentials.get()];
 }
 void requestSide;
-createAuthFetch(requestAuth, "https://api.example.com");
-createAuthFetch(tokenServer.forRequest(jar), "https://api.example.com");
+createAuthFetch(requestAuth, { baseUrl });
+createAuthFetch(tokenServer.forRequest(jar), { baseUrl });
 // @ts-expect-error Signing in stays on serverAuth.
 void requestAuth.signIn;
 // @ts-expect-error So does updateUser.
@@ -538,7 +551,7 @@ void mirrorEmail;
 void mirror.signIn({ username: "emilys" });
 // @ts-expect-error signIn takes what the signIn option takes.
 void mirror.signIn({ password: "x" });
-createAuthFetch(mirror, "https://api.example.com");
+createAuthFetch(mirror, { baseUrl });
 createAuthHooks<typeof mirror>().AuthProvider({ client: mirror });
 void requireSession(mirror, {
 	location: { href: "/private" },

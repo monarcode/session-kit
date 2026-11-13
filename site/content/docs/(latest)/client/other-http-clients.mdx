@@ -1,11 +1,85 @@
 ---
 title: Other HTTP clients
-description: Attach the access token with axios, ky, or any other HTTP client, using the client's credentials calls.
+description: Send the access token with ky, axios, openapi-fetch or any other HTTP client.
 ---
 
-[`createAuthFetch`](/docs/client/requests) and the
+[`authFetch`](/docs/client/requests) takes a `URL` or a `Request` as well as
+a path, as `fetch` does. An HTTP client that lets you choose its `fetch` can
+send its requests through it, and they get everything `authFetch` does: the
+token stays on your API's origin, a 401 refreshes once, and only a GET or
+HEAD is sent again.
+
+A client with its own transport uses
+[the calls `authFetch` is built on](#clients-without-a-fetch-option) instead.
+
+## Clients that take a `fetch`
+
+With [ky](https://github.com/sindresorhus/ky), pass `authFetch` as `fetch`:
+
+```ts title="src/ky.ts"
+import ky from "ky";
+
+import { authFetch } from "./api.js";
+import { API } from "./backend.js";
+
+export const api = ky.create({ baseUrl: `${API}/`, fetch: authFetch });
+
+export async function fetchCarts(userId: number): Promise<unknown> {
+  return api.get(`auth/carts/user/${userId}`).json();
+}
+```
+
+With [axios](https://axios-http.com), choose its `fetch` adapter and pass
+`authFetch` in `env`:
+
+```ts title="src/axios.ts"
+import axios from "axios";
+
+import { authFetch } from "./api.js";
+import { API } from "./backend.js";
+
+export const http = axios.create({
+  baseURL: API,
+  adapter: "fetch",
+  env: { fetch: authFetch },
+});
+```
+
+[openapi-fetch](https://openapi-ts.dev/openapi-fetch/) takes it the same way
+as ky:
+
+```ts
+const client = createClient<paths>({ baseUrl: API, fetch: authFetch });
+```
+
+What changes for the client's calls:
+
+- **Give the client the same API.** Its base URL must be on the origin that
+  `authFetch` was created for. A request for another origin rejects with
+  `INVALID_OPTIONS`, and the token isn't sent.
+- **Signed out, every call rejects** with `UNAUTHENTICATED`. If the client
+  also calls public endpoints, such as your sign-in, create `authFetch` with
+  [`optional: true`](/docs/client/requests): those requests then go without a
+  token.
+- **A 401 reaches the client after the refresh.** For a GET or HEAD, the
+  client sees the answer to the request that was sent again. For a write, it
+  sees the 401, as ky's `HTTPError` or axios's `AxiosError`. Retry it where
+  sending it twice is safe.
+- **Session kit's errors keep their code.** ky rejects with the `AuthError`
+  itself. axios wraps it in an `AxiosError` that has the same `code`, with
+  the `AuthError` as its `cause`. Match on `error.code`, which works with
+  both, rather than on `instanceof AuthError`.
+- **`authFetch` sets `Authorization`.** While signed in, it replaces a
+  header the client set itself.
+- **Only what a `Request` holds is sent.** ky hands `fetch` the options it
+  doesn't know itself, such as Next.js's `next`. `authFetch` doesn't pass
+  those on.
+
+## Clients without a `fetch` option
+
+`createAuthFetch` and the
 [effetch plugin](/docs/effect#6-call-your-api-with-effetch) are built on three
-calls, and any other HTTP client can use the same ones:
+calls, and a client with its own transport can use the same ones:
 
 1. **Before a request**, `auth.credentials.get()` resolves the credentials to
    send, waiting for a restore or a refresh that is under way. It resolves
@@ -17,9 +91,10 @@ calls, and any other HTTP client can use the same ones:
 3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
    session, unless a newer one has replaced it.
 
-With [axios](https://axios-http.com), that's two interceptors:
+An axios instance that keeps its default adapter does it with two
+interceptors:
 
-```ts title="src/axios.ts"
+```ts title="src/axios-interceptors.ts"
 import type { Credentials } from "@monarcode/session-kit";
 import axios, { type InternalAxiosRequestConfig } from "axios";
 
@@ -61,54 +136,6 @@ http.interceptors.response.use(undefined, async (error: unknown) => {
   if (!fresh || !["get", "head"].includes(config.method ?? "")) throw error;
   const replay: Config = { ...config, replayed: true };
   return http.request(replay);
-});
-```
-
-With [ky](https://github.com/sindresorhus/ky), two hooks do the same. The
-request's `context` carries the credentials from one hook to the other:
-
-```ts title="src/ky.ts"
-import type { Credentials } from "@monarcode/session-kit";
-import ky from "ky";
-
-import { auth } from "./auth.js";
-import { API } from "./backend.js";
-
-export const api = ky.create({
-  baseUrl: `${API}/`,
-  hooks: {
-    beforeRequest: [
-      async ({ request, options }) => {
-        const credentials = await auth.credentials.get();
-        if (!credentials) return;
-        options.context.credentials = credentials;
-        request.headers.set(
-          "Authorization",
-          `Bearer ${credentials.accessToken}`,
-        );
-      },
-    ],
-    afterResponse: [
-      async ({ request, options, response }) => {
-        const used = options.context.credentials as Credentials | undefined;
-        if (response.status !== 401 || !used) return;
-
-        if (options.context.replayed) {
-          // The new token was refused too: end the session.
-          await auth.credentials.reject(used);
-          return;
-        }
-        const fresh = await auth.credentials.renew(used);
-        // As with authFetch, only a GET or HEAD is sent twice.
-        if (!fresh || !["GET", "HEAD"].includes(request.method)) return;
-        options.context.credentials = fresh;
-        options.context.replayed = true;
-        const headers = new Headers(request.headers);
-        headers.set("Authorization", `Bearer ${fresh.accessToken}`);
-        return ky.retry({ request: new Request(request, { headers }) });
-      },
-    ],
-  },
 });
 ```
 

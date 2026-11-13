@@ -198,10 +198,9 @@ declare const requestAuth: unique symbol;
  *
  * // Sends the cookie's token, and renews it after a 401.
  * export async function orders(jar: CookieJar) {
- * 	const authFetch = createAuthFetch(
- * 		serverAuth.forRequest(jar),
- * 		"https://api.example.com",
- * 	);
+ * 	const authFetch = createAuthFetch(serverAuth.forRequest(jar), {
+ * 		baseUrl: "https://api.example.com",
+ * 	});
  * 	return (await authFetch("/orders")).json();
  * }
  * ```

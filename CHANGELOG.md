@@ -2,8 +2,40 @@
 
 ## Unreleased
 
+### Added
+
+- `authFetch` takes a `URL` or a `Request` as well as a path, as `fetch`
+  does. An HTTP client with a `fetch` option can now send its requests
+  through it, and they keep its safeguards: the token stays on one origin, a
+  401 refreshes once, and only a GET or HEAD is sent again. The
+  [Other HTTP clients](https://session-kit.pages.dev/docs/client/other-http-clients)
+  page shows ky, axios with its `fetch` adapter, and openapi-fetch. It
+  replaces the ky recipe built on hooks, and keeps the axios interceptors for
+  an instance on axios's default adapter.
+
 ### Changed
 
+- **Breaking:** `createAuthFetch` takes the base URL as an option, as
+  `sessionBearer` does. A missing `baseUrl` throws `INVALID_OPTIONS`.
+
+  ```ts
+  // Before
+  createAuthFetch(auth, "https://api.example.com/", { optional: true });
+  // After
+  createAuthFetch(auth, {
+    baseUrl: "https://api.example.com/",
+    optional: true,
+  });
+  ```
+
+- **Breaking:** `AuthFetch`'s first parameter is `string | URL | Request`,
+  not `string`. Only code that implements the type is affected, such as a
+  test fake that declares `(path: string) => …`: widen its parameter.
+- `authFetch` rejects with `INVALID_OPTIONS` when called with no path. It
+  used to request `undefined` under the base URL.
+- `authFetch` asks for the credentials before it builds the request. Signed
+  out or locked, a call with an `init` that `Request` refuses now rejects
+  with `UNAUTHENTICATED` or `LOCKED`, not with `Request`'s `TypeError`.
 - The guides moved to the documentation site,
   [session-kit.pages.dev](https://session-kit.pages.dev), with an API
   reference for every entry point and every error code. The README is now a

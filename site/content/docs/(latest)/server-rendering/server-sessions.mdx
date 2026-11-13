@@ -67,9 +67,9 @@ its cookies.
 
 `serverAuth.forRequest(jar)` is one request's session shaped like a client
 (`RequestAuth`). Code written for a client works on the server with it:
-`createAuthFetch(serverAuth.forRequest(jar), baseUrl)` sends the cookie's
-token and saves a renewed one after a 401, and Effect's `Auth.layer` takes
-it ([Effect on the server](/docs/effect#on-the-server)). Make it per request,
+`createAuthFetch(serverAuth.forRequest(jar), { baseUrl })` sends the
+cookie's token and saves a renewed one after a 401, and Effect's
+`Auth.layer` takes it ([Effect on the server](/docs/effect#on-the-server)). Make it per request,
 like the jar.
 
 ## Token refresh

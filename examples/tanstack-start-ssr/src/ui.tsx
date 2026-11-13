@@ -78,7 +78,10 @@ export function Profile({ fromServer }: { fromServer: string }) {
 	const user = useAuth((state) => state.user);
 	const auth = useAuthClient();
 	// The browser's requests get the access token from the server, in memory.
-	const authFetch = useMemo(() => createAuthFetch(auth, `${API}/`), [auth]);
+	const authFetch = useMemo(
+		() => createAuthFetch(auth, { baseUrl: `${API}/` }),
+		[auth],
+	);
 	const [fromBrowser, setFromBrowser] = useState("");
 
 	async function loadProfile() {
