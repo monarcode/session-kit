@@ -11,13 +11,20 @@ import {
 	type LoaderFunctionArgs,
 } from "react-router";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 
-import { createAppAuth } from "./auth/client";
+import { createAppAuth, type AppAuth } from "./auth/client";
 import { sessionMiddleware } from "./auth/middleware.server";
 import { serverAuth } from "./auth/session.server";
-import { AuthProvider } from "./hooks";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: AppAuth;
+	}
+}
 
 export const middleware = sessionMiddleware;
 

@@ -27,19 +27,11 @@ The codes an [`AuthFailure`](#authfailure) carries: every `AuthErrorCode` except
 
 ### AuthLayerClient
 
-What `Auth.layer` takes. Once you register a client in [`Register`](#register), that's your client, or on the server a `serverAuth.forRequest(jar)` view with the same user. Until then, it's any [`AuthServiceClient`](#authserviceclient).
+What `Auth.layer` takes. Once you register a client in `Register`, that's your client, or on the server a `serverAuth.forRequest(jar)` view with the same user. Until then, it's any [`AuthServiceClient`](#authserviceclient).
 
 ### AuthServiceClient
 
 What `Auth` needs from a client. Any `createAuth` or `createMirrorAuth` client fits, and so does a fake with these members in tests. `signIn` is optional, because a mirror made without it has none.
-
-### Register
-
-Register your client's type here, once, so `Auth`'s Effects carry your user. Without it, the user is typed `unknown`. The same registration types `Auth` on the server, where `Auth.layer` takes a `serverAuth.forRequest(jar)` view.
-
-### RegisteredAuth
-
-The client registered in [`Register`](#register), or a client with an `unknown` user when none is.
 
 ### RegisteredSession
 

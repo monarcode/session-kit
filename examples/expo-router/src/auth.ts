@@ -1,7 +1,6 @@
 import { createAuth } from "@monarcode/session-kit";
 import { secureStorage } from "@monarcode/session-kit/expo";
 import { createAuthFetch } from "@monarcode/session-kit/http";
-import { createAuthHooks } from "@monarcode/session-kit/react";
 import { z } from "zod";
 
 /** DummyJSON's auth API: https://dummyjson.com/docs/auth */
@@ -54,9 +53,6 @@ export const auth = createAuth({
 		return tokensSchema.parse(await response.json());
 	},
 });
-
-export const { AuthProvider, useAuth, useAuthClient } =
-	createAuthHooks<typeof auth>();
 
 /**
  * Sends requests to DummyJSON with the access token. After a 401 it

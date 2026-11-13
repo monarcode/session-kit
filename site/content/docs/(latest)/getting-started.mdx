@@ -179,26 +179,29 @@ routers, which use it to send the user on to the page they asked for.
 
 ## 4. Read the session in React
 
-Create the hooks once, typed by your client, and export them for every
-component to share:
-
-```ts title="src/hooks.ts"
-import { createAuthHooks } from "@monarcode/session-kit/react";
-
-import type { auth } from "./auth.js";
-
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<typeof auth>();
-```
+The hooks come from `@monarcode/session-kit/react`. Register your client's
+type once, where you render `AuthProvider`, and they carry your user.
 
 Then render by `status`. Each case is one of the states in
 [How it works](/docs#how-it-works). By the last case, TypeScript has narrowed
 `user` to a value that's set:
 
 ```tsx title="src/app.tsx"
+import {
+  AuthProvider,
+  useAuth,
+  useAuthClient,
+} from "@monarcode/session-kit/react";
+
 import { auth } from "./auth.js";
-import { AuthProvider, useAuth, useAuthClient } from "./hooks.js";
 import { SignIn } from "./sign-in.js";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 export function App() {
   return (
@@ -250,6 +253,8 @@ function AuthError() {
 - `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
   it, and re-renders only when that part changes, as `AuthError` does.
 - `useAuthClient()` returns the client, for actions.
+- With more than one client in an app, create hooks for each with
+  `createAuthHooks<typeof client>()` instead.
 - `retry` and `signOut` reject when they fail, and publish the same failure in
   `state.error`. `AuthError` shows it, so the handlers have nothing left to
   do.

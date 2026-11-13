@@ -70,7 +70,7 @@ export const auth = createAuth({
 });
 
 // Registered once, so every `Auth` Effect is typed with this client's user.
-declare module "@monarcode/session-kit/effect" {
+declare module "@monarcode/session-kit" {
 	interface Register {
 		auth: typeof auth;
 	}

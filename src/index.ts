@@ -18,6 +18,7 @@ export type {
 	MirrorAuthOptions,
 	MirrorCredentials,
 } from "./core/mirror.js";
+export type { Register, RegisteredAuth } from "./core/register.js";
 export type { SafeReturnToOptions } from "./core/return-to.js";
 export type {
 	AccessTokenUser,

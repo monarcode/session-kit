@@ -1,10 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
 import { useRouter } from "@tanstack/react-router";
 
 import { API } from "./auth/api";
-import { useAuth, useAuthClient } from "./hooks";
 
 /** The sign-in form, prefilled with DummyJSON's documented test user. */
 export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {

@@ -178,6 +178,14 @@ What your refresh callback ([`RefreshFn`](#refreshfn)) returns:
 - [`Tokens`](#tokens): the new tokens. They must last at least five seconds. Leave out `refreshToken` or `user` to keep the current one.
 - `null`: your backend rejected the refresh token. The user is signed out.
 
+### Register
+
+Register your client's type here, once, so the hooks from `@monarcode/session-kit/react` and the Effect service carry your user. Without it, the user is typed `unknown`.
+
+### RegisteredAuth
+
+The client registered in [`Register`](#register), or a client with an `unknown` user when none is. It's `never` when what's registered isn't a client.
+
 ### RevokeFn
 
 Asks your backend to revoke the tokens of a session that just signed out. It's the `revoke` option of [`AuthOptions`](#authoptions).

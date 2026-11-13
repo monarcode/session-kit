@@ -42,8 +42,9 @@ beforeEach(async () => {
 });
 
 /**
- * Hooks for `auth` and a way to render under them, either through
- * `AuthProvider` or provider-free from Router context.
+ * Hooks for `auth` and a way to render under them: through an `AuthProvider`
+ * from `createAuthHooks`, through `./react`'s registered one, or from Router
+ * context with `./tanstack-router`'s hooks.
  */
 type Setup = {
 	hooks: Pick<AuthHooks<Client>, "useAuth" | "useAuthClient">;
@@ -58,17 +59,28 @@ const setups: Record<string, (auth: Client) => Setup> = {
 			wrap: (child) => h(hooks.AuthProvider, { client: auth }, child),
 		};
 	},
+	registered(auth) {
+		return {
+			// The tests register no client, so the types are the unregistered ones.
+			hooks: {
+				useAuth: binding.useAuth,
+				useAuthClient: binding.useAuthClient,
+			} as unknown as Setup["hooks"],
+			wrap: (child) => h(binding.AuthProvider, { client: auth }, child),
+		};
+	},
 	router(auth) {
 		const router = routerModule.createRouter({
 			routeTree: routerModule.createRootRoute({}),
 			context: { auth },
 			history: routerModule.createMemoryHistory({ initialEntries: ["/"] }),
 		});
-		const hooks = binding.createAuthHooks({
-			useClient: routerBinding.useRouterAuth as () => Client,
-		});
 		return {
-			hooks,
+			// The tests register no Router, so the types are `never`.
+			hooks: {
+				useAuth: routerBinding.useAuth,
+				useAuthClient: routerBinding.useAuthClient,
+			} as unknown as Setup["hooks"],
 			wrap: (child) =>
 				h(routerModule.RouterContextProvider, {
 					router: router as AnyRouter,
@@ -348,42 +360,55 @@ test("AuthProvider mounts its client while rendered", async () => {
 	assert.equal(mounted, 0);
 });
 
-test("hooks without a provider explain what is missing", async () => {
-	const { useAuth } = binding.createAuthHooks<Client>();
-	function Status() {
-		return h(
-			"output",
-			null,
-			useAuth((state) => state.status),
+for (const [kind, useAuth, message] of [
+	[
+		"createAuthHooks",
+		() => binding.createAuthHooks<Client>().useAuth,
+		/Render AuthProvider/,
+	],
+	["registered", () => binding.useAuth, /Render AuthProvider/],
+	[
+		"useClient",
+		() =>
+			binding.createAuthHooks<Client>({
+				useClient: () => null as unknown as Client,
+			}).useAuth,
+		/useClient did not return an auth client/,
+	],
+] as const)
+	test(`hooks without a client explain what is missing (${kind})`, async () => {
+		const useStatus = useAuth() as AuthHooks<Client>["useAuth"];
+		function Status() {
+			return h(
+				"output",
+				null,
+				useStatus((state) => state.status),
+			);
+		}
+		const errors: unknown[] = [];
+		const onError = (event: ErrorEvent) => {
+			errors.push(event.error);
+			event.preventDefault();
+		};
+		dom.window.addEventListener("error", onError);
+		const consoleError = console.error;
+		console.error = () => {};
+		try {
+			await render(h(Status)).catch((error) => errors.push(error));
+		} finally {
+			console.error = consoleError;
+			dom.window.removeEventListener("error", onError);
+		}
+		assert.ok(
+			errors.some((error) => message.test((error as Error)?.message ?? "")),
 		);
-	}
-	const errors: unknown[] = [];
-	const onError = (event: ErrorEvent) => {
-		errors.push(event.error);
-		event.preventDefault();
-	};
-	dom.window.addEventListener("error", onError);
-	const consoleError = console.error;
-	console.error = () => {};
-	try {
-		await render(h(Status)).catch((error) => errors.push(error));
-	} finally {
-		console.error = consoleError;
-		dom.window.removeEventListener("error", onError);
-	}
-	assert.ok(
-		errors.some((error) =>
-			/Render AuthProvider/.test((error as Error)?.message ?? ""),
-		),
-	);
-});
+	});
 
 test("SessionOutlet keeps child routes through profile updates and swaps them on account changes", async () => {
 	const auth = newClient();
 	await signIn(auth);
-	const { useAuth } = binding.createAuthHooks({
-		useClient: routerBinding.useRouterAuth as () => Client,
-	});
+	const useAuth =
+		routerBinding.useAuth as unknown as AuthHooks<Client>["useAuth"];
 	let homeMounts = 0;
 	function Home() {
 		const email = useAuth((state) => state.user?.email);

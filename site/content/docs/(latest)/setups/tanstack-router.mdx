@@ -6,7 +6,9 @@ description: Keep the client in Router context, guard private routes before they
 In this guide, you add TanStack Router to the app from Getting started: a
 sign-in route, private routes that redirect signed-out users, and hooks that
 read the client from the Router. Guards run in `beforeLoad`, before a private
-route loads or renders, and the hooks need no `AuthProvider`.
+route loads or renders. The hooks come from
+`@monarcode/session-kit/tanstack-router`, typed by the Router you register,
+and need no `AuthProvider`.
 
 A complete app is in
 [`examples/tanstack-router`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-router).
@@ -46,34 +48,16 @@ export default defineConfig({
 
 The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
 
-## 1. Create the hooks
-
-Create hooks that read the client from Router context. They replace Getting
-started's `src/hooks.ts`:
-
-```ts title="src/hooks.ts"
-import { createAuthHooks } from "@monarcode/session-kit/react";
-import { useRouterAuth } from "@monarcode/session-kit/tanstack-router";
-
-// Reads the client from Router context, so no provider is needed.
-export const { useAuth, useAuthClient } = createAuthHooks({
-  useClient: useRouterAuth,
-});
-```
-
-Routes take the place of Getting started's `src/app.tsx`. Registering the
-Router in step 5 gives the hooks your user type.
-
-## 2. Type the root route
+## 1. Type the root route
 
 The root route declares that Router context holds the client, so every guard
 gets a typed `context.auth`:
 
 ```tsx title="src/routes/__root.tsx"
+import { useAuth } from "@monarcode/session-kit/tanstack-router";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 
 import type { AppAuth } from "../auth.js";
-import { useAuth } from "../hooks.js";
 
 export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
   component: Root,
@@ -92,7 +76,7 @@ function Root() {
 }
 ```
 
-## 3. Add the sign-in route
+## 2. Add the sign-in route
 
 The sign-in route renders the form from Getting started, and sends the user
 on to the page they asked for:
@@ -130,7 +114,7 @@ Pass `{ loginPath }` if sign-in lives somewhere other than `/login`.
 `redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
 same way.
 
-## 4. Guard private routes
+## 3. Guard private routes
 
 Guard private routes with a pathless layout. Its child routes are guarded
 without `authenticated` appearing in their URLs:
@@ -139,13 +123,12 @@ without `authenticated` appearing in their URLs:
 import {
   requireSession,
   SessionOutlet,
+  useAuthClient,
 } from "@monarcode/session-kit/tanstack-router";
 import {
   createFileRoute,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-
-import { useAuthClient } from "../hooks.js";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ context, location }) =>
@@ -181,9 +164,8 @@ Child routes read the session from route context, where `user` is typed and
 never `null`:
 
 ```tsx title="src/routes/_authenticated/index.tsx"
+import { useAuthClient } from "@monarcode/session-kit/tanstack-router";
 import { createFileRoute } from "@tanstack/react-router";
-
-import { useAuthClient } from "../../hooks.js";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Home,
@@ -203,7 +185,7 @@ function Home() {
 }
 ```
 
-## 5. Create and connect the Router
+## 4. Create and connect the Router
 
 Create the Router with the client in its context, then connect the two:
 
@@ -235,7 +217,10 @@ declare module "@tanstack/react-router" {
 app, and one thing more: when the session changes, it runs the guards again,
 so a sign-out in another tab redirects this one.
 
-## 6. Render the app
+Registering the Router also types `useAuth` and `useAuthClient` with your
+client. Until it's registered, they're typed `never`.
+
+## 5. Render the app
 
 Render the Router:
 
@@ -269,9 +254,7 @@ the pages go:
 ```tsx title="src/dashboard.tsx"
 import { useState } from "react";
 
-import { SessionOutlet } from "@monarcode/session-kit/tanstack-router";
-
-import { useAuth } from "./hooks.js";
+import { SessionOutlet, useAuth } from "@monarcode/session-kit/tanstack-router";
 
 /** The guarded route's component: `component: Dashboard`. */
 export function Dashboard() {

@@ -2,11 +2,22 @@
 
 import type { ReactNode } from "react";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
 import { useRouter } from "next/navigation";
 
-import { createAppAuth, type AppSession } from "../lib/auth/client";
-import { AuthProvider } from "./hooks";
+import {
+	createAppAuth,
+	type AppAuth,
+	type AppSession,
+} from "../lib/auth/client";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: AppAuth;
+	}
+}
 
 /**
  * Gives Client Components the session the layout read. `useMirrorAuth`

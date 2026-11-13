@@ -8,8 +8,7 @@ Start. The server signs in, refreshes the tokens before rendering, and sends
 the signed-in page first, so the browser never shows a "Checking session…"
 state or a flash of signed-out content. The browser holds a small client that
 mirrors the session, and the
-[hooks](/docs/getting-started#4-read-the-session-in-react)
-and the [TanStack Router guards](/docs/setups/tanstack-router) work with it.
+[TanStack Router hooks and guards](/docs/setups/tanstack-router) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
 For TanStack Start in SPA mode, where the browser keeps the session, follow
@@ -259,7 +258,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 ```
 
-[Guard private routes](/docs/setups/tanstack-router#4-guard-private-routes)
+[Guard private routes](/docs/setups/tanstack-router#3-guard-private-routes)
 explains `SessionOutlet`, and an error component for a failed refresh.
 
 Guards decide what a page shows. Server functions that return private data
@@ -290,6 +289,9 @@ export async function signIn(
   }
 }
 ```
+
+In a component, `useAuthClient` from `@monarcode/session-kit/tanstack-router`
+gives you `auth`, from Router context.
 
 In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, for

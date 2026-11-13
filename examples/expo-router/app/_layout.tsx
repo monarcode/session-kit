@@ -1,8 +1,17 @@
 import { SessionGate } from "@monarcode/session-kit/expo";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SplashScreen, Stack } from "expo-router";
 
-import { auth, AuthProvider, useAuth } from "../src/auth";
+import { auth } from "../src/auth";
 import { Unavailable } from "../src/unavailable";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 // Keeps the splash screen up until SessionGate hides it.
 void SplashScreen.preventAutoHideAsync();

@@ -15,8 +15,8 @@ This page builds the
 [`expo-router` example app](https://github.com/monarcode/session-kit/tree/main/examples/expo-router)
 from scratch. It signs in against
 [DummyJSON's auth API](https://dummyjson.com/docs/auth), so it runs as
-written. Its `src/auth.ts` takes the place of Getting started's `backend.ts`,
-`auth.ts` and `hooks.ts`. [Using the client](/docs/client),
+written. Its `src/auth.ts` takes the place of Getting started's `backend.ts`
+and `auth.ts`. [Using the client](/docs/client),
 [Refresh](/docs/configuration/refresh) and
 [Errors](/docs/configuration/errors) explain how the client works. This page
 covers what differs on Expo.
@@ -63,7 +63,6 @@ as on the web:
 import { createAuth } from "@monarcode/session-kit";
 import { secureStorage } from "@monarcode/session-kit/expo";
 import { createAuthFetch } from "@monarcode/session-kit/http";
-import { createAuthHooks } from "@monarcode/session-kit/react";
 import { z } from "zod";
 
 const API = "https://dummyjson.com";
@@ -99,9 +98,6 @@ export const auth = createAuth({
   },
 });
 
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<typeof auth>();
-
 export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });
 
 export async function signInWithPassword(username: string, password: string) {
@@ -122,14 +118,23 @@ export async function signInWithPassword(username: string, password: string) {
 
 `SessionGate` goes inside `AuthProvider`, around the root navigator. Guard the
 screens with `Stack.Protected`. Signed-in users see the `(app)` group, and
-everyone else sees `login`:
+everyone else sees `login`. Register the client's type here too, so the hooks
+from `@monarcode/session-kit/react` carry your user:
 
 ```tsx title="app/_layout.tsx"
 import { SessionGate } from "@monarcode/session-kit/expo";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SplashScreen, Stack } from "expo-router";
 
-import { auth, AuthProvider, useAuth } from "../src/auth";
+import { auth } from "../src/auth";
 import { Unavailable } from "../src/unavailable";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 // Keeps the splash screen up until SessionGate hides it.
 void SplashScreen.preventAutoHideAsync();
@@ -278,7 +283,9 @@ Its first screen shows the user's name, fetches their email, and signs out:
 import { useEffect, useState } from "react";
 import { Button, Text, View } from "react-native";
 
-import { authFetch, useAuth, useAuthClient } from "../../src/auth";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
+
+import { authFetch } from "../../src/auth";
 
 export default function Home() {
   const firstName = useAuth((state) => state.user?.firstName);
@@ -644,7 +651,9 @@ import { Button, Text, View } from "react-native";
 
 import { Link } from "expo-router";
 
-import { auth, useAuth } from "../src/auth";
+import { useAuth } from "@monarcode/session-kit/react";
+
+import { auth } from "../src/auth";
 import { loadKey } from "../src/session-key";
 
 export default function WelcomeBack() {

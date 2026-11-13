@@ -8,12 +8,20 @@ import {
 } from "react-router";
 
 import { safeReturnTo } from "@monarcode/session-kit";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
 
 import { auth } from "./auth";
-import { AuthProvider, useAuth } from "./hooks";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 /**
  * Doesn't navigate after `signIn`: the state change re-renders this page,

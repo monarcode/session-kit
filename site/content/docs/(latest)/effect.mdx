@@ -136,11 +136,11 @@ export const refreshSession = (refreshToken: string, signal: AbortSignal) =>
 ## 3. Register the client
 
 Create the client as usual, then register its type once, so every Effect
-carries your user:
+carries your user. The same registration types the hooks from
+`@monarcode/session-kit/react`:
 
 ```ts title="src/auth.ts"
 import { createAuth, webStorage } from "@monarcode/session-kit";
-import { createAuthHooks } from "@monarcode/session-kit/react";
 
 import { userSchema } from "./backend.js";
 import { refreshSession } from "./refresh.js";
@@ -152,10 +152,7 @@ export const auth = createAuth({
   refresh: ({ refreshToken, signal }) => refreshSession(refreshToken, signal),
 });
 
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<typeof auth>();
-
-declare module "@monarcode/session-kit/effect" {
+declare module "@monarcode/session-kit" {
   interface Register {
     auth: typeof auth;
   }
@@ -405,8 +402,8 @@ and its requests in flight, and renders the tree with a new one:
 import type { ReactNode } from "react";
 
 import { QueryProvider } from "@monarcode/effetch-query/react";
+import { useAuth } from "@monarcode/session-kit/react";
 
-import { useAuth } from "./auth.js";
 import { makeQueryClient } from "./query.js";
 
 export function Queries({ children }: { children: ReactNode }) {
@@ -432,10 +429,10 @@ queries and mutations made of them:
 ```tsx title="src/features/account.tsx"
 import * as Fetch from "@monarcode/effetch";
 import { useMutation, useQuery } from "@monarcode/effetch-query/react";
+import { useAuthClient } from "@monarcode/session-kit/react";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
 
-import { useAuthClient } from "../auth.js";
 import { SessionUser, SignInResponse } from "../backend.js";
 import { api } from "../query.js";
 

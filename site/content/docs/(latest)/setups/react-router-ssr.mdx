@@ -276,22 +276,13 @@ export function createAppAuth(initial: AppSession | null) {
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
 
-Create the hooks, typed by that client:
-
-```ts title="app/hooks.ts"
-import { createAuthHooks } from "@monarcode/session-kit/react";
-
-import type { AppAuth } from "./auth/client";
-
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<AppAuth>();
-```
-
 The root route runs the middleware and reads the session, and its component
 creates the client with `useMirrorAuth` from `@monarcode/session-kit/react`:
 once per request on the server, never at module level. It keeps the client
 and the server in step both ways, running loaders again with `revalidate`
-from `useRevalidator()` when the session changes in the browser:
+from `useRevalidator()` when the session changes in the browser. Register the
+client's type here, where you render `AuthProvider`, so the hooks carry your
+user:
 
 ```tsx title="app/root.tsx"
 import type { ReactNode } from "react";
@@ -305,13 +296,19 @@ import {
   type LoaderFunctionArgs,
 } from "react-router";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 
-import { createAppAuth } from "./auth/client";
+import { createAppAuth, type AppAuth } from "./auth/client";
 import { sessionMiddleware } from "./auth/middleware.server";
 import { serverAuth } from "./auth/session.server";
-import { AuthProvider } from "./hooks";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: AppAuth;
+  }
+}
 
 export const middleware = sessionMiddleware;
 
@@ -379,7 +376,7 @@ export default function Protected() {
 A page nested in it reads the user as usual:
 
 ```tsx title="app/routes/home.tsx"
-import { useAuth } from "../hooks";
+import { useAuth } from "@monarcode/session-kit/react";
 
 export default function Home() {
   const user = useAuth((state) => state.user);

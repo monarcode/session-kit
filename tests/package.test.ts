@@ -14,7 +14,13 @@ import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { nextJar, proxyJar } from "@monarcode/session-kit/next";
-import { createAuthHooks, useMirrorAuth } from "@monarcode/session-kit/react";
+import {
+	AuthProvider,
+	createAuthHooks,
+	useAuth,
+	useAuthClient,
+	useMirrorAuth,
+} from "@monarcode/session-kit/react";
 import {
 	requireSession as requireLoaderSession,
 	SessionOutlet as RouterSessionOutlet,
@@ -30,7 +36,8 @@ import {
 	redirectIfSignedIn,
 	requireSession,
 	SessionOutlet,
-	useRouterAuth,
+	useAuth as useRouterState,
+	useAuthClient as useRouterClient,
 } from "@monarcode/session-kit/tanstack-router";
 import {
 	connectSession,
@@ -55,11 +62,15 @@ test("all public entry points import without browser globals", () => {
 		proxyJar,
 		useMirrorAuth,
 		createAuthHooks,
+		AuthProvider,
+		useAuth,
+		useAuthClient,
 		connectAuth,
 		requireSession,
 		redirectIfSignedIn,
 		SessionOutlet,
-		useRouterAuth,
+		useRouterState,
+		useRouterClient,
 		requireLoaderSession,
 		RouterSessionOutlet,
 		useAuthRevalidation,
@@ -161,6 +172,6 @@ test("TanStack Router declarations retain consumer Router registration", async (
 		"utf8",
 	);
 	assert.match(declarations, /Register extends/);
-	assert.match(declarations, /useRouterAuth\(\): RegisteredAuth/);
-	assert.doesNotMatch(declarations, /useRouterAuth\(\): any/);
+	assert.match(declarations, /useAuthClient\(\): RouterAuth/);
+	assert.doesNotMatch(declarations, /useAuthClient\(\): any/);
 });

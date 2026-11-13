@@ -3,9 +3,9 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 import { API } from "../lib/auth/api";
-import { useAuth, useAuthClient } from "./hooks";
 
 /**
  * The sign-in form, prefilled with DummyJSON's documented test user. Once

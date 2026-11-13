@@ -1,13 +1,13 @@
 import { useState, type FormEvent } from "react";
 
 import { useMutation, useQuery } from "@monarcode/effetch-query/react";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
 import * as Exit from "effect/Exit";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 
 import { expiresInMins } from "./auth";
 import { profileQuery, signInMutation } from "./endpoints";
 import { apiErrorMessage } from "./error-message";
-import { useAuth, useAuthClient } from "./hooks";
 
 /** The sign-in form, prefilled with DummyJSON's documented test user. */
 export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {

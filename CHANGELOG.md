@@ -13,6 +13,25 @@
   replaces the ky recipe built on hooks, and keeps the axios interceptors for
   an instance on axios's default adapter.
 - `UseMirrorAuthOptions`, the type of `useMirrorAuth`'s options.
+- Hooks without a hooks file. `@monarcode/session-kit/react` exports
+  `AuthProvider`, `useAuth` and `useAuthClient`, typed by the client you
+  register once in `Register`, from `@monarcode/session-kit`. Until you
+  register one, `AuthProvider` takes any client, and the user is `unknown`.
+  `ProvidedAuth` names the client they use.
+  `createAuthHooks` stays, for an app with several clients.
+
+  ```ts
+  declare module "@monarcode/session-kit" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  ```
+
+- `@monarcode/session-kit/tanstack-router` exports `useAuth` and
+  `useAuthClient`, which read the client from Router context and are typed
+  by the Router you register. They need no `AuthProvider` and no
+  registration of their own.
 
 ### Changed
 
@@ -83,6 +102,37 @@
   const router = createRouter({ routeTree, context: { auth } });
   connectSession(router);
   ```
+
+- **Breaking:** `Register` and `RegisteredAuth` moved from
+  `@monarcode/session-kit/effect` to `@monarcode/session-kit`, so one
+  registration types the hooks and the Effect service. Change the module you
+  augment. The other `Registered…` types stay in `./effect`. Register a
+  client from `createAuth` or `createMirrorAuth`: anything else now types the
+  hooks and the Effect service as `never`, where the Effect service used to
+  fall back to an `unknown` user.
+
+  ```ts
+  // Before
+  declare module "@monarcode/session-kit/effect" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  // After
+  declare module "@monarcode/session-kit" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  ```
+
+- **Breaking:** in `@monarcode/session-kit/tanstack-router`, `useRouterAuth`
+  is now `useAuthClient`, and `RegisteredAuth` is now `RouterAuth`, so it
+  isn't confused with the main entry point's. When `auth` is optional in
+  Router context, `useAuthClient` returns the client without `undefined`, as
+  it throws when there's none. A hooks file made with
+  `createAuthHooks({ useClient: useRouterAuth })` can go: import `useAuth`
+  and `useAuthClient` from `@monarcode/session-kit/tanstack-router` instead.
 
 - The guides moved to the documentation site,
   [session-kit.pages.dev](https://session-kit.pages.dev), with an API

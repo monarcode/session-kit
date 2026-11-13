@@ -155,7 +155,6 @@ const GETTING_STARTED = {
 		"src/backend.ts",
 		"src/auth.ts",
 		"src/sign-in.tsx",
-		"src/hooks.ts",
 		"src/app.tsx",
 		"src/api.ts",
 	],
@@ -202,12 +201,7 @@ export const documents = [
 		fixtures: {},
 		shared: {
 			from: page("getting-started"),
-			files: [
-				"src/backend.ts",
-				"src/auth.ts",
-				"src/hooks.ts",
-				"src/sign-in.tsx",
-			],
+			files: ["src/backend.ts", "src/auth.ts", "src/sign-in.tsx"],
 			// Framework mode keeps its code in `app`.
 			directories: ["src", "app"],
 		},

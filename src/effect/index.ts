@@ -4,8 +4,6 @@ export { AuthFailure } from "./failure.js";
 export type {
 	AuthLayerClient,
 	AuthServiceClient,
-	Register,
-	RegisteredAuth,
 	RegisteredSession,
 	RegisteredSignIn,
 	RegisteredState,

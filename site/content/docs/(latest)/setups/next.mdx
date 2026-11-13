@@ -235,33 +235,33 @@ export function createAppAuth(session: AppSession | null) {
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
 
-Create the hooks, typed by that client:
-
-```ts title="app/hooks.ts"
-import { createAuthHooks } from "@monarcode/session-kit/react";
-
-import type { AppAuth } from "../lib/auth/client";
-
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<AppAuth>();
-```
-
 `useMirrorAuth` from `@monarcode/session-kit/react` creates the client in a
 Client Component, once per request on the server, never at module level. It
 keeps the client and the server in step both ways, rendering Server
 Components again with `router.refresh()` when the session changes in the
-browser:
+browser. Register the client's type where you render `AuthProvider`, so the
+hooks carry your user:
 
 ```tsx title="app/providers.tsx"
 "use client";
 
 import type { ReactNode } from "react";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react";
+import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
 import { useRouter } from "next/navigation";
 
-import { createAppAuth, type AppSession } from "../lib/auth/client";
-import { AuthProvider } from "./hooks";
+import {
+  createAppAuth,
+  type AppAuth,
+  type AppSession,
+} from "../lib/auth/client";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: AppAuth;
+  }
+}
 
 export function Providers(props: {
   session: AppSession | null;
@@ -341,7 +341,7 @@ The form is a Client Component that calls the client's `signIn`:
 
 import { useState, type FormEvent } from "react";
 
-import { useAuthClient } from "../hooks";
+import { useAuthClient } from "@monarcode/session-kit/react";
 
 export function SignInForm() {
   const auth = useAuthClient();

@@ -8,9 +8,11 @@ const examples = join(import.meta.dirname, "..", "examples");
 // Each example app stands alone, so these files are copies rather than
 // imports. Edit one, then copy it to the rest.
 const copies = {
-	"the UI": [
+	"the TanStack Router UI": [
 		"tanstack-router/src/ui.tsx",
 		"tanstack-start-spa/src/ui.tsx",
+	],
+	"the React Router UI": [
 		"react-router-declarative/src/ui.tsx",
 		"react-router-data/src/ui.tsx",
 		"react-router-framework-spa/app/ui.tsx",
@@ -19,12 +21,6 @@ const copies = {
 		"tanstack-router/src/auth.ts",
 		"react-router-declarative/src/auth.ts",
 		"react-router-framework-spa/app/auth.ts",
-	],
-	"the TanStack Router hooks": [
-		"tanstack-router/src/hooks.ts",
-		"tanstack-start-spa/src/hooks.ts",
-		"tanstack-start-spa-effetch/src/hooks.ts",
-		"tanstack-start-ssr/src/hooks.ts",
 	],
 	"the TanStack Router guarded layout": [
 		"tanstack-router/src/routes/_authenticated.tsx",
@@ -50,11 +46,6 @@ const copies = {
 	"the TanStack Start SPA settings": [
 		"tanstack-start-spa/src/start.ts",
 		"tanstack-start-spa-effetch/src/start.ts",
-	],
-	"the React Router hooks": [
-		"react-router-declarative/src/hooks.ts",
-		"react-router-data/src/hooks.ts",
-		"react-router-framework-spa/app/hooks.ts",
 	],
 	"the DummyJSON address": [
 		"tanstack-start-ssr/src/auth/api.ts",

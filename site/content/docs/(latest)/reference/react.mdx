@@ -13,11 +13,25 @@ Guide: [Read the session in React](/docs/getting-started#4-read-the-session-in-r
 
 ### createAuthHooks
 
-Creates React hooks typed for one auth client. Each call has its own context, so an app with several clients calls it once per client. With TanStack Router, pass `useRouterAuth` as `useClient` instead of rendering `AuthProvider`. See [`AuthHooksOptions`](#authhooksoptions).
+Creates React hooks typed for one auth client. Use it when an app has several clients: each call has its own context, so call it once per client. With one client, register it and use [`useAuth`](#useauth), [`useAuthClient`](#useauthclient) and [`AuthProvider`](#authprovider) instead.
+
+### useAuth
+
+Reads the current auth state, or the part `selector` picks, and re-renders when it changes. With a selector, it re-renders only when that part changes.
+
+### useAuthClient
+
+Returns the client of the nearest [`AuthProvider`](#authprovider), for actions such as `signIn` and `signOut`. It's typed by the client you register in `Register`, from `@monarcode/session-kit` ([`ProvidedAuth`](#providedauth)).
 
 ### useMirrorAuth
 
 Creates a `createMirrorAuth` client once, from the session the page was rendered with, and keeps it in step with your server. Call it in the component that renders `AuthProvider`.
+
+## Components
+
+### AuthProvider
+
+Gives a client to the hooks below it, and mounts it while rendered, which starts expiry timers and following other tabs. Render it once, around your app.
 
 ## Types
 
@@ -48,6 +62,10 @@ Props for the `AuthProvider` that [`createAuthHooks`](#createauthhooks) returns.
 ### AuthSource
 
 What the React bindings need from an auth client: its `state`, and `mount` to start background work while rendered. A `createAuth` or `createMirrorAuth` client fits.
+
+### ProvidedAuth
+
+The client `AuthProvider` takes and `useAuthClient` returns: the one you register in `Register`, from `@monarcode/session-kit`.
 
 ### StateOf
 

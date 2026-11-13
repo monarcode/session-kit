@@ -8,7 +8,8 @@ import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 
 import { AuthError, toAuthError } from "../core/errors.js";
-import type { AuthClient, Credentials } from "../core/types.js";
+import type { Register, RegisteredAuth } from "../core/register.js";
+import type { Credentials } from "../core/types.js";
 import type { RequestAuth } from "../server/auth.js";
 import {
 	type AuthFailure,
@@ -16,63 +17,6 @@ import {
 	fromPromise,
 	unauthenticated,
 } from "./failure.js";
-
-/**
- * Register your client's type here, once, so `Auth`'s Effects carry your
- * user. Without it, the user is typed `unknown`. The same registration
- * types `Auth` on the server, where {@link Auth.layer} takes a
- * `serverAuth.forRequest(jar)` view.
- *
- * @example
- * ```ts
- * import { createAuth, memoryStorage } from "@monarcode/session-kit";
- * import { Auth } from "@monarcode/session-kit/effect";
- * import { z } from "zod";
- *
- * export const auth = createAuth({
- * 	name: "app",
- * 	user: z.object({ id: z.string(), name: z.string() }),
- * 	storage: memoryStorage(),
- * });
- *
- * declare module "@monarcode/session-kit/effect" {
- * 	interface Register {
- * 		auth: typeof auth;
- * 	}
- * }
- *
- * export const AuthLive = Auth.layer(auth);
- * ```
- *
- * @example
- * A `createMirrorAuth` client, made per request with server rendering,
- * registers its type the same way:
- * ```ts
- * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
- * import { Auth } from "@monarcode/session-kit/effect";
- *
- * declare function getSessionFn(): Promise<Session<{ id: number }> | null>;
- *
- * export const createAppAuth = () =>
- * 	createMirrorAuth({
- * 		name: "app",
- * 		session: null,
- * 		revalidate: getSessionFn,
- * 		signOut: async () => {},
- * 	});
- *
- * declare module "@monarcode/session-kit/effect" {
- * 	interface Register {
- * 		auth: ReturnType<typeof createAppAuth>;
- * 	}
- * }
- *
- * export const layer = () => Auth.layer(createAppAuth());
- * ```
- *
- * @since 0.1.0
- */
-export interface Register {}
 
 /**
  * What `Auth` needs from a client. Any `createAuth` or `createMirrorAuth`
@@ -115,26 +59,6 @@ export type AuthServiceClient = {
 };
 
 /**
- * The client registered in {@link Register}, or a client with an `unknown`
- * user when none is.
- *
- * @example
- * ```ts
- * import type { RegisteredAuth } from "@monarcode/session-kit/effect";
- *
- * declare const client: RegisteredAuth;
- * export const status = client.state.get().status;
- * ```
- *
- * @since 0.1.0
- */
-export type RegisteredAuth = Register extends {
-	readonly auth: infer Client extends AuthServiceClient;
-}
-	? Client
-	: AuthClient<unknown, unknown>;
-
-/**
  * What {@link Auth.layer} takes. Once you register a client in
  * {@link Register}, that's your client, or on the server a
  * `serverAuth.forRequest(jar)` view with the same user. Until then, it's any
@@ -151,7 +75,7 @@ export type RegisteredAuth = Register extends {
  * @since 0.1.0
  */
 export type AuthLayerClient = Register extends {
-	readonly auth: AuthServiceClient;
+	readonly auth: object;
 }
 	?
 			| RegisteredAuth
@@ -241,8 +165,8 @@ export type RegisteredUserInput = RegisteredAuth extends {
  * an access token for API calls, sign in and out, update the user, and
  * stream state changes.
  *
- * Provide it with {@link Auth.layer}. Register your client's type in
- * {@link Register} so the Effects carry your user.
+ * Provide it with {@link Auth.layer}. Register your client's type in the
+ * main entry point's {@link Register}, so the Effects carry your user.
  *
  * Each Effect fails with an {@link AuthFailure} whose `code` is the client's
  * `AuthErrorCode`. An Effect dies on misuse (`INVALID_OPTIONS`).

@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 
 import { QueryProvider } from "@monarcode/effetch-query/react";
+import { useAuth } from "@monarcode/session-kit/tanstack-router";
 import {
 	createRootRouteWithContext,
 	HeadContent,
@@ -10,7 +11,6 @@ import {
 } from "@tanstack/react-router";
 
 import type { auth } from "../auth";
-import { useAuth } from "../hooks";
 import { makeQueryClient } from "../query";
 
 export const Route = createRootRouteWithContext<{ auth: typeof auth }>()({

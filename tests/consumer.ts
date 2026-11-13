@@ -50,6 +50,7 @@ import {
 	routerJar,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
+import * as react from "../dist/react/index.js";
 import {
 	createAuthHooks,
 	useMirrorAuth,
@@ -64,7 +65,9 @@ import {
 	connectAuth,
 	requireSession,
 	SessionOutlet,
-	useRouterAuth,
+	useAuth,
+	useAuthClient,
+	type RouterAuth,
 } from "../dist/tanstack-router/index.js";
 import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
 import { startJar } from "../dist/tanstack-start/server.js";
@@ -88,7 +91,8 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-declare module "../dist/effect/index.js" {
+// One registration types the hooks from `./react` and the Effect service.
+declare module "../dist/index.js" {
 	interface Register {
 		auth: typeof auth;
 	}
@@ -119,10 +123,33 @@ void [fakeFetch, plainFetch, asFetch, asKyFetch, asOpenApiFetch];
 // @ts-expect-error: a path is required.
 void authFetch();
 
-// Provider-free hooks typed by the registered Router.
-const { useAuth, useAuthClient } = createAuthHooks({
-	useClient: useRouterAuth,
-});
+// TanStack Router's hooks, typed by the registered Router.
+const routerClient: typeof auth = useAuthClient();
+const routerAuth: RouterAuth = routerClient;
+void routerAuth;
+// The hooks from `./react`, typed by the registered client.
+const registeredClient: typeof auth = react.useAuthClient();
+const registeredEmail: string | undefined = react.useAuth(
+	(state) => state.user?.email,
+);
+const registeredState: AuthState<z.output<typeof userSchema>> = react.useAuth();
+void [registeredClient, registeredEmail, registeredState];
+react.AuthProvider({ client: auth });
+// @ts-expect-error User fields come from the registered client's schema.
+react.useAuth((state) => state.user?.missing);
+// @ts-expect-error Without a selector, it returns the state, whatever is asked.
+const notState: string = react.useAuth();
+// @ts-expect-error Without a selector, it takes no type argument.
+react.useAuth<number>();
+// @ts-expect-error The router's hook returns the state too.
+const notRouterState: string = useAuth();
+void [notState, notRouterState];
+// The rest of `createAuthHooks`, for an app with several clients.
+const fromRouter = createAuthHooks({ useClient: useAuthClient });
+const routerEmail: string | undefined = fromRouter.useAuth(
+	(state) => state.user?.email,
+);
+void routerEmail;
 // Hooks for an explicit client type, with a provider.
 const provided = createAuthHooks<typeof auth>();
 provided.AuthProvider({ client: auth });
@@ -133,6 +160,8 @@ const otherAuth = createAuth({
 });
 // @ts-expect-error The provider takes the client these hooks were made for.
 provided.AuthProvider({ client: otherAuth });
+// @ts-expect-error So does the registered one.
+react.AuthProvider({ client: otherAuth });
 SessionOutlet({ pending: "Checking session…" });
 
 async function guard() {

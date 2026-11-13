@@ -20,8 +20,7 @@ rendering, follow
 ## Before you begin
 
 Follow [Getting started](/docs/getting-started) through step 4. This guide
-uses its client in `src/auth.ts`, its hooks in `src/hooks.ts`, and its form in
-`src/sign-in.tsx`.
+uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
 
 ## Installation
 
@@ -37,12 +36,14 @@ React Router 7 and 8 both work.
 
 In every mode, `AuthProvider` goes around the router. It mounts the client in
 a layout effect, so with `localStorage` and a synchronous schema, the session
-is restored before the first paint. Nothing starts on a server.
+is restored before the first paint. Nothing starts on a server. Register the
+client where you render it, as in Getting started, and the hooks from
+`@monarcode/session-kit/react` carry your user.
 
 Every mode on this page protects the same page:
 
 ```tsx title="src/home.tsx"
-import { useAuth, useAuthClient } from "./hooks.js";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 export function Home() {
   const user = useAuth((state) => state.user);
@@ -75,13 +76,20 @@ import {
 } from "react-router";
 
 import { safeReturnTo } from "@monarcode/session-kit";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
 
 import { auth } from "./auth.js";
 import { Home } from "./home.js";
-import { AuthProvider, useAuth } from "./hooks.js";
 import { SignIn } from "./sign-in.js";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 /** The guard: its child routes render only while someone is signed in. */
 function Private() {
@@ -153,6 +161,7 @@ import {
 } from "react-router";
 
 import { safeReturnTo } from "@monarcode/session-kit";
+import { useAuthClient } from "@monarcode/session-kit/react";
 import {
   redirectIfSignedIn,
   requireSession,
@@ -162,7 +171,6 @@ import {
 
 import { auth } from "./auth.js";
 import { Home } from "./home.js";
-import { useAuthClient } from "./hooks.js";
 import { SignIn } from "./sign-in.js";
 
 /** Runs the loaders again when auth changes, and with them the guards. */
@@ -234,11 +242,18 @@ Then render the router inside the provider, in `src/main.tsx`:
 import { StrictMode } from "react";
 import { RouterProvider } from "react-router";
 
+import { AuthProvider } from "@monarcode/session-kit/react";
 import { createRoot } from "react-dom/client";
 
 import { auth } from "./auth.js";
-import { AuthProvider } from "./hooks.js";
 import { router } from "./router.js";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -286,10 +301,17 @@ Provide the client, and watch for auth changes, in the root route:
 import type { ReactNode } from "react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
+import { AuthProvider } from "@monarcode/session-kit/react";
 import { useAuthRevalidation } from "@monarcode/session-kit/react-router";
 
 import { auth } from "./auth.js";
-import { AuthProvider } from "./hooks.js";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
@@ -333,13 +355,13 @@ Guard a layout route, and nest the private routes under it:
 ```tsx title="app/routes/protected.tsx"
 import { useRouteError } from "react-router";
 
+import { useAuthClient } from "@monarcode/session-kit/react";
 import {
   requireSession,
   SessionOutlet,
 } from "@monarcode/session-kit/react-router";
 
 import { auth } from "../auth.js";
-import { useAuthClient } from "../hooks.js";
 
 export function clientLoader({ request }: { request: Request }) {
   return requireSession(auth, { request, loginPath: "/login" });
@@ -426,9 +448,8 @@ and a top bar. Render it in the guarded route's element, with `SessionOutlet`
 where the pages go:
 
 ```tsx title="src/dashboard.tsx"
+import { useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
-
-import { useAuth } from "./hooks.js";
 
 /** The guarded route's element: `element: <Dashboard />`. */
 export function Dashboard() {
