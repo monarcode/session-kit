@@ -19,7 +19,7 @@ export function Hero({
 	config: ConfigLine[];
 }) {
 	return (
-		<section className={`${COLUMN} pt-8 pb-4 sm:pt-10 short:pt-6`}>
+		<section className={`${COLUMN} pt-8 pb-4 sm:pt-10 short:pt-5`}>
 			<h1 className={HEADLINE}>
 				<span className="block">
 					<span className="font-light text-fd-muted-foreground">

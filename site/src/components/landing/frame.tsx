@@ -22,7 +22,8 @@ export function Frame({
 		>
 			<a
 				href="#main"
-				className="sr-only border border-buffer-line bg-fd-background px-4 py-3 text-sm focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50"
+				// `not-sr-only` resets padding, so it is set for the focused state.
+				className="sr-only border border-buffer-line bg-fd-background text-sm focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-3"
 			>
 				Skip to content
 			</a>

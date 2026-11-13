@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // The same managers, in the same order, as the docs' install tabs.
 const INSTALL = [
@@ -10,9 +10,49 @@ const INSTALL = [
 
 type Manager = (typeof INSTALL)[number][0];
 
+// The chosen package manager is one choice for the whole page, so the prompt
+// in the hero and the one where the page closes agree, and it is remembered
+// for the next visit.
+const STORAGE_KEY = "session-kit:package-manager";
+const watchers = new Set<() => void>();
+let chosen: Manager | undefined;
+
+/** The saved choice, read once. Storage can be blocked: then it is npm. */
+function chosenManager(): Manager {
+	if (chosen) return chosen;
+	let saved: string | null = null;
+	try {
+		saved = localStorage.getItem(STORAGE_KEY);
+	} catch {
+		// Private windows and blocked storage: nothing was saved.
+	}
+	chosen = INSTALL.find(([name]) => name === saved)?.[0] ?? "npm";
+	return chosen;
+}
+
+function chooseManager(manager: Manager) {
+	chosen = manager;
+	try {
+		localStorage.setItem(STORAGE_KEY, manager);
+	} catch {
+		// The choice still holds for this page.
+	}
+	for (const notify of watchers) notify();
+}
+
+function watchManager(onChange: () => void) {
+	watchers.add(onChange);
+	return () => watchers.delete(onChange);
+}
+
 /** The install prompt: a package-manager switch, the command and a copy button. */
 export function Install() {
-	const [manager, setManager] = useState<Manager>("npm");
+	// The server renders npm; a saved choice shows once the page hydrates.
+	const manager = useSyncExternalStore(
+		watchManager,
+		chosenManager,
+		(): Manager => "npm",
+	);
 	// What the copy button last did: copied the command, or, where the page
 	// may not write to the clipboard, selected it for the visitor to copy.
 	const [copy, setCopy] = useState<"idle" | "copied" | "selected">("idle");
@@ -59,7 +99,7 @@ export function Install() {
 						key={name}
 						type="button"
 						aria-pressed={name === manager}
-						onClick={() => setManager(name)}
+						onClick={() => chooseManager(name)}
 						// The hit area reaches past the name: 44px tall, and half the gap
 						// to each neighbour.
 						className="relative py-1 transition-colors after:absolute after:inset-x-[-0.75rem] after:inset-y-[-0.625rem] hover:text-fd-foreground aria-pressed:text-fd-foreground aria-pressed:shadow-[inset_0_-2px_0_var(--color-fd-foreground)]"

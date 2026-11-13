@@ -90,10 +90,10 @@ export function Setups() {
 							</span>
 							{description}
 						</span>
-						<span className="flex gap-x-5 text-sm text-buffer-dim">
+						<span className="flex gap-x-5 text-sm text-buffer-dim transition-colors group-hover:text-fd-muted-foreground">
 							<span
 								aria-hidden="true"
-								className="underline-offset-4 transition-colors group-hover:text-fd-foreground group-hover:underline group-has-[[data-example]:hover]:text-buffer-dim group-has-[[data-example]:hover]:no-underline"
+								className="underline-offset-4 transition-colors group-hover:text-fd-foreground group-hover:underline group-has-[[data-example]:hover]:text-fd-muted-foreground group-has-[[data-example]:hover]:no-underline"
 							>
 								guide
 							</span>

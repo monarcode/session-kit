@@ -44,6 +44,8 @@ const MINUTE_MS = 140;
  * visitor has queued an edit.
  */
 const HURRY_MS = 25;
+/** The longest a frame counts for, in real milliseconds. */
+const MAX_FRAME_MS = 50;
 /** A short rest between cycles, in minutes of the hour. */
 const REST = 8;
 /** How long the playhead holds on a moment, so its tooltip can be read. */
@@ -336,7 +338,10 @@ export function LiveConfig({
 			let rested = false;
 			let last: number | null = null;
 			function tick(now: number) {
-				const elapsed = now - previous;
+				// A frame that took long, as in a throttled tab, counts as a short
+				// one: the hour slows down rather than jumping past a moment or
+				// the rest, where the page's own edit is made.
+				const elapsed = Math.min(now - previous, MAX_FRAME_MS);
 				previous = now;
 				const hurried = hurry.current;
 				// A hurried playhead leaves the moment it was holding on.
@@ -354,7 +359,9 @@ export function LiveConfig({
 						hurried || (stop === undefined && t < END)
 							? HURRY_MS
 							: MINUTE_MS;
-					const advanced = t + elapsed / pace;
+					let advanced = t + elapsed / pace;
+					// The hurry ends where the rest starts.
+					if (!hurried && t < END) advanced = Math.min(advanced, END);
 					if (hurried) {
 						// No holds: pass every moment on the way to the boundary.
 						while ((stops.current[next] ?? Infinity) <= advanced)
@@ -429,7 +436,8 @@ export function LiveConfig({
 
 	const shownMinute = playing ? minute : END;
 	const tip = hovered ?? (playing && visible ? held : null);
-	const readout = hovered ?? said;
+	const readout = hovered ?? (playing ? said : null);
+	const spoken = readout !== null ? happened.get(readout) : undefined;
 
 	return (
 		<>
@@ -461,7 +469,7 @@ export function LiveConfig({
 										? "Comment out the refresh option"
 										: "Restore the refresh option"
 								}
-								className={`-ms-2 flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 ps-2 text-start transition-colors max-sm:pb-1 ${
+								className={`group/line -ms-2 flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 ps-2 text-start transition-colors max-sm:pb-1 ${
 									queued !== null
 										? "bg-fd-accent/40 shadow-[inset_2px_0_0_var(--brand-lime)]"
 										: "hover:bg-fd-accent/40"
@@ -486,7 +494,7 @@ export function LiveConfig({
 										className={`px-2 ${
 											queued !== null
 												? "bg-fd-primary text-fd-primary-foreground"
-												: "text-buffer-dim"
+												: "text-buffer-dim transition-colors group-hover/line:text-fd-muted-foreground"
 										}`}
 									>
 										{queued === null && (
@@ -532,11 +540,34 @@ export function LiveConfig({
 
 				{/* The status line heads the figure: it sits by the config it reports
 				    on, and no tooltip, which opens under a lane, covers it. */}
-				<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground">
-					<figcaption id={captionId} className="text-pretty">
-						One illustrative hour, as Session kit runs it
-					</figcaption>
-					<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-buffer-dim">
+				<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground short:flex-nowrap">
+					{/* On a short screen a tooltip under the lanes would fall below
+					    the fold, so the moment is read out here, in the caption's
+					    place, with room kept for two lines. */}
+					<div className="min-w-0 short:min-h-[2lh] short:flex-1">
+						<figcaption
+							id={captionId}
+							className={`text-pretty ${spoken ? "short:sr-only" : ""}`}
+						>
+							One illustrative hour, as Session kit runs it
+						</figcaption>
+						{spoken && (
+							<p aria-hidden="true" className="hidden short:block">
+								<span className="text-fd-foreground tabular-nums">
+									{clock(readout!)}
+								</span>
+								{spoken.map((moment) => (
+									<span key={moment.lane} className="ms-4">
+										<span className="text-buffer-dim">
+											{moment.label ?? LANES[moment.lane]![0]}
+										</span>{" "}
+										{moment.text}
+									</span>
+								))}
+							</p>
+						)}
+					</div>
+					<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-buffer-dim short:shrink-0">
 						<span>{playing ? "running" : "paused"}</span>
 						<span>refresh {refresh ? "on" : "off"}</span>
 						{!refresh && shownMinute >= EXPIRES && (
@@ -550,12 +581,16 @@ export function LiveConfig({
 								{cycle}
 							</span>
 						</span>
-						<span
-							className="text-sm text-fd-foreground tabular-nums"
-							aria-hidden="true"
-						>
-							{clock(shownMinute)}
-						</span>
+						{/* A still hour shows every minute at once, so it has no
+						    time to give. */}
+						{playing && (
+							<span
+								className="text-sm text-fd-foreground tabular-nums"
+								aria-hidden="true"
+							>
+								{clock(shownMinute)}
+							</span>
+						)}
 						<button
 							type="button"
 							onClick={pauseOrPlay}
@@ -571,7 +606,7 @@ export function LiveConfig({
 						{LANES.map(([lane, kind], k) => (
 							<div
 								key={lane}
-								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-[5px] sm:grid-cols-[8rem_1fr] short:py-[3px]"
+								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-[5px] sm:grid-cols-[8rem_1fr] short:py-[2px]"
 							>
 								<span className="text-xs text-fd-muted-foreground">
 									{lane}
@@ -645,7 +680,7 @@ export function LiveConfig({
 								</div>
 							</div>
 						))}
-						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.625rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.875rem] short:[--row:1.625rem]">
+						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.625rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.875rem] short:[--row:1.5rem]">
 							<div
 								ref={head}
 								className="absolute inset-y-[-4px] w-0.5 bg-fd-primary"
@@ -683,10 +718,10 @@ export function LiveConfig({
 					    slot tall enough for any of them, so nothing under it moves. */}
 					{(playing || readout !== null) && (
 						<div className="mt-3 min-h-[7.5rem] text-xs leading-relaxed sm:hidden">
-							{readout !== null && happened.has(readout) && (
+							{spoken && (
 								<MomentLines
-									minute={readout}
-									moments={happened.get(readout)!}
+									minute={readout!}
+									moments={spoken}
 									label="text-buffer-dim"
 									text="text-fd-muted-foreground"
 								/>
@@ -761,7 +796,7 @@ function Tooltip({ minute, moments }: { minute: number; moments: Moment[] }) {
 	// Rows are a fixed height, so a lane's bottom is a multiple of --row.
 	const below = `calc(${lowest + 1} * var(--row))`;
 	return (
-		<div className="max-sm:hidden">
+		<div className="max-sm:hidden short:hidden">
 			{/* A tick from the cell's bottom, through the row's padding, down to
 			    the tip. The tip sits above the axis times, which come later in
 			    the page. */}

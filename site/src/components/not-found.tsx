@@ -21,7 +21,7 @@ export function NotFound() {
 		>
 			<main
 				id="main"
-				className={`${COLUMN} flex flex-1 flex-col pt-16 pb-24`}
+				className={`${COLUMN} flex flex-1 scroll-mt-14 flex-col pt-16 pb-24`}
 			>
 				<h1 className={`${HEADLINE} font-bold`}>
 					<span aria-hidden="true" className="font-light text-buffer-dim">

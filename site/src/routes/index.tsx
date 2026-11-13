@@ -20,6 +20,7 @@ export const Route = createFileRoute("/")({
 	loader: () => loadLanding(),
 	head: () => ({
 		meta: [
+			{ title: "Session kit: the session layer for React apps" },
 			{
 				name: "description",
 				content:
@@ -45,7 +46,7 @@ function Home() {
 				{ text: "Reference", url: "/docs/reference" },
 			]}
 		>
-			<main id="main" className="flex flex-1 flex-col">
+			<main id="main" className="flex flex-1 scroll-mt-14 flex-col">
 				<Hero version={version} config={config} />
 				<Tour steps={steps} />
 				<ScopeNote />

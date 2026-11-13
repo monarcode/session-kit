@@ -337,10 +337,13 @@ so 09:00 marks the handover.
 
 Short screens (640px and wider, at most 800px tall, such as a 1280×720
 laptop; the `short:` variant): the hero tightens so the config, the lanes
-and the axis fit in one view. It opens 24px under the navbar, the lead sits
+and the axis fit in one view. It opens 20px under the navbar, the lead sits
 12px under the H1 at a 1.625 line height, the actions 20px below, the config
 20px below that at a 1.55 line height, the hairline takes 12px either side,
-and lane rows are 26px.
+and lane rows are 24px. A tooltip under the lanes would fall below the fold
+there, so there is none: the moment the playhead last held on is read out in
+the status line, in the caption's place (the time in foreground, lane names
+in comment grey, what happened in quiet grey), with room kept for two lines.
 
 Phones (below 640px): the gutter narrows, the config's "tap to comment
 out" tag drops to its own row under the code, the version link takes its own
@@ -420,7 +423,10 @@ Set in the buffer's type, square, 48px tall.
   outline, square, at least 48px tall, a comment-grey `$`, the command in
   foreground, and a copy button inside the right edge whose label reads
   "copied" for 1.6s. Where the page may not write to the clipboard, it
-  selects the command instead and reads "selected" for 4s.
+  selects the command instead and reads "selected" for 4s. The chosen
+  package manager is one choice for the page: the hero's prompt and the
+  closing one switch together, and the choice is remembered for the next
+  visit.
 - **Focus:** carried by the copy button inside it.
 
 ### Navigation
