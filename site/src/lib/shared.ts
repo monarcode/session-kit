@@ -15,6 +15,19 @@ export const codeThemes = {
 	defaultColor: "dark",
 } as const;
 
+/** Where the site is served. Link previews need absolute URLs. */
+export const SITE_URL = "https://session-kit.pages.dev";
+
+/** A page's title and description, for the browser and for link previews. */
+export function pageMeta(title: string, description: string) {
+	return [
+		{ title },
+		{ name: "description", content: description },
+		{ property: "og:title", content: title },
+		{ property: "og:description", content: description },
+	];
+}
+
 export const gitConfig = {
 	user: "monarcode",
 	repo: "session-kit",
