@@ -127,20 +127,29 @@ const refuseRedirects = <A, E, R>(
  *
  * @example
  * ```ts
- * import * as Effect from "effect/Effect";
- * import * as FetchHttpClient from "effect/http/FetchHttpClient";
+ * import type * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  * import { sessionBearer } from "@monarcode/session-kit/effetch";
  *
  * const baseUrl = "https://api.example.com";
+ * const Profile = Schema.Struct({ email: Schema.String });
  *
  * export const makeApi = Fetch.make({
  * 	baseUrl,
  * 	plugins: [retry(), sessionBearer({ baseUrl })],
- * }).pipe(Effect.provide(FetchHttpClient.layer));
- * // Skip it for a call that needs no token:
- * // api.post("/auth/login", { body, plugins: { sessionBearer: false } })
+ * });
+ * type Api = Effect.Success<typeof makeApi>;
+ *
+ * export const getProfile = (api: Api) => api.get("/me", { output: Profile });
+ *
+ * // Signing in needs no token: skip the plugin.
+ * export const login = (api: Api, username: string, password: string) =>
+ * 	api.post("/login", {
+ * 		body: { username, password },
+ * 		plugins: { sessionBearer: false },
+ * 	});
  * ```
  *
  * @see {@link SessionBearerOptions} for `optional` and `signOutOnRepeated401`

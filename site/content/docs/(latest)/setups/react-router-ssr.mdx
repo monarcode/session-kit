@@ -6,7 +6,8 @@ description: Keep the session in an encrypted cookie in React Router's framework
 Actions sign in and out. The first response already shows the signed-in
 page, so the browser never shows a "Checking session…" state or a flash of
 signed-out content. Components get a small client that mirrors the session,
-and the [hooks](/docs/client) work with it.
+and the [hooks](/docs/getting-started#4-read-the-session-in-react) work with
+it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
 This needs React Router's middleware: React Router 8, or 7.9 and later with
@@ -29,10 +30,11 @@ server. `react-router build` doesn't need it.
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
-cookie. It takes the options `createAuth` does, except storage and locking, plus
-`secret`. Keep it in a `.server` module: React Router then refuses to bundle it
-for the browser.
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
+a cookie sealed with your `secret`.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options. Keep it in a `.server` module: React Router then refuses
+to bundle it for the browser.
 
 ```ts title="app/auth/user.ts"
 import { z } from "zod";
@@ -70,7 +72,7 @@ export const serverAuth = createServerAuth({
 });
 
 /** Signs in with your backend, from the server. */
-export async function logIn(username: string, password: string) {
+export async function login(username: string, password: string) {
   const response = await fetch(`${API}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -82,8 +84,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie, rotating the
-secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
+rotating the secret, signing out, and the limits every setup shares.
 
 ## 2. Middleware
 
@@ -154,7 +156,7 @@ import {
 import { safeReturnTo } from "@monarcode/session-kit";
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 
-import { logIn, serverAuth } from "../auth/session.server";
+import { login, serverAuth } from "../auth/session.server";
 
 export async function loader({ context, url }: LoaderFunctionArgs) {
   if (await serverAuth.getSession(routerJar(context)))
@@ -167,7 +169,7 @@ export async function action({ request, context, url }: ActionFunctionArgs) {
   try {
     await serverAuth.signIn(
       routerJar(context),
-      await logIn(String(form.get("username")), String(form.get("password"))),
+      await login(String(form.get("username")), String(form.get("password"))),
     );
   } catch (error) {
     return {
@@ -331,6 +333,9 @@ import { requireSession } from "../auth/middleware.server";
 
 export const middleware = [requireSession];
 
+// So navigation in the browser runs the middleware: see below.
+export const loader = () => null;
+
 export default function Protected() {
   return <Outlet />;
 }
@@ -348,16 +353,14 @@ export default function Home() {
 In `app/routes.ts`, nest the routes it protects:
 `layout("routes/protected.tsx", [index("routes/home.tsx")])`. During
 navigation in the browser, server middleware runs only when a route has a
-loader to fetch, so give the layout a loader if the routes below it have
-none.
+loader to fetch, so the layout has one in case the routes below it don't.
 
 Above, the server signs in with your backend, so the user in the cookie comes
 from the backend. If the browser signs in with the backend itself, have the
 action take the tokens and the user instead. It seals what it's given, as
 [Signing in](/docs/setups/tanstack-start#signing-in) on the TanStack Start
-page explains: check the
-tokens there first, or let your backend authorize requests with the access
-token.
+page explains: check the tokens there first, or let your backend authorize
+requests with the access token.
 
 ## Calling your API
 
@@ -417,8 +420,8 @@ export async function action({ request, context }: ActionFunctionArgs) {
 Then pass the client a `credentials` option: `get` posts to the route with
 no body, and `renew` posts the rejected token. The browser keeps the access
 token in memory, never the refresh token; see
-[Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser). The
-example app does this.
+[Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
+The example app does this.
 
 ## Things to know
 
@@ -437,4 +440,5 @@ example app does this.
   server again and run their loaders again. So does returning to a tab after
   a while.
 - **More.** Several server instances, the cookie's size, and plain http
-  during development: see [Server sessions](/docs/server-rendering/server-sessions).
+  during development: see
+  [Server sessions](/docs/server-rendering/server-sessions).

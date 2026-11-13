@@ -20,8 +20,9 @@ export type AuthErrorCode =
 	/**
 	 * The user couldn't be accepted. `issues` holds the schema's issues when
 	 * it rejected the user, and `cause` holds the error when something else
-	 * failed, such as an `updateUser` function. Otherwise `message` says why,
-	 * such as a user that isn't a plain JSON object.
+	 * failed, such as an `updateUser` function or, in the browser of a
+	 * server-rendered app, signing in on the server. Otherwise `message` says
+	 * why, such as a user that isn't a plain JSON object.
 	 */
 	| "USER_VALIDATION_FAILED"
 	/**
@@ -29,11 +30,16 @@ export type AuthErrorCode =
 	 * that already expired at sign-in.
 	 */
 	| "INVALID_SESSION"
-	/** Storage couldn't be read, written or cleared. */
+	/**
+	 * Storage couldn't be read, written or cleared. In the browser of a
+	 * server-rendered app, signing out on the server failed.
+	 */
 	| "PERSISTENCE_FAILED"
 	/**
 	 * The refresh failed: your refresh callback threw, or there was no
-	 * `refresh` option or refresh token to use.
+	 * `refresh` option or refresh token to use. In the browser of a
+	 * server-rendered app, reading the session or the access token from the
+	 * server failed.
 	 */
 	| "REFRESH_FAILED"
 	/**

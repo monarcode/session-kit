@@ -5,7 +5,8 @@ description: Keep the session in an encrypted cookie with TanStack Start, so the
 
 The server refreshes the tokens before rendering, so the browser never shows
 a "Checking session…" state or a flash of signed-out content. The browser
-holds a small client that mirrors the session, and the [hooks](/docs/client)
+holds a small client that mirrors the session, and the
+[hooks](/docs/getting-started#4-read-the-session-in-react)
 and the [TanStack Router guards](/docs/setups/tanstack-router) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
@@ -26,10 +27,11 @@ random characters to seal the cookie, such as from
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
-cookie. It takes the options `createAuth` does, except storage and locking, plus
-`secret`. Keep it in a server-only module: Start then refuses to bundle it for
-the browser.
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
+a cookie sealed with your `secret`.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options. Keep it in a server-only module: Start then refuses to
+bundle it for the browser.
 
 ```ts title="src/auth/server.ts"
 import "@tanstack/react-start/server-only";
@@ -59,7 +61,7 @@ export const serverAuth = createServerAuth({
 });
 
 /** Signs in with your backend, from the server. */
-export async function logIn(username: string, password: string) {
+export async function login(username: string, password: string) {
   const response = await fetch(`${API}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -71,8 +73,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie, rotating the
-secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
+rotating the secret, signing out, and the limits every setup shares.
 
 ## 2. Server functions
 
@@ -85,7 +87,7 @@ import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { logIn, serverAuth } from "./server";
+import { login, serverAuth } from "./server";
 
 export const getSessionFn = createServerFn().handler(() =>
   serverAuth.getSession(startJar()),
@@ -94,7 +96,7 @@ export const getSessionFn = createServerFn().handler(() =>
 export const signInFn = createServerFn({ method: "POST" })
   .validator(z.object({ username: z.string(), password: z.string() }))
   .handler(async ({ data }) =>
-    serverAuth.signIn(startJar(), await logIn(data.username, data.password)),
+    serverAuth.signIn(startJar(), await login(data.username, data.password)),
   );
 
 export const signOutFn = createServerFn({ method: "POST" }).handler(() =>
@@ -147,8 +149,8 @@ An app that defines `createStart` has no CSRF protection for its server
 functions until it adds `createCsrfMiddleware`. Its `filter` keeps the check
 to server-function calls: unfiltered, it also refuses page loads from links
 on other sites and from the address bar. Server routes are left out too, so
-a server route that changes the session must check the request's `Origin`
-header itself.
+a server route that changes the session must refuse other sites itself:
+compare its `Sec-Fetch-Site` header to `same-origin`.
 
 ## 4. The browser client
 
@@ -227,15 +229,21 @@ Guards are the ones from `@monarcode/session-kit/tanstack-router`. On the
 server, a redirect is a real HTTP redirect:
 
 ```tsx title="src/routes/_authenticated.tsx"
-import { requireSession } from "@monarcode/session-kit/tanstack-router";
-import { createFileRoute, Outlet } from "@tanstack/react-router";
+import {
+  requireSession,
+  SessionOutlet,
+} from "@monarcode/session-kit/tanstack-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ context, location }) =>
     requireSession(context.auth, { location, loginPath: "/login" }),
-  component: Outlet,
+  component: () => <SessionOutlet pending={<p>Loading…</p>} />,
 });
 ```
+
+[Guard private routes](/docs/setups/tanstack-router#4-guard-private-routes)
+explains `SessionOutlet`, and an error component for a failed refresh.
 
 Guards decide what a page shows. Server functions that return private data
 must check the session themselves, with `serverAuth.getSession(startJar())`
@@ -319,4 +327,5 @@ does this.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again. So does returning to a tab after a while.
 - **More.** Several server instances, the cookie's size, and plain http
-  during development: see [Server sessions](/docs/server-rendering/server-sessions).
+  during development: see
+  [Server sessions](/docs/server-rendering/server-sessions).

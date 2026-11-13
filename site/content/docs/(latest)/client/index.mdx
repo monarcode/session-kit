@@ -12,7 +12,7 @@ returned:
 | `auth.state.get()`, `.subscribe()` | Reads the [state](/docs/client/state), or follows its changes.             |
 | `auth.getSession()`                | Resolves who is signed in, restoring or refreshing first, or `null`.       |
 | `auth.signIn(tokens)`              | Saves a new session, replacing any current one.                            |
-| `auth.signOut()`                   | Ends the session in every tab and clears storage.                          |
+| `auth.signOut()`                   | Ends the session, clears storage, and tells other tabs.                    |
 | `auth.updateUser(user)`            | Replaces the user and keeps the session.                                   |
 | `auth.refresh()`                   | Refreshes now, even while the access token is usable.                      |
 | `auth.retry()`                     | Tries again after a failed refresh.                                        |

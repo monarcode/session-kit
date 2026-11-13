@@ -19,7 +19,7 @@ How errors reach your app, and how to show them:
 
 ## USER_VALIDATION_FAILED
 
-The user couldn't be accepted. `issues` holds the schema's issues when it rejected the user, and `cause` holds the error when something else failed, such as an `updateUser` function. Otherwise `message` says why, such as a user that isn't a plain JSON object.
+The user couldn't be accepted. `issues` holds the schema's issues when it rejected the user, and `cause` holds the error when something else failed, such as an `updateUser` function or, in the browser of a server-rendered app, signing in on the server. Otherwise `message` says why, such as a user that isn't a plain JSON object.
 
 ## INVALID_SESSION
 
@@ -27,11 +27,11 @@ Tokens or a saved session that can't be used, such as an access token that alrea
 
 ## PERSISTENCE_FAILED
 
-Storage couldn't be read, written or cleared.
+Storage couldn't be read, written or cleared. In the browser of a server-rendered app, signing out on the server failed.
 
 ## REFRESH_FAILED
 
-The refresh failed: your refresh callback threw, or there was no `refresh` option or refresh token to use.
+The refresh failed: your refresh callback threw, or there was no `refresh` option or refresh token to use. In the browser of a server-rendered app, reading the session or the access token from the server failed.
 
 ## REVOKE_FAILED
 

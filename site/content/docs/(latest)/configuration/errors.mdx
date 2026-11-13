@@ -7,18 +7,18 @@ Every error from Session kit's own logic is an `AuthError`, whether thrown,
 rejected with, or published in `state.error`. Match on its `code`, not its
 message:
 
-| Code                     | Meaning                                                                               |
-| ------------------------ | ------------------------------------------------------------------------------------- |
-| `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                           |
-| `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use.         |
-| `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.      |
-| `USER_VALIDATION_FAILED` | The schema rejected the user; `issues` holds its issues.                              |
-| `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.    |
-| `PERSISTENCE_FAILED`     | Storage could not be read, written, or cleared.                                       |
-| `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves. |
-| `LOCKED`                 | The session is locked: `unlock()` it first.                                           |
-| `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                   |
-| `INVALID_OPTIONS`        | Misuse: an option or argument Session kit can't use.                                  |
+| Code                     | Meaning                                                                                                                                                              |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                                                                                                          |
+| `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use. With server rendering, reading the session or the access token from the server failed. |
+| `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.                                                                                     |
+| `USER_VALIDATION_FAILED` | The user couldn't be accepted: the schema rejected it (`issues`), or, with server rendering, signing in on the server failed (`cause`).                              |
+| `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.                                                                                   |
+| `PERSISTENCE_FAILED`     | Storage could not be read, written, or cleared. With server rendering, signing out on the server failed.                                                             |
+| `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves.                                                                                |
+| `LOCKED`                 | The session is locked: `unlock()` it first.                                                                                                                          |
+| `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                                                                                                  |
+| `INVALID_OPTIONS`        | Misuse: an option or argument Session kit can't use.                                                                                                                 |
 
 [Error codes](/docs/reference/error-codes) describes each code in full.
 
@@ -31,8 +31,8 @@ import { AuthError, type AuthErrorCode } from "@monarcode/session-kit";
 
 const messages: Partial<Record<AuthErrorCode, string>> = {
   REFRESH_FAILED: "We can't reach the server. Check your connection.",
-  PERSISTENCE_FAILED: "Your browser wouldn't save the session.",
-  USER_VALIDATION_FAILED: "Your account couldn't be loaded.",
+  PERSISTENCE_FAILED: "We couldn't save or clear your session.",
+  UNAUTHENTICATED: "Sign in to continue.",
 };
 
 export function errorMessage(error: unknown): string {

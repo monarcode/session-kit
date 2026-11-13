@@ -4,8 +4,8 @@ description: Read the user from a JWT access token's claims, instead of from you
 ---
 
 If your backend puts the user in a JWT access token, read it from there with
-`fromAccessToken`. `signIn` and the refresh callback then take tokens only,
-and the user changes whenever the token does:
+`fromAccessToken`. `signIn` then takes tokens only, the refresh callback
+returns them, and the user changes whenever the token does:
 
 ```ts title="src/token-auth.ts"
 import {

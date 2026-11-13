@@ -56,8 +56,9 @@ http.interceptors.response.use(undefined, async (error: unknown) => {
     throw error;
   }
   const fresh = await auth.credentials.renew(used);
-  // Only a GET is safe to send twice. For anything else the caller decides.
-  if (!fresh || config.method !== "get") throw error;
+  // As with authFetch, only a GET or HEAD is sent twice. For anything else
+  // the caller decides.
+  if (!fresh || !["get", "head"].includes(config.method ?? "")) throw error;
   const replay: Config = { ...config, replayed: true };
   return http.request(replay);
 });

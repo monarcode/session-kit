@@ -15,8 +15,8 @@ sends the access token, and refreshes after a 401. With
 [effetch-query](https://github.com/monarcode/effetch-query) on top, each
 account gets its own cache.
 
-This page covers what Effect adds to the client. [Getting started](/docs/getting-started)
-builds the client itself, and [Refresh](/docs/configuration/refresh) and
+This page covers what Effect adds to the client.
+[Getting started](/docs/getting-started) builds the client itself, and [Refresh](/docs/configuration/refresh) and
 [Errors](/docs/configuration/errors) explain how it renews and fails. Every
 export is listed in the reference for [`./effect`](/docs/reference/effect) and
 [`./effetch`](/docs/reference/effetch). A complete app is in
@@ -39,17 +39,13 @@ pnpm add @monarcode/effetch-query @effect/atom-react
 
 ## 1. Describe your backend
 
-This is the backend from [Getting started](/docs/getting-started#1-talk-to-your-backend),
-written with Effect: an Effect Schema describes the user, and the refresh is an
-effetch call. Nothing in this file creates a Session kit client, so the
-[server](#on-the-server) can import it too.
+This is the backend from
+[Getting started](/docs/getting-started#1-talk-to-your-backend), as Effect
+Schemas: the user, the tokens, and the body DummyJSON explains a failure
+with. They're schemas only, with no client, so the rest of the app, and the
+[server](#on-the-server), import them from one place.
 
 ```ts title="src/backend.ts"
-import * as Fetch from "@monarcode/effetch";
-import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 export const API_BASE_URL = "https://dummyjson.com";
@@ -69,37 +65,56 @@ export const SessionTokens = Schema.Struct({
   refreshToken: Schema.String,
 });
 
-/**
- * `fetch`, without the tracing headers Effect adds to every request: from a
- * browser, they fail the preflight of an API that doesn't allow them.
- */
-export const FetchLive = Layer.merge(
-  FetchHttpClient.layer,
-  Layer.succeed(HttpClient.TracerPropagationEnabled, false),
-);
+/** DummyJSON returns the user's fields beside the tokens. */
+export const SignInResponse = Schema.Struct({
+  ...SessionTokens.fields,
+  ...SessionUser.fields,
+});
+
+export const ApiError = Schema.Struct({ message: Schema.String });
+```
+
+## 2. Refresh with effetch
+
+The refresh goes through a client of its own, made with its own
+`Fetch.make`. The app's API client [waits for a refresh](#requests-with-effetch)
+after a 401, so a refresh sent through it would wait for itself. It runs
+outside the app's runtime too, since that runtime is built on the session
+client this refresh belongs to, so it provides its own `FetchHttpClient`,
+which effetch sends with. The server uses it as well:
+
+```ts title="src/refresh.ts"
+import * as Fetch from "@monarcode/effetch";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+
+import { API_BASE_URL, SessionTokens } from "./backend.js";
 
 // Not the app's API client: its session plugin waits for this refresh.
 const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
 
-// `null` signs out; a failure keeps the session for a retry.
-export const refreshSession = (refreshToken: string) =>
-  Effect.gen(function* () {
-    const client = yield* makeRefreshClient;
-    return yield* client.post("/auth/refresh", {
-      body: { refreshToken },
-      output: SessionTokens,
-    });
-  }).pipe(
-    Effect.catchTag("HttpError", (error) =>
-      error.status === 401 || error.status === 403
-        ? Effect.succeed(null)
-        : Effect.fail(error),
+/** New tokens. `null` signs out; a failure keeps the session for a retry. */
+export const refreshSession = (refreshToken: string, signal: AbortSignal) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      const client = yield* makeRefreshClient;
+      return yield* client.post("/auth/refresh", {
+        body: { refreshToken },
+        output: SessionTokens,
+      });
+    }).pipe(
+      Effect.catchTag("HttpError", (error) =>
+        error.status === 401 || error.status === 403
+          ? Effect.succeed(null)
+          : Effect.fail(error),
+      ),
+      Effect.provide(FetchHttpClient.layer),
     ),
-    Effect.provide(FetchLive),
+    { signal },
   );
 ```
 
-## 2. Register the client
+## 3. Register the client
 
 Create the client as usual, then register its type once, so every Effect
 carries your user:
@@ -107,16 +122,15 @@ carries your user:
 ```ts title="src/auth.ts"
 import { createAuth, webStorage } from "@monarcode/session-kit";
 import { createAuthHooks } from "@monarcode/session-kit/react";
-import * as Effect from "effect/Effect";
 
-import { refreshSession, userSchema } from "./backend.js";
+import { userSchema } from "./backend.js";
+import { refreshSession } from "./refresh.js";
 
 export const auth = createAuth({
   name: "app",
   user: userSchema,
   storage: webStorage(),
-  refresh: ({ refreshToken, signal }) =>
-    Effect.runPromise(refreshSession(refreshToken), { signal }),
+  refresh: ({ refreshToken, signal }) => refreshSession(refreshToken, signal),
 });
 
 export const { AuthProvider, useAuth, useAuthClient } =
@@ -129,7 +143,7 @@ declare module "@monarcode/session-kit/effect" {
 }
 ```
 
-## 3. Provide the service
+## 4. Provide the service
 
 `Auth.layer` provides the client as the `Auth` service. It doesn't mount the
 client: `AuthProvider`, `SessionGate` or the router adapters do that, as
@@ -143,7 +157,7 @@ import { auth } from "./auth.js";
 export const AuthLive = Auth.layer(auth);
 ```
 
-## 4. Read the session
+## 5. Read the session
 
 `Auth.session` is the current session, refreshing expired access first. It
 fails with `UNAUTHENTICATED` when signed out. `Auth.sessionOption` gives
@@ -195,11 +209,12 @@ Code outside `Auth` that rejects with an `AuthError`, such as
 
 ## Requests with effetch
 
-The `sessionBearer` plugin does what [`createAuthFetch`](/docs/client/requests)
-does: it sends the access token to one origin, and refreshes after a 401. Put
-it last, so a retry reads the current token, and give it the client's
-`baseUrl`: the token goes only to that origin. `Fetch.make` then needs the
-`Auth` service, once:
+The app's API client is effetch's: the backend's base URL, its error body and
+the plugins every call goes through. The `sessionBearer` plugin does what
+[`createAuthFetch`](/docs/client/requests) does: it sends the access token to
+one origin, and refreshes after a 401. Put it last, so a retry reads the
+current token, and give it the client's `baseUrl`: the token goes only to
+that origin. `Fetch.make` then needs the `Auth` service, once:
 
 ```ts title="src/api.ts"
 import * as Fetch from "@monarcode/effetch";
@@ -207,17 +222,20 @@ import { retry } from "@monarcode/effetch/plugins";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 
-import { API_BASE_URL, SessionUser } from "./backend.js";
+import { API_BASE_URL, ApiError } from "./backend.js";
 
 const make = Fetch.make({
   baseUrl: API_BASE_URL,
-  // The body the API answers a failure with.
-  defaultError: Schema.Struct({ message: Schema.String }),
+  defaultError: ApiError,
   plugins: [retry(), sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
-});
+}).pipe(
+  // Effect adds tracing headers to every request, which fail the preflight
+  // of an API that doesn't allow them.
+  Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+);
 
 export class ApiClient extends Context.Service<
   ApiClient,
@@ -226,19 +244,38 @@ export class ApiClient extends Context.Service<
 
 /** The API client, over whichever `Auth` is provided. */
 export const ApiClientLive = Layer.effect(ApiClient, make);
-
-export const currentUser = Effect.gen(function* () {
-  const api = yield* ApiClient;
-  return yield* api.get("/auth/me", { output: SessionUser });
-});
 ```
 
-Calls can fail with `AuthFailure`, and skip the plugin with
-`plugins: { sessionBearer: false }`, for a public endpoint such as the sign-in
-request. When one client serves public and private endpoints, as this one
-does, give the plugin `optional: true`. A call made while signed out is then
-sent without a token, and a private endpoint answers with its own 401. A
-locked client still fails with `LOCKED`.
+Calls can fail with `AuthFailure`. When one client serves public and private
+endpoints, as this one does, give the plugin `optional: true`: a call made
+while signed out is then sent without a token, and a private endpoint
+answers with its own 401. A locked client still fails with `LOCKED`.
+
+Effect code yields the client and calls its methods: `get`, `post` and the
+rest. Signing in skips the plugin with `sessionBearer: false`: it's how the
+user gets a token.
+
+```ts title="src/user.ts"
+import * as Effect from "effect/Effect";
+
+import { ApiClient } from "./api.js";
+import { SessionUser, SignInResponse } from "./backend.js";
+
+export const currentUser = Effect.gen(function* () {
+  const client = yield* ApiClient;
+  return yield* client.get("/auth/me", { output: SessionUser });
+});
+
+export const login = (username: string, password: string) =>
+  Effect.gen(function* () {
+    const client = yield* ApiClient;
+    return yield* client.post("/auth/login", {
+      body: { username, password },
+      output: SignInResponse,
+      plugins: { sessionBearer: false },
+    });
+  });
+```
 
 With [another HTTP client](/docs/client/other-http-clients), use
 `Auth.credentials`, the access token. It's kept apart from `Auth.session`, so
@@ -247,21 +284,23 @@ code that only needs the user never holds a token. After a 401,
 
 ### One runtime
 
-One place composes the app's layers: the transport, the session, and the API
-client, made once. Everything that runs an Effect uses its runtime, as in
-`appRuntime.runPromise(currentUser)`.
+One place composes the app's layers: the API client, the session and the
+`FetchHttpClient` effetch sends with, each made once. Everything that runs an
+Effect uses its runtime, as in `appRuntime.runPromise(currentUser)`, in place of
+providing `AuthLive` as step 5 did.
 
 ```ts title="src/runtime.ts"
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+
 import { ApiClientLive } from "./api.js";
-import { FetchLive } from "./backend.js";
 import { AuthLive } from "./layer.js";
 
 const AppLayer = ApiClientLive.pipe(
   Layer.provideMerge(AuthLive),
-  Layer.provide(FetchLive),
+  Layer.provide(FetchHttpClient.layer),
 );
 
 /** One runtime for the app's lifetime. */
@@ -279,7 +318,7 @@ failure comes through unchanged:
 ```ts title="src/profile.ts"
 import { Auth } from "@monarcode/session-kit/effect";
 
-import { currentUser } from "./api.js";
+import { currentUser } from "./user.js";
 
 export const reloadProfile = Auth.updateUser(currentUser);
 ```
@@ -303,8 +342,11 @@ export const logStatus = Auth.changes.pipe(
 
 ## Caching with effetch-query
 
-effetch-query turns endpoints into cached queries and mutations that run with
-the app's runtime, so components never run an Effect by hand:
+effetch-query caches endpoints: a route and its schemas, defined with
+`Fetch.endpoint`, which it calls with the app's API client. Its queries and
+mutations run with the app's runtime, so components never run an Effect by
+hand. Give it the client's `defaultError`, which an endpoint can't read from
+the client:
 
 ```ts title="src/query.ts"
 import { QueryClient } from "@monarcode/effetch-query";
@@ -312,6 +354,7 @@ import { endpoints } from "@monarcode/effetch-query/effetch";
 import type * as ManagedRuntime from "effect/ManagedRuntime";
 
 import { ApiClient } from "./api.js";
+import { ApiError } from "./backend.js";
 import { appRuntime, type AppRuntime } from "./runtime.js";
 
 declare module "@monarcode/effetch-query" {
@@ -320,7 +363,7 @@ declare module "@monarcode/effetch-query" {
   }
 }
 
-export const api = endpoints(ApiClient);
+export const api = endpoints(ApiClient, { defaultError: ApiError });
 
 export const makeQueryClient = () => QueryClient.make({ runtime: appRuntime });
 ```
@@ -355,7 +398,8 @@ fail with `LOCKED` until `unlock()`, then refetch as usual. Until a saved
 session is restored, the key is `"signed-out"`, and the restore replaces
 that client.
 
-A feature then declares its endpoints, and its components use them:
+A feature defines the endpoints it caches, and its components use the
+queries and mutations made of them:
 
 ```tsx title="src/features/account.tsx"
 import * as Fetch from "@monarcode/effetch";
@@ -364,18 +408,15 @@ import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
 
 import { useAuthClient } from "../auth.js";
-import { SessionTokens, SessionUser } from "../backend.js";
+import { SessionUser, SignInResponse } from "../backend.js";
 import { api } from "../query.js";
 
 const signInMutation = api.mutation(
   Fetch.endpoint("POST /auth/login", {
-    input: Schema.Struct({
-      username: Schema.String,
-      password: Schema.String,
-    }),
-    // DummyJSON returns the user's fields beside the tokens.
-    output: Schema.Struct({ ...SessionTokens.fields, ...SessionUser.fields }),
+    input: Schema.Struct({ username: Schema.String, password: Schema.String }),
+    output: SignInResponse,
   }),
+  { plugins: { sessionBearer: false } },
 );
 
 const profileQuery = api.query(
@@ -428,8 +469,9 @@ Effects too, and the session they read is the cookie the server keeps
 it, so `Auth.session`, `Auth.credentials` and `sessionBearer` work there:
 `sessionBearer` sends the cookie's token, and saves a renewed one after a 401.
 
-The engine is `createServerAuth`, with the user schema the app registers.
-These files build on `src/backend.ts` and `src/api.ts` above. In a
+The engine is `createServerAuth`, with the user schema the app registers and
+the same refresh. These files build on `src/backend.ts`, `src/refresh.ts`,
+`src/api.ts` and `src/user.ts` above. In a
 server-rendered app, the registered client is the browser's `createMirrorAuth`
 one, set up as each framework's guide shows
 ([TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next),
@@ -437,9 +479,9 @@ one, set up as each framework's guide shows
 
 ```ts title="src/server/auth.ts"
 import { createServerAuth } from "@monarcode/session-kit/server";
-import * as Effect from "effect/Effect";
 
-import { refreshSession, userSchema } from "../backend.js";
+import { userSchema } from "../backend.js";
+import { refreshSession } from "../refresh.js";
 
 declare const secret: string; // from the environment
 
@@ -447,8 +489,7 @@ export const serverAuth = createServerAuth({
   name: "app",
   user: userSchema,
   secret,
-  refresh: ({ refreshToken, signal }) =>
-    Effect.runPromise(refreshSession(refreshToken), { signal }),
+  refresh: ({ refreshToken, signal }) => refreshSession(refreshToken, signal),
 });
 ```
 
@@ -470,7 +511,7 @@ import { serverAuth } from "./auth.js";
 /** Built once: what belongs to no user. */
 const serverRuntime = ManagedRuntime.make(FetchHttpClient.layer);
 
-/** Built per request: its session, and the services that use it. */
+/** Built per request: its session, and the API client that uses it. */
 export const requestLayer = (jar: CookieJar) =>
   ApiClientLive.pipe(
     Layer.provideMerge(Auth.layer(serverAuth.forRequest(jar))),
@@ -485,7 +526,7 @@ export function runRequest<A, E>(
 }
 ```
 
-The runtime has no `Auth` and no `ApiClient`, so an Effect that needs them
+The runtime has no `Auth` and no API client, so an Effect that needs them
 doesn't compile until it goes through `runRequest`, and nothing a service
 keeps outlives its request. Building them costs microseconds, next to the
 request your API answers.
@@ -496,7 +537,7 @@ handler:
 ```ts title="src/server/profile.ts"
 import type { CookieJar } from "@monarcode/session-kit/server";
 
-import { currentUser } from "../api.js";
+import { currentUser } from "../user.js";
 import { runRequest } from "./run.js";
 
 // TanStack Start: startJar(). Next.js: nextJar(await cookies(), { writable: true }).
@@ -512,26 +553,10 @@ seal what it returns:
 
 ```ts title="src/server/sign-in.ts"
 import type { CookieJar } from "@monarcode/session-kit/server";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
-import { ApiClient } from "../api.js";
-import { SessionTokens, SessionUser } from "../backend.js";
+import { login } from "../user.js";
 import { serverAuth } from "./auth.js";
 import { runRequest } from "./run.js";
-
-const login = (username: string, password: string) =>
-  Effect.gen(function* () {
-    const api = yield* ApiClient;
-    return yield* api.post("/auth/login", {
-      body: { username, password },
-      output: Schema.Struct({
-        ...SessionTokens.fields,
-        ...SessionUser.fields,
-      }),
-      plugins: { sessionBearer: false },
-    });
-  });
 
 export async function signIn(
   jar: CookieJar,
@@ -581,10 +606,11 @@ the mirror client.
   its `credentials` option, and `Auth.updateUser` isn't available, since the
   user comes from the server.
 - **Keep server modules free of the browser client.** Here, the server files
-  import only `src/backend.ts` and `src/api.ts`, which create no client. Keep
-  it that way in your app: a module the server imports, such as the one that
-  defines `ApiClientLive` or the user schema, mustn't also create a browser
-  client or its layer, or the server loads it too.
+  import only `src/backend.ts`, `src/refresh.ts`, `src/api.ts` and
+  `src/user.ts`, which create no Session kit client.
+  Keep it that way in your app: a module the server imports, such as the one
+  that defines `ApiClientLive` or the user schema, mustn't also create a
+  browser client or its layer, or the server loads it too.
 - **Name the services in `runRequest`'s signature,** as above, rather than
   inferring them from `requestLayer`. With a mirror registered, the
   registration depends on the server functions the mirror calls, which call

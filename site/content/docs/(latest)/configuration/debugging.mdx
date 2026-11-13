@@ -3,10 +3,10 @@ title: Debugging
 description: Log what the client does, or send each event to your error reporting, without exposing tokens.
 ---
 
-`createAuth`'s `debug` option reports what the client does: restores, refreshes and why
-they ran, timers, storage operations and how long they took, other tabs'
-changes, state changes, and what ended a session. `debug: true` logs each
-event as one `console.info` line:
+`createAuth`'s `debug` option reports what the client does: restores,
+refreshes and why they ran, timers, storage operations and how long they took,
+other tabs' changes, state changes, and what ended a session. `debug: true`
+logs each event as one `console.info` line:
 
 ```text
 [session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }

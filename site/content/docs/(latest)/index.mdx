@@ -60,7 +60,8 @@ Five terms come up throughout:
   request and is short-lived. The refresh token, if there is one, is exchanged
   for a new access token when the old one expires.
 - **The client**, from `createAuth`, holds the tokens and does the work:
-  saving, restoring, refreshing, and telling other tabs. An app has one.
+  saving, restoring, refreshing, and telling other tabs. An app usually has
+  one.
 - **A session** is who is signed in: `{ sessionId, user }`. It never holds
   tokens, so it is safe to render and to pass around.
 - **State** is what components read: `status`, `user`, `sessionId`, and
@@ -81,11 +82,11 @@ Five terms come up throughout:
 
 The session is kept in one of two places, depending on where your app renders:
 
-|                   | In the browser or on the device                                            | On the server                                              |
-| ----------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| For               | Single-page apps and Expo apps                                             | TanStack Start, Next.js, React Router with SSR             |
-| Client            | `createAuth`                                                               | `createServerAuth`, with `createMirrorAuth` in the browser |
-| Saved in          | `localStorage`, `sessionStorage`, or the iOS keychain and Android Keystore | An encrypted `httpOnly` cookie                             |
-| The refresh token | Stays in that storage                                                      | Never reaches the browser                                  |
+|                   | In the browser or on the device                                                  | On the server                                              |
+| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| For               | Single-page apps and Expo apps                                                   | TanStack Start, Next.js, React Router with SSR             |
+| Client            | `createAuth`                                                                     | `createServerAuth`, with `createMirrorAuth` in the browser |
+| Saved in          | `localStorage`, `sessionStorage`, the iOS keychain, or Android encrypted storage | An encrypted `httpOnly` cookie                             |
+| The refresh token | Stays in that storage                                                            | Never reaches the browser                                  |
 
 Hooks, guards, and tab sync work the same in both.

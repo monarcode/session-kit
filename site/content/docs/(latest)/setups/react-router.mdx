@@ -428,9 +428,10 @@ export function Dashboard() {
 
 Three things follow from where `SessionOutlet` sits:
 
-- **It protects only what it renders.** After a sign-out or an account switch,
-  the pages are swapped for `pending` and remounted, but the layout around
-  them stays mounted until the guard redirects.
+- **It protects only what it renders.** After a sign-out it redirects to the
+  sign-in page. After an account switch it remounts the pages, and in data
+  and framework mode shows `pending` until the guard runs again. The layout
+  around it stays mounted meanwhile.
 - **Read the user from state there.** In the layout, use
   `useAuth((state) => state.user)` and handle `null`. The loader's `session`
   is the one the guard accepted, which for that moment is the previous one.

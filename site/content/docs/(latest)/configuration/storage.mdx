@@ -9,7 +9,7 @@ description: Where the client saves the session, from localStorage to the device
 | --------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
 | `webStorage()`                    | `localStorage`                            | Browsers. One session, shared by every tab.          |
 | `webStorage({ area: "session" })` | `sessionStorage`                          | One session per tab, ending with the tab.            |
-| `secureStorage()`                 | The iOS keychain, or the Android Keystore | Expo apps. From `@monarcode/session-kit/expo`.       |
+| `secureStorage()`                 | The iOS keychain, or encrypted on Android | Expo apps. From `@monarcode/session-kit/expo`.       |
 | `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
 | Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
 
@@ -26,5 +26,5 @@ description: Where the client saves the session, from localStorage to the device
 
 Tokens and the user share one `<name>:auth:session` entry, so every save is a
 single write that other tabs see whole. A user read from the access token is
-not saved. Sessions saved by earlier alphas are not restored, so users sign in
-once after upgrading.
+not saved. Sessions saved by 0.1.0-alpha.3 or earlier are not restored, so
+users of those versions sign in once after upgrading.

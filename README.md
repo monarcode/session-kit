@@ -146,13 +146,13 @@ one step at a time, against a real test backend.
 | React without a router                          | [Getting started](https://session-kit.pages.dev/docs/getting-started)               |
 | TanStack Router, and TanStack Start in SPA mode | [TanStack Router](https://session-kit.pages.dev/docs/setups/tanstack-router)        |
 | TanStack Start with server rendering            | [TanStack Start](https://session-kit.pages.dev/docs/setups/tanstack-start)          |
-| React Router: declarative, data, framework mode | [React Router](https://session-kit.pages.dev/docs/setups/react-router)              |
+| React Router: declarative, data, framework SPA  | [React Router](https://session-kit.pages.dev/docs/setups/react-router)              |
 | React Router, framework mode with SSR           | [React Router with SSR](https://session-kit.pages.dev/docs/setups/react-router-ssr) |
 | Next.js 16, App Router                          | [Next.js](https://session-kit.pages.dev/docs/setups/next)                           |
 | Expo Router on iOS and Android, SDK 53+         | [Expo Router](https://session-kit.pages.dev/docs/setups/expo)                       |
 | Effect and effetch, with any of the above       | [Effect and effetch](https://session-kit.pages.dev/docs/effect)                     |
 
-Each has a runnable app in [`examples/`](./examples).
+All but the first have a runnable app in [`examples/`](./examples).
 
 ## Contributing
 

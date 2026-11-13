@@ -6,7 +6,8 @@ description: Keep the session in an encrypted cookie with the Next.js App Router
 Server Functions sign in and out. The first response already shows the
 signed-in page, so the browser never shows a "Checking session…" state or a
 flash of signed-out content. Client Components get a small client that
-mirrors the session, and the [hooks](/docs/client) work with it.
+mirrors the session, and the
+[hooks](/docs/getting-started#4-read-the-session-in-react) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
 Session kit supports Next 16 and the App Router. A complete app is in
@@ -24,10 +25,11 @@ server. `next build` doesn't need it.
 
 ## 1. The server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in the
-cookie. It takes the options `createAuth` does, except storage and locking, plus
-`secret`. Keep it in a server-only module: Next then refuses to bundle it for
-the browser.
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
+a cookie sealed with your `secret`.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options. Keep it in a server-only module: Next then refuses to
+bundle it for the browser.
 
 ```ts title="lib/auth/server.ts"
 import "server-only";
@@ -57,7 +59,7 @@ export const serverAuth = createServerAuth({
 });
 
 /** Signs in with your backend, from the server. */
-export async function logIn(username: string, password: string) {
+export async function login(username: string, password: string) {
   const response = await fetch(`${API}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -69,8 +71,8 @@ export async function logIn(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie, rotating the
-secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
+rotating the secret, signing out, and the limits every setup shares.
 
 ## 2. Read the session in Server Components
 
@@ -83,6 +85,7 @@ reads the session once per render:
 import "server-only";
 import { cache } from "react";
 
+import { safeReturnTo } from "@monarcode/session-kit";
 import { nextJar } from "@monarcode/session-kit/next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -93,9 +96,11 @@ export const getSession = cache(async () =>
   serverAuth.getSession(nextJar(await cookies())),
 );
 
-export async function requireSession() {
+/** The session, or the sign-in page, which sends the user back to `path`. */
+export async function requireSession(path: string) {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session)
+    redirect(`/login?redirectTo=${encodeURIComponent(safeReturnTo(path))}`);
   return session;
 }
 ```
@@ -143,7 +148,7 @@ import { nextJar } from "@monarcode/session-kit/next";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { logIn, serverAuth } from "../lib/auth/server";
+import { login, serverAuth } from "../lib/auth/server";
 
 async function jar() {
   return nextJar(await cookies(), { writable: true });
@@ -161,7 +166,7 @@ export async function signInAction(input: unknown) {
     return {
       session: await serverAuth.signIn(
         await jar(),
-        await logIn(username, password),
+        await login(username, password),
       ),
     };
   } catch (error) {
@@ -280,24 +285,30 @@ a layout: layouts don't render again on navigation.
 import { requireSession } from "../lib/auth/session";
 
 export default async function Home() {
-  const session = await requireSession();
+  const session = await requireSession("/");
   return <h1>Welcome, {session.user.firstName}</h1>;
 }
 ```
 
-The sign-in page sends a signed-in user on, and its form calls the client's
-`signIn`. When the session changes in the browser, after a sign-in or
-sign-out here or in another tab, `useMirrorAuth` renders the page again on
-the server, so these redirects run without code in the form:
+The sign-in page sends a signed-in user back to `redirectTo`, and its form
+calls the client's `signIn`. When the session changes in the browser, after a
+sign-in or sign-out here or in another tab, `useMirrorAuth` renders the page
+again on the server, so these redirects run without code in the form:
 
 ```tsx title="app/login/page.tsx"
+import { safeReturnTo } from "@monarcode/session-kit";
 import { redirect } from "next/navigation";
 
 import { getSession } from "../../lib/auth/session";
 import { SignInForm } from "./sign-in-form";
 
-export default async function Login() {
-  if (await getSession()) redirect("/");
+export default async function Login({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  if (await getSession())
+    redirect(safeReturnTo((await searchParams).redirectTo));
   return <SignInForm />;
 }
 ```
@@ -343,8 +354,8 @@ Above, the server signs in with your backend, so the user in the cookie comes
 from the backend. If the browser signs in with the backend itself, have
 `signInAction` take the tokens and the user instead. It seals what it's
 given, as [Signing in](/docs/setups/tanstack-start#signing-in) on the
-TanStack Start page explains: check the tokens there first, or let your backend authorize
-requests with the access token.
+TanStack Start page explains: check the tokens there first, or let your
+backend authorize requests with the access token.
 
 ## Calling your API
 
@@ -361,7 +372,7 @@ import { serverAuth } from "../../lib/auth/server";
 import { requireSession } from "../../lib/auth/session";
 
 export default async function Orders() {
-  await requireSession();
+  await requireSession("/orders");
   const credentials = await serverAuth.credentials.get(
     nextJar(await cookies()),
   );
@@ -409,8 +420,8 @@ export async function POST(request: Request) {
 ```
 
 The browser keeps the access token in memory, never the refresh token; see
-[Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser). The
-example app does this.
+[Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
+The example app does this.
 
 ## Things to know
 
@@ -437,4 +448,5 @@ example app does this.
   server again and render their pages again. So does returning to a tab
   after a while.
 - **More.** Several server instances, the cookie's size, and plain http
-  during development: see [Server sessions](/docs/server-rendering/server-sessions).
+  during development: see
+  [Server sessions](/docs/server-rendering/server-sessions).

@@ -100,9 +100,9 @@ export type AppAuth = typeof auth;
 `refresh` tells two failures apart. `null` means the backend rejected the
 refresh token, so the user is signed out. A throw means something else failed,
 so the session is kept and the error reported. That split is why an outage
-doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the details, and
-[Storage](/docs/configuration/storage) lists the other places a session can
-be saved.
+doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the
+details, and [Storage](/docs/configuration/storage) lists the other places a
+session can be saved.
 
 Create one client per `name` in each tab.
 

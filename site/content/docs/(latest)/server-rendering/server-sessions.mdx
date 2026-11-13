@@ -14,7 +14,8 @@ code: [TanStack Start](/docs/setups/tanstack-start),
 the user in one cookie, `<name>.session`, sealed with AES-256-GCM through Web
 Crypto. It is `httpOnly`, so page scripts can't read it, and `Secure` and
 `SameSite=Lax` unless you pass other `cookie` options. It takes the options
-`createAuth` does, except `storage` and `locking`, plus `secret`.
+`createAuth` does, except `storage` and `locking`, plus `secret`, `cookie`
+and `clientCredentials`.
 
 Keep the module that creates it on the server: each setup page shows how
 its framework keeps such a module out of the browser bundle.
@@ -54,7 +55,7 @@ like the jar.
 ## Refreshing
 
 Parallel requests to one instance that carry the same cookie share one
-refresh, and for a few seconds afterwards a request still carrying the old
+refresh, and for ten seconds afterwards a request still carrying the old
 cookie gets the new tokens rather than refreshing again. Each
 `createServerAuth` call is its own instance, and a framework may make several
 on one server, one per bundle; separate processes, servers and serverless

@@ -9,9 +9,11 @@ renders `unavailable` after a failed refresh, and checks the session again
 when the app returns to the foreground.
 
 This page builds the
-[`expo-router` example app](https://github.com/monarcode/session-kit/tree/main/examples/expo-router),
-which signs in against [DummyJSON's auth API](https://dummyjson.com/docs/auth),
-so it runs as written. [Using the client](/docs/client),
+[`expo-router` example app](https://github.com/monarcode/session-kit/tree/main/examples/expo-router)
+from scratch. It signs in against
+[DummyJSON's auth API](https://dummyjson.com/docs/auth), so it runs as
+written. Its `src/auth.ts` takes the place of Getting started's `backend.ts`,
+`auth.ts` and `hooks.ts`. [Using the client](/docs/client),
 [Refresh](/docs/configuration/refresh) and
 [Errors](/docs/configuration/errors) explain how the client works; this page
 covers what differs on Expo.
@@ -275,13 +277,15 @@ export default function Home() {
   const auth = useAuthClient();
   const [email, setEmail] = useState("");
 
-  useEffect(() => {
+  useEffect(function loadEmail() {
     const controller = new AbortController();
     authFetch("auth/me", { signal: controller.signal })
       .then((response) => response.json())
       .then((body: { email: string }) => setEmail(body.email))
       .catch(() => {});
-    return () => controller.abort();
+    return function cancel() {
+      controller.abort();
+    };
   }, []);
 
   return (
@@ -337,10 +341,10 @@ have the boundary call both.
 `secureStorage()` saves the session with `expo-secure-store`: in the iOS
 keychain, and encrypted with an Android Keystore key.
 
-| Option               | Default | Meaning                                                                         |
-| -------------------- | ------- | ------------------------------------------------------------------------------- |
-| `clearOnReinstall`   | `true`  | Remove a session an earlier install left in the iOS keychain before reading it. |
-| `keychainAccessible` | None    | When iOS lets the app read the session, passed to SecureStore unchanged.        |
+| Option               | Default         | Meaning                                                                         |
+| -------------------- | --------------- | ------------------------------------------------------------------------------- |
+| `clearOnReinstall`   | `true`          | Remove a session an earlier install left in the iOS keychain before reading it. |
+| `keychainAccessible` | `WHEN_UNLOCKED` | When iOS lets the app read the session, passed to SecureStore unchanged.        |
 
 - **Large sessions.** Two JWTs and a user often exceed SecureStore's
   2048-byte value limit, so longer values are split across keys. The new value
@@ -435,9 +439,10 @@ such as removing a session an earlier install left, or discarding data
 Android can't decrypt.
 
 Events leave out tokens, saved values, user fields, deep links' query strings,
-and errors' causes. `debug: { sensitive: true }` puts them in, so keep it to development
-builds. A function, `debug: (event) => ...` or `debug: { log }`, receives each
-event instead of the console, for example to add Sentry breadcrumbs.
+and errors' causes. `debug: { sensitive: true }` puts them in, so keep it to
+development builds. A function, `debug: (event) => ...` or `debug: { log }`,
+receives each event instead of the console, for example to add Sentry
+breadcrumbs.
 
 ## Locking
 

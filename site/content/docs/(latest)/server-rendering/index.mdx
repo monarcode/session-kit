@@ -14,8 +14,8 @@ read, so the refresh token never reaches the browser. Pages never show a
   its methods takes the request's cookie jar, which each framework's adapter
   gives you.
 - **In the browser**, `createMirrorAuth` makes a client that starts from the
-  session the server rendered. `AuthProvider`, the hooks, and the router
-  guards work with it, and sign-ins and sign-outs reach every tab.
+  session the server rendered. `AuthProvider`, the hooks, and the TanStack
+  Router guards work with it, and sign-ins and sign-outs reach every tab.
 - **Your server code** signs in and out with your backend and calls your API
   with the access token. `serverAuth.forRequest(jar)` gives code written for
   a client, such as `createAuthFetch` or Effect's `Auth`, one request's

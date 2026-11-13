@@ -47,8 +47,9 @@ export const lockApp = () => lockedAuth.lock();
 - **While locked, nothing waits.** `getSession`, `retry`, `refresh`,
   `updateUser`, `credentials.get`, and `credentials.renew` reject with
   `LOCKED` instead of waiting for an unlock that may never come. Nothing
-  refreshes, and timers are off. `signIn` replaces the session, which is the password path, and
-  `signOut` clears it without calling `revoke`, since the tokens are sealed.
+  refreshes, and timers are off. `signIn` replaces the session, which is the
+  password path. After `lock()` resolves, `signOut` clears it without
+  calling `revoke`, since no tokens are left in memory.
 - **A failed unlock isn't always still locked.** When `open` throws,
   `unlock()` rejects with `UNLOCK_FAILED` and the session stays locked. But a
   refresh that fails after the tokens were opened rejects with
