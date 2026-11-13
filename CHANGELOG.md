@@ -34,6 +34,9 @@
   corrected: `keychainAccessible`'s default, the ten-second reuse window,
   which requests are sent again after a refresh, and when a sign-out reaches
   other tabs.
+- The compatibility page lists `effect` as a peer of `./effetch` as well as
+  `./effect`, and the entry points page orders the entry points as the
+  reference does.
 
 ## 0.1.0-alpha.8
 
