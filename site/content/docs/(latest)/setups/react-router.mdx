@@ -27,8 +27,8 @@ uses its client in `src/auth.ts`, its hooks in `src/hooks.ts`, and its form in
 
 To install the packages, run the following command:
 
-```sh
-pnpm add @monarcode/session-kit react-router zod
+```npm
+npm install @monarcode/session-kit react-router zod
 ```
 
 React Router 7 and 8 both work.
@@ -228,12 +228,22 @@ export const router = createBrowserRouter([
 ]);
 ```
 
-Render it inside the provider:
+Then render the router inside the provider, in `src/main.tsx`:
 
 ```tsx
-<AuthProvider client={auth}>
-  <RouterProvider router={router} />
-</AuthProvider>
+import { RouterProvider } from "react-router";
+
+import { createRoot } from "react-dom/client";
+
+import { auth } from "./auth.js";
+import { AuthProvider } from "./hooks.js";
+import { router } from "./router.js";
+
+createRoot(document.getElementById("root")!).render(
+  <AuthProvider client={auth}>
+    <RouterProvider router={router} />
+  </AuthProvider>,
+);
 ```
 
 Three pieces work together:

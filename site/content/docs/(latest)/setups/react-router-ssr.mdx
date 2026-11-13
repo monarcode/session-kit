@@ -31,8 +31,8 @@ instead. A complete app is in
 
 To install the packages, run the following command:
 
-```sh
-pnpm add @monarcode/session-kit zod
+```npm
+npm install @monarcode/session-kit zod
 ```
 
 ## 1. Create the server engine
@@ -73,6 +73,7 @@ export const serverAuth = createServerAuth({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
+    // The backend rejected the refresh token: sign out.
     if (response.status === 401) return null;
     if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
     return tokens.parse(await response.json());
@@ -86,7 +87,8 @@ export async function login(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (!response.ok) throw new Error("Wrong username or password");
+  if (response.status === 401) throw new Error("Wrong username or password");
+  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
   const body: unknown = await response.json();
   return { ...tokens.parse(body), user: userSchema.parse(body) };
 }
@@ -193,8 +195,18 @@ export default function Login() {
   const result = useActionData<typeof action>();
   return (
     <Form method="post">
-      <input name="username" />
-      <input name="password" type="password" />
+      <label>
+        Username
+        <input name="username" autoComplete="username" />
+      </label>
+      <label>
+        Password
+        <input
+          name="password"
+          type="password"
+          autoComplete="current-password"
+        />
+      </label>
       {result?.error && <p role="alert">{result.error}</p>}
       <button>Sign in</button>
     </Form>
@@ -382,7 +394,7 @@ Loaders and actions get the access token with the request's jar, refreshing
 it first when it has expired, and can `renew` it after a 401:
 
 ```tsx title="app/routes/orders.tsx"
-import { useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { redirect, useLoaderData, type LoaderFunctionArgs } from "react-router";
 
 import { routerJar } from "@monarcode/session-kit/react-router/server";
 import { z } from "zod";
@@ -391,9 +403,11 @@ import { serverAuth } from "../auth/session.server";
 
 export async function loader({ context }: LoaderFunctionArgs) {
   const credentials = await serverAuth.credentials.get(routerJar(context));
+  if (!credentials) throw redirect("/login?redirectTo=/orders");
   const response = await fetch("https://api.example.com/orders", {
-    headers: { Authorization: `Bearer ${credentials!.accessToken}` },
+    headers: { Authorization: `Bearer ${credentials.accessToken}` },
   });
+  if (!response.ok) throw new Error(`Orders failed (${response.status})`);
   return z.array(z.object({ id: z.number() })).parse(await response.json());
 }
 

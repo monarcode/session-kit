@@ -23,9 +23,9 @@ uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
 
 To install the packages, run the following commands:
 
-```sh
-pnpm add @monarcode/session-kit @tanstack/react-router zod
-pnpm add -D @tanstack/router-plugin
+```npm
+npm install @monarcode/session-kit @tanstack/react-router zod
+npm install -D @tanstack/router-plugin
 ```
 
 This page uses file-based routing, so add the Router plugin before the React
@@ -323,9 +323,16 @@ things follow from where it sits:
 TanStack Start's SPA mode is TanStack Router with a build-time shell, so every
 step on this page applies, with two changes.
 
-Create the Router, and connect auth, inside `getRouter()`:
+In `src/router.tsx`, create the Router and connect auth inside
+`getRouter()`, which Start calls:
 
 ```tsx
+import { connectAuth } from "@monarcode/session-kit/tanstack-router";
+import { createRouter } from "@tanstack/react-router";
+
+import { auth } from "./auth.js";
+import { routeTree } from "./routeTree.gen.js";
+
 export function getRouter() {
   const router = createRouter({
     routeTree,
