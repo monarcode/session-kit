@@ -16,20 +16,20 @@ colors:
   surface-secondary: "#22232b"
   lane-empty: "#1f2129"
   lane-unplayed: "#2b2d37"
-  lane-mark: "#4d5160"
+  lane-mark: "#626676"
   lane-played: "#9a9ca8"
   scrollbar-thumb: "#3a3c48"
   code-string: "#83a598"
 typography:
   display-quiet:
     fontFamily: "Geist Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace"
-    fontSize: "clamp(1.5rem, 3.6vw, 2.75rem)"
+    fontSize: "clamp(1.6875rem, 3.6vw, 2.75rem)"
     fontWeight: 300
     lineHeight: 1.12
     letterSpacing: "-0.04em"
   display:
     fontFamily: "Geist Mono Variable, ui-monospace, SFMono-Regular, Menlo, monospace"
-    fontSize: "clamp(1.5rem, 3.6vw, 2.75rem)"
+    fontSize: "clamp(1.6875rem, 3.6vw, 2.75rem)"
     fontWeight: 700
     lineHeight: 1.12
     letterSpacing: "-0.04em"
@@ -206,8 +206,8 @@ signal. Everything else is a cool blue-grey ramp drawn from the ink.
   `surface-secondary`): Fumadocs' retinted panels for search, the sidebar and
   popovers. On the landing, only the lane tooltip uses one (`surface-popover`).
 - **Lane greys** (`lane-unplayed`, `lane-mark`, `lane-played`): a lane's
-  hairline track and a bar not yet reached, a moment still ahead, and a
-  moment already passed (the quiet grey, so passed moments recede behind
+  hairline track and a bar not yet reached, a moment still ahead (3.1:1 on
+  ink, the floor for a mark), and a moment already passed (the quiet grey, so passed moments recede behind
   the lime). `lane-empty` is the inline-code fill in the docs.
 - **Scrollbar** (`scrollbar-thumb`): the page scrollbar on an ink track.
 
@@ -263,11 +263,11 @@ face is the mono.
 
 ### Hierarchy
 
-- **Display** (300 then 700, `clamp(1.5rem, 3.6vw, 2.75rem)`, 1.12, -0.04em):
+- **Display** (300 then 700, `clamp(1.6875rem, 3.6vw, 2.75rem)`, 1.12, -0.04em):
   the H1 only, as two comment lines. Quiet over loud: the
   first line light in quiet grey, the second bold in foreground, each behind
   a light comment-grey `//`.
-- **Headline** (600, 1.5rem on phones, 1.875rem from 640px, -0.025em):
+- **Headline** (600, 1.375rem on phones, 1.875rem from 640px, -0.025em):
   section heads, written as a comment with a dim `//`, balanced.
 - **Code** (400, 15px / 1.7; 13px / 1.8 on phones): the hero's config lines.
   Wrapped lines hang under the line they continue (a 4ch hanging indent).
@@ -342,12 +342,24 @@ and the axis fit in one view. It opens 24px under the navbar, the lead sits
 20px below that at a 1.55 line height, the hairline takes 12px either side,
 and lane rows are 26px.
 
-Phones (below 640px): the gutter narrows, the config's "click to comment
-out" tag drops to its own row under the code, the tour's file tabs become
-three equal columns that may wrap, code wraps with a hanging indent instead
-of scrolling sideways, the 09:45 tick and the lane-row "signed out" note
-are replaced by a shorter status-line note, and lane tooltips open under the
-lanes, across the figure, instead of above them.
+Phones (below 640px): the gutter narrows, the config's "tap to comment
+out" tag drops to its own row under the code, the version link takes its own
+line under the buttons, the tour's file tabs become three equal columns at
+11px whose paths wrap after a slash or before the extension, code wraps with
+a hanging indent instead of scrolling sideways, and the 09:45 tick and the
+lane-row "signed out" note are replaced by a shorter status-line note. There
+is no tooltip: the moment the playhead last held on is read out under the
+axis, in a slot 120px tall, so the lanes stay in view and nothing under them
+moves.
+
+Every control's hit area is at least 44px in both directions, on every
+screen: where the visible label is smaller (the package-manager names,
+copy, pause, "example", the footer links, the version on phones), the area
+reaches past it.
+
+The navbar is the page's banner, the sections sit in one `<main>`, and the
+footer follows it. A "Skip to content" link comes first in the tab order and
+shows only on focus, at the top left, as a hairline box on ink.
 
 ## Elevation & Depth
 
@@ -387,8 +399,9 @@ Set in the buffer's type, square, 48px tall.
   padding. The only lime action on the page: it appears in the hero and
   again where the page closes.
 - **Hover / Focus:** the primary gains a 2px ink underline (4px offset); its
-  colours never change. The landing's own buttons set no focus style and
-  show the browser's default outline; Fumadocs' controls use the lime ring.
+  colours never change. Keyboard focus is one style across the landing: a
+  2px lime outline, 2px off the control, on its own controls, on Fumadocs'
+  (in place of their ring) and on the tour's panel.
 - **Secondary:** GitHub. Ink with a hairline outline and foreground text,
   20px side padding; the accent veil fills it on hover.
 - **Quiet:** the version link and the copy button: comment-grey or quiet-grey
@@ -399,16 +412,16 @@ Set in the buffer's type, square, 48px tall.
 - **Style:** "applies next cycle": lime with ink label text, 8px side
   padding, square. It appears only while an edit is queued.
 - **State:** idle, the same slot reads "click to comment out" or "click to
-  restore" in comment grey, with no fill.
+  restore" in comment grey, with no fill. On touch screens it says "tap".
 
 ### Inputs / Fields
 
 - **Style:** the install prompt is a read-only command line. Hairline
   outline, square, at least 48px tall, a comment-grey `$`, the command in
   foreground, and a copy button inside the right edge whose label reads
-  "copied" for 1.6s.
-- **Focus:** carried by the copy button inside it (the browser's default
-  outline).
+  "copied" for 1.6s. Where the page may not write to the clipboard, it
+  selects the command instead and reads "selected" for 4s.
+- **Focus:** carried by the copy button inside it.
 
 ### Navigation
 
@@ -481,8 +494,8 @@ starts at the column's edge, level with the numbers.
 ### Live Config Line (signature)
 
 The `refresh` line is a full-width button. Hover gives it a light veil.
-Clicking it comments the line out (the whole line turns comment grey behind
-`// `) or restores it. While playing, the edit is queued, not applied: the
+Clicking it comments the line out (the whole line turns the code's comment
+colour, `#a89984`, behind `// `) or restores it. While playing, the edit is queued, not applied: the
 line keeps a veil and a 2px lime inset bar, a lime block cursor blinks at
 its end (1s, stepped), and the tag becomes the lime "applies next cycle"
 chip. The edit lands at the next cycle boundary, never mid-hour. Paused,
@@ -536,14 +549,14 @@ during the playhead's hold on that moment, and on hover over any moment cell
 
 - **Style:** the popover surface, a hairline border, square, 12px side and
   8px vertical padding, label type. The time in foreground, then one row per
-  lane: the lane name (or "your backend") in comment grey, what happened in
-  quiet grey. No lime:
+  lane: the lane name (or "your backend") in quiet grey, what happened in
+  the popover's foreground. No lime:
   the lit cell under it is the live part.
 - **Position:** below the lowest lane the moment lit, centred on its column
   and kept inside the lanes' width (27rem at most), with a 1px comment-grey
   tick up to the cell. The lanes under a moment are empty or still ahead, so
   it never hides the lit cells, the 09:00 handover or the code above. It
-  sits above the axis times. On phones it runs across the figure.
+  sits above the axis times. Phones have no tooltip: see Layout.
 - **Motion:** fades up 2px over 160ms. Reduced motion shows it without the
   fade, on hover only.
 

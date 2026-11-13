@@ -6,7 +6,7 @@ export const COLUMN = "mx-auto w-full max-w-(--fd-layout-width) px-4";
 
 /** The page's comment-voice headline, as the hero and the 404 set it. */
 export const HEADLINE =
-	"text-[clamp(1.5rem,3.6vw,2.75rem)] leading-[1.12] tracking-[-0.04em]";
+	"text-[clamp(1.6875rem,3.6vw,2.75rem)] leading-[1.12] tracking-[-0.04em]";
 
 /** The one lime action on a page, such as Get started. */
 export const PRIMARY_ACTION =
@@ -48,7 +48,7 @@ export function SectionHead({
 }) {
 	return (
 		<header>
-			<h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+			<h2 className="text-[1.375rem] leading-tight font-semibold tracking-tight text-balance sm:text-3xl">
 				<span aria-hidden="true" className="text-buffer-dim">
 					{"// "}
 				</span>

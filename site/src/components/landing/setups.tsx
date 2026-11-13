@@ -101,7 +101,8 @@ export function Setups() {
 								data-example
 								href={`${EXAMPLES}/${example}`}
 								aria-label={`${title} example app`}
-								className="relative z-10 underline-offset-4 transition-colors hover:text-fd-foreground hover:underline"
+								// Above the row's link, with a hit area a thumb can find.
+								className="relative z-10 underline-offset-4 transition-colors after:absolute after:inset-[-0.75rem] hover:text-fd-foreground hover:underline"
 							>
 								example
 							</a>

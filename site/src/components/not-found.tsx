@@ -9,12 +9,20 @@ import {
 	PRIMARY_ACTION,
 	SECONDARY_ACTION,
 } from "./landing/buffer";
+import { Frame } from "./landing/frame";
 
 /** A path with no page: the buffer's comment voice, and two ways back. */
 export function NotFound() {
 	return (
-		<HomeLayout {...baseOptions()} className="live-source">
-			<section className={`${COLUMN} flex flex-1 flex-col pt-16 pb-24`}>
+		<HomeLayout
+			{...baseOptions()}
+			slots={{ container: Frame }}
+			className="live-source"
+		>
+			<main
+				id="main"
+				className={`${COLUMN} flex flex-1 flex-col pt-16 pb-24`}
+			>
 				<h1 className={`${HEADLINE} font-bold`}>
 					<span aria-hidden="true" className="font-light text-buffer-dim">
 						{"// "}
@@ -38,7 +46,7 @@ export function NotFound() {
 						Home
 					</Link>
 				</div>
-			</section>
+			</main>
 		</HomeLayout>
 	);
 }

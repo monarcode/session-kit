@@ -287,6 +287,8 @@ export function LiveConfig({
 	const captionId = useId();
 	// The moment the playhead holds on, and the one under the pointer.
 	const [held, setHeld] = useState<number | null>(null);
+	// The last moment it held on: phones keep it on show under the lanes.
+	const [said, setSaid] = useState<number | null>(null);
 	const [hovered, setHovered] = useState<number | null>(null);
 
 	const source = queued ?? refresh;
@@ -363,6 +365,7 @@ export function LiveConfig({
 						next += 1;
 						holdUntil = now + HOLD_MS;
 						setHeld(stop);
+						setSaid(stop);
 					} else {
 						t = advanced;
 					}
@@ -426,6 +429,7 @@ export function LiveConfig({
 
 	const shownMinute = playing ? minute : END;
 	const tip = hovered ?? (playing && visible ? held : null);
+	const readout = hovered ?? said;
 
 	return (
 		<>
@@ -469,7 +473,7 @@ export function LiveConfig({
 										{queued !== null && <Cursor />}
 									</code>
 								) : (
-									<code className={`${CODE} text-buffer-dim`}>
+									<code className={`${CODE} text-buffer-comment`}>
 										{" ".repeat(indent)}
 										{"// "}
 										{line.text.trimStart()}
@@ -485,11 +489,21 @@ export function LiveConfig({
 												: "text-buffer-dim"
 										}`}
 									>
+										{queued === null && (
+											<>
+												<span className="pointer-coarse:hidden">
+													click
+												</span>
+												<span className="hidden pointer-coarse:inline">
+													tap
+												</span>{" "}
+											</>
+										)}
 										{queued !== null
 											? "applies next cycle"
 											: source
-												? "click to comment out"
-												: "click to restore"}
+												? "to comment out"
+												: "to restore"}
 									</span>
 								</span>
 							</button>
@@ -545,7 +559,7 @@ export function LiveConfig({
 						<button
 							type="button"
 							onClick={pauseOrPlay}
-							className="underline decoration-buffer-dim underline-offset-4 transition-colors hover:text-fd-foreground"
+							className="relative underline decoration-buffer-dim underline-offset-4 transition-colors after:absolute after:inset-x-[-0.5rem] after:inset-y-[-0.875rem] hover:text-fd-foreground"
 						>
 							{playing ? "pause" : "play"}
 						</button>
@@ -664,6 +678,21 @@ export function LiveConfig({
 							<span className="absolute right-0">{clock(REJECTED)}</span>
 						</div>
 					</div>
+					{/* Phones have no room for a tooltip beside the lanes, and it
+					    would cover them. The moment is read out here instead, in a
+					    slot tall enough for any of them, so nothing under it moves. */}
+					{(playing || readout !== null) && (
+						<div className="mt-3 min-h-[7.5rem] text-xs leading-relaxed sm:hidden">
+							{readout !== null && happened.has(readout) && (
+								<MomentLines
+									minute={readout}
+									moments={happened.get(readout)!}
+									label="text-buffer-dim"
+									text="text-fd-muted-foreground"
+								/>
+							)}
+						</div>
+					)}
 				</div>
 
 				<p className="mt-4 max-w-[110ch] text-xs leading-relaxed text-buffer-dim">
@@ -691,12 +720,40 @@ export function LiveConfig({
 	);
 }
 
+/** A moment's time, then what each lane did in it. */
+function MomentLines({
+	minute,
+	moments,
+	label,
+	text,
+}: {
+	minute: number;
+	moments: Moment[];
+	/** The colour classes of the lane names and of what they did. */
+	label: string;
+	text: string;
+}) {
+	return (
+		<>
+			<p className="text-fd-foreground tabular-nums">{clock(minute)}</p>
+			{moments.map((moment) => (
+				<p key={moment.lane} className="flex gap-x-3 max-sm:flex-col">
+					<span className={`shrink-0 sm:w-[12ch] ${label}`}>
+						{moment.label ?? LANES[moment.lane]![0]}
+					</span>
+					<span className={text}>{moment.text}</span>
+				</p>
+			))}
+		</>
+	);
+}
+
 /**
  * What happened at a lit moment, opening below the lowest lane it lit. At
  * each moment the lanes under it are empty or still ahead, so it never hides
  * the lit cells, the handover at 09:00 or the code above. It stays inside the
- * lanes' width, so near either end it shifts off centre. Phones run it across
- * the figure (6.25rem is the label column and its gap).
+ * lanes' width, so near either end it shifts off centre. Phones read the
+ * moment out under the axis instead.
  */
 function Tooltip({ minute, moments }: { minute: number; moments: Moment[] }) {
 	const lowest = Math.max(...moments.map((moment) => moment.lane));
@@ -704,17 +761,17 @@ function Tooltip({ minute, moments }: { minute: number; moments: Moment[] }) {
 	// Rows are a fixed height, so a lane's bottom is a multiple of --row.
 	const below = `calc(${lowest + 1} * var(--row))`;
 	return (
-		<>
+		<div className="max-sm:hidden">
 			{/* A tick from the cell's bottom, through the row's padding, down to
 			    the tip. The tip sits above the axis times, which come later in
 			    the page. */}
 			<span
-				className="absolute h-[11px] w-px bg-buffer-dim max-sm:hidden"
+				className="absolute h-[11px] w-px bg-buffer-dim"
 				style={{ left: x, top: `calc(${below} - 5px)` }}
 			/>
 			<div
 				key={minute}
-				className="absolute top-(--below) z-10 w-(--tip) border border-buffer-line bg-fd-popover px-3 py-2 text-xs leading-relaxed [--tip:calc(100%+6.25rem)] motion-safe:animate-[buffer-tip-in_160ms_ease-out] max-sm:-left-[6.25rem] sm:left-(--left) sm:[--tip:min(27rem,100%)]"
+				className="absolute top-(--below) left-(--left) z-10 w-(--tip) border border-buffer-line bg-fd-popover px-3 py-2 text-xs leading-relaxed [--tip:min(27rem,100%)] motion-safe:animate-[buffer-tip-in_160ms_ease-out]"
 				style={
 					{
 						"--left": `clamp(0px, calc(${x} - var(--tip) / 2), calc(100% - var(--tip)))`,
@@ -722,19 +779,14 @@ function Tooltip({ minute, moments }: { minute: number; moments: Moment[] }) {
 					} as CSSProperties
 				}
 			>
-				<p className="text-fd-foreground tabular-nums">{clock(minute)}</p>
-				{moments.map((moment) => (
-					<p key={moment.lane} className="flex gap-x-3 max-sm:flex-col">
-						<span className="shrink-0 text-buffer-dim sm:w-[12ch]">
-							{moment.label ?? LANES[moment.lane]![0]}
-						</span>
-						<span className="text-fd-muted-foreground">
-							{moment.text}
-						</span>
-					</p>
-				))}
+				<MomentLines
+					minute={minute}
+					moments={moments}
+					label="text-fd-muted-foreground"
+					text="text-fd-popover-foreground"
+				/>
 			</div>
-		</>
+		</div>
 	);
 }
 

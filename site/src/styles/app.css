@@ -15,7 +15,11 @@
 	--color-buffer-dim: #7f828e;
 	--color-buffer-line: #262833;
 	--color-buffer-cell: #1f2129;
-	--color-buffer-mark: #4d5160;
+	/* A moment still ahead in the lanes: 3:1 on ink, the floor for a mark. */
+	--color-buffer-mark: #626676;
+	/* A line commented out in the hero: Charbox's comment colour, as in the
+	   code blocks (6.4:1 on ink, 5.9:1 on a hovered or queued line). */
+	--color-buffer-comment: #a89984;
 	/* A lane's hairline track, and a held state the playhead hasn't reached. */
 	--color-buffer-track: #2b2d37;
 	/* Your own code, such as the entry points and your app's sign-in call in
@@ -52,6 +56,15 @@
 /* The landing page is set in the mono; its prose opts back into the sans. */
 .live-source {
 	font-family: var(--font-mono);
+}
+
+/* Keyboard focus on the landing: one lime outline, set off from the control.
+   Fumadocs' controls take it in place of their ring, and the tour's panel,
+   which Fumadocs leaves without one, gets it too. */
+.live-source :is(a, button, [tabindex]):focus-visible {
+	outline: 2px solid var(--brand-lime);
+	outline-offset: 2px;
+	--tw-ring-shadow: 0 0 #0000;
 }
 
 /* The site is dark only, built on the brand's two colours: the background

@@ -6,6 +6,7 @@ import { HomeLayout } from "fumadocs-ui/layouts/home";
 import { Closing } from "@/components/landing/closing";
 import { Features } from "@/components/landing/features";
 import { Footer } from "@/components/landing/footer";
+import { Frame } from "@/components/landing/frame";
 import { Hero } from "@/components/landing/hero";
 import { ScopeNote } from "@/components/landing/scope-note";
 import { Setups } from "@/components/landing/setups";
@@ -34,6 +35,7 @@ function Home() {
 	return (
 		<HomeLayout
 			{...baseOptions()}
+			slots={{ container: Frame }}
 			// The landing page is a code buffer: one monospaced face throughout.
 			className="live-source"
 			style={{ "--fd-layout-width": "72rem" } as CSSProperties}
@@ -43,15 +45,14 @@ function Home() {
 				{ text: "Reference", url: "/docs/reference" },
 			]}
 		>
-			{/* HomeLayout is the page's <main>. */}
-			<div className="flex flex-1 flex-col">
+			<main id="main" className="flex flex-1 flex-col">
 				<Hero version={version} config={config} />
 				<Tour steps={steps} />
 				<ScopeNote />
 				<Setups />
 				<Features />
 				<Closing />
-			</div>
+			</main>
 			<Footer />
 		</HomeLayout>
 	);

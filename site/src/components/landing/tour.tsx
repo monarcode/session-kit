@@ -1,3 +1,5 @@
+import { Fragment } from "react";
+
 import { Link } from "@tanstack/react-router";
 import { toJsx } from "fumadocs-core/utils/hast-to-jsx";
 import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
@@ -37,14 +39,24 @@ export function Tour({ steps }: { steps: TourStep[] }) {
 				{/* The tabs are the buffer's open files. Phones: three equal columns
 				    whose names may wrap, so no file hides off the edge of a
 				    scrolling strip. */}
-				<TabsList className="grid grid-cols-3 gap-0 border-b border-buffer-line px-0 sm:flex sm:gap-6">
+				<TabsList
+					aria-label="Files"
+					className="grid grid-cols-3 gap-0 border-b border-buffer-line px-0 sm:flex sm:gap-6"
+				>
 					{steps.map((step) => (
 						<TabsTrigger
 							key={step.label}
 							value={step.label}
-							className="justify-center px-2 text-center text-xs whitespace-normal [overflow-wrap:anywhere] data-[active]:border-fd-foreground data-[active]:text-fd-foreground sm:px-0 sm:text-sm sm:whitespace-nowrap"
+							className="justify-center px-1 text-center text-[11px] whitespace-normal [overflow-wrap:anywhere] data-[active]:border-fd-foreground data-[active]:text-fd-foreground sm:px-0 sm:text-sm sm:whitespace-nowrap"
 						>
-							{step.file}
+							{/* A path wraps after a slash or before the extension, not
+							    inside a name. */}
+							{step.file.split(/(?<=\/)|(?=\.)/).map((part, i) => (
+								<Fragment key={i}>
+									{i > 0 && <wbr />}
+									{part}
+								</Fragment>
+							))}
 						</TabsTrigger>
 					))}
 				</TabsList>
@@ -82,7 +94,7 @@ export function Tour({ steps }: { steps: TourStep[] }) {
 						})}
 						<Link
 							to={step.href}
-							className="mt-3 inline-block text-sm underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
+							className="inline-block py-3 text-sm underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
 						>
 							Read the walkthrough in {step.guide}
 						</Link>

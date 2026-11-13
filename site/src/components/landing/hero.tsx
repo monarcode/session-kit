@@ -75,7 +75,7 @@ export function Hero({
 					</a>
 					<a
 						href={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/main/CHANGELOG.md`}
-						className="flex h-12 items-center px-1 text-xs text-buffer-dim transition-colors hover:text-fd-foreground max-sm:hidden"
+						className="flex h-12 items-center px-1 text-xs text-buffer-dim transition-colors hover:text-fd-foreground max-sm:relative max-sm:h-auto max-sm:basis-full max-sm:px-0 max-sm:after:absolute max-sm:after:inset-x-0 max-sm:after:inset-y-[-0.875rem]"
 					>
 						v{version}
 					</a>
