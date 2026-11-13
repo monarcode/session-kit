@@ -7,6 +7,7 @@ import {
 import { RootProvider } from "fumadocs-ui/provider/tanstack";
 
 import SearchDialog from "@/components/search";
+import { SITE_URL } from "@/lib/shared";
 
 import appCss from "@/styles/app.css?url";
 
@@ -23,6 +24,14 @@ export const Route = createRootRoute({
 			{
 				title: "Session kit",
 			},
+			// The image a link to any page shows when shared.
+			{ property: "og:type", content: "website" },
+			{ property: "og:site_name", content: "Session kit" },
+			{ property: "og:image", content: `${SITE_URL}/og.png` },
+			{ property: "og:image:width", content: "1200" },
+			{ property: "og:image:height", content: "630" },
+			{ name: "twitter:card", content: "summary_large_image" },
+			{ name: "twitter:image", content: `${SITE_URL}/og.png` },
 		],
 		links: [{ rel: "stylesheet", href: appCss }],
 	}),

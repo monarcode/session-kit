@@ -22,6 +22,7 @@ import {
 	gitConfig,
 	LATEST,
 	latestLabel,
+	pageMeta,
 	versionOfPath,
 } from "@/lib/shared";
 import { docs, source } from "@/lib/source";
@@ -37,8 +38,10 @@ export const Route = createFileRoute("/docs/$")({
 	head: ({ loaderData }) => ({
 		meta: loaderData
 			? [
-					{ title: `${loaderData.title} | Session kit` },
-					{ name: "description", content: loaderData.description },
+					...pageMeta(
+						`${loaderData.title} | Session kit`,
+						loaderData.description,
+					),
 					// Older lines stay out of search engines, which send readers
 					// to the current docs instead.
 					...(loaderData.older

@@ -12,6 +12,7 @@ import { ScopeNote } from "@/components/landing/scope-note";
 import { Setups } from "@/components/landing/setups";
 import { Tour } from "@/components/landing/tour";
 import { baseOptions } from "@/lib/layout.shared";
+import { pageMeta } from "@/lib/shared";
 import { loadLanding } from "@/lib/tour";
 
 import { version } from "../../../package.json";
@@ -19,14 +20,10 @@ import { version } from "../../../package.json";
 export const Route = createFileRoute("/")({
 	loader: () => loadLanding(),
 	head: () => ({
-		meta: [
-			{ title: "Session kit: the session layer for React apps" },
-			{
-				name: "description",
-				content:
-					"Your backend signs users in. Session kit handles everything after: it saves and restores the session, refreshes tokens, keeps tabs in step and guards your routes.",
-			},
-		],
+		meta: pageMeta(
+			"Session kit: the session layer for React apps",
+			"Your backend signs users in. Session kit handles everything after: it saves and restores the session, refreshes tokens, keeps tabs in step and guards your routes.",
+		),
 	}),
 	component: Home,
 });
