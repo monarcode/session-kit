@@ -3,9 +3,14 @@ title: Overview
 description: With server rendering, the session lives in an encrypted cookie on the server, and the first page renders signed in.
 ---
 
+If your app renders pages on the server, with TanStack Start, Next.js, or
+React Router's framework mode, Session kit keeps the session on the server.
+This page explains how the pieces fit, then sends you to your framework's
+guide.
+
 Both tokens and the user sit in one `httpOnly` cookie that page scripts can't
-read, so the refresh token never reaches the browser. Pages never show a
-"Checking session…" state.
+read, so the refresh token never reaches the browser. The server refreshes
+before rendering, so pages never show a "Checking session…" state.
 
 ## The pieces
 
@@ -44,5 +49,10 @@ how the session reaches the browser:
 Locking isn't available with server rendering. For another server, such as
 the Next.js Pages Router, build a `CookieJar` over its cookies and use
 `createServerAuth` directly.
-[Server sessions](/docs/server-rendering/server-sessions) covers the secret,
-cookie jars, refreshing across instances, and limits.
+
+## Next steps
+
+- Follow the guide for your framework in the table, from installation to
+  calling your API.
+- [Server sessions](/docs/server-rendering/server-sessions): the secret,
+  cookie jars, refreshes across server instances, sign-out, and limits.

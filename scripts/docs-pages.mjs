@@ -113,7 +113,7 @@ declare module "@tanstack/react-router" {
 }
 `;
 
-/** The part of Node's types the Start guide's server code uses. */
+/** The part of Node's types the server guides' code uses. */
 const SERVER_ENV = `
 declare const process: { env: Record<string, string | undefined> };
 `;
@@ -251,6 +251,12 @@ export const documents = [
 		requires: { "react-router": "8.0" },
 		dom: true,
 		fixtures: { "app/env.d.ts": SERVER_ENV },
+	},
+	{
+		path: page("server-rendering/server-sessions"),
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: { "src/env.d.ts": SERVER_ENV },
 	},
 	{
 		path: page("effect"),
