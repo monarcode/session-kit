@@ -3,19 +3,26 @@ title: Getting started
 description: Build a small app that signs in, stays signed in across reloads and tabs, calls an API, and signs out.
 ---
 
-These six steps are the same for every setup that keeps the session in the
-browser or on the device. Server-rendered apps create their client
-differently, so start from [Server rendering](/docs/server-rendering) instead.
+In this guide, you build a small React app that signs in, stays signed in
+across reloads and tabs, calls an API, and signs out. The six steps are the
+same for every setup that keeps the session in the browser or on the device.
+Server-rendered apps create their client differently, so start from
+[Server rendering](/docs/server-rendering) instead.
 
 The code signs in against
 [DummyJSON's auth API](https://dummyjson.com/docs/auth), a public test
 backend, so it runs as written.
 
+## Before you begin
+
+Install Session kit, Zod, and React, as
+[Installation](/docs/installation) shows.
+
 ## 1. Talk to your backend
 
 Session kit never calls your backend for you, so start with the two requests
 you would write anyway: one that signs in, and one that exchanges a refresh
-token for new tokens. Nothing in this file imports Session kit.
+token for new tokens. Nothing in this file imports Session kit:
 
 ```ts title="src/backend.ts"
 import { z } from "zod";
@@ -70,8 +77,8 @@ Session kit keeps tokens out of cookies and attaches them itself.
 
 ## 2. Create the client
 
-The client is the one object that knows about the session. Tell it what a
-user is, where to save the session, and how to refresh.
+The client is the one object that holds the session. Tell it what a user is,
+where to save the session, and how to refresh:
 
 ```ts title="src/auth.ts"
 import { createAuth, webStorage } from "@monarcode/session-kit";
@@ -104,7 +111,7 @@ doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the
 details, and [Storage](/docs/configuration/storage) lists the other places a
 session can be saved.
 
-Create one client per `name` in each tab.
+Create one client per `name` in each tab, once, as this module does.
 
 DummyJSON's tokens are JWTs, so their expiry comes from the `exp` and `iat`
 claims. [Expiry](/docs/configuration/expiry) covers backends that say it
@@ -112,8 +119,8 @@ another way.
 
 ## 3. Add a sign-in form
 
-`signInWithPassword` is all a form needs. It has no Session kit code of its
-own.
+`signInWithPassword` is all a form needs. The form has no Session kit code
+of its own:
 
 ```tsx title="src/sign-in.tsx"
 import { useState, type FormEvent } from "react";
@@ -173,7 +180,7 @@ routers, which use it to send the user on to the page they asked for.
 ## 4. Read the session in React
 
 Create the hooks once, typed by your client, and export them for every
-component to share.
+component to share:
 
 ```ts title="src/hooks.ts"
 import { createAuthHooks } from "@monarcode/session-kit/react";
@@ -185,8 +192,8 @@ export const { AuthProvider, useAuth, useAuthClient } =
 ```
 
 Then render by `status`. Each case is one of the states in
-[How it works](/docs#how-it-works), and TypeScript knows `user` is set by the
-time the last one is reached.
+[How it works](/docs#how-it-works). By the last case, TypeScript has narrowed
+`user` to a value that's set:
 
 ```tsx title="src/app.tsx"
 import { auth } from "./auth.js";
@@ -250,13 +257,17 @@ function AuthError() {
 With [`locking`](/docs/client/locking), give `locked` a case of its own: it
 has a user too, but no usable access.
 
-That is a working app. Sign in and reload: you are still signed in. Open a
-second tab and sign out: both tabs show the form.
+That's a working app. To check it:
+
+1. Sign in. The welcome message appears.
+2. Reload the page. You're still signed in.
+3. Open the app in a second tab, and sign out in one of them. Both tabs show
+   the sign-in form.
 
 ## 5. Call your API
 
 `createAuthFetch` makes a `fetch` that sends the access token to one origin,
-and to no other.
+and to no other:
 
 ```ts title="src/api.ts"
 import { createAuthFetch } from "@monarcode/session-kit/http";
@@ -282,7 +293,8 @@ behaviour and its options.
 ## 6. Protect your routes
 
 The client is the same everywhere. What changes is how each router keeps
-signed-out users away from private pages, so continue with yours:
+signed-out users away from private pages. To continue, follow the guide for
+your router:
 
 - [TanStack Router](/docs/setups/tanstack-router), and
   [TanStack Start in SPA mode](/docs/setups/tanstack-router#tanstack-start-in-spa-mode).
@@ -294,5 +306,8 @@ signed-out users away from private pages, so continue with yours:
 With Effect, the same client becomes a service: see
 [Effect and effetch](/docs/effect).
 
-[Using the client](/docs/client) then covers what else the client does, and
-[Configuring the client](/docs/configuration) the rest of its options.
+## Next steps
+
+- [Using the client](/docs/client): what else the client does, such as
+  updating the user and locking.
+- [Configuring the client](/docs/configuration): the rest of its options.

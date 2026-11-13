@@ -3,6 +3,11 @@ title: Installation
 description: Install Session kit and a schema library, then find the guide and example app for your setup.
 ---
 
+Install Session kit, a schema library, and the packages your setup needs, then
+follow the guide for that setup.
+
+To install the package, run the following command:
+
 ```npm
 npm install @monarcode/session-kit
 ```
@@ -12,22 +17,24 @@ the public API, so pin an exact version and read the
 [release notes](https://github.com/monarcode/session-kit/blob/main/CHANGELOG.md)
 before upgrading.
 
-Any [Standard Schema](https://standardschema.dev) library describes users.
-The examples use Zod:
+Session kit checks each user against a schema from any
+[Standard Schema](https://standardschema.dev) library. The examples use Zod.
+To install it, run the following command:
 
 ```npm
 npm install zod
 ```
 
-Then install React and the router your setup uses.
+Then install React, and the router or framework your setup uses.
 [Compatibility](/docs/reference/compatibility) lists every optional peer
 dependency and the versions it supports.
 
 ## Pick your setup
 
-Each setup has a guide. All but the first have a runnable app in
+Find your setup in the following table. Each one has an import path and a
+guide. All but the first also have a runnable app in
 [`examples/`](https://github.com/monarcode/session-kit/tree/main/examples)
-that signs in against DummyJSON's public test API.
+that signs in against DummyJSON's public test API:
 
 | Setup                                      | Import                                       | Guide                                                                      | Example app                                                                                                                                                                                                                    |
 | ------------------------------------------ | -------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -42,7 +49,16 @@ that signs in against DummyJSON's public test API.
 | Next.js 16, App Router                     | `@monarcode/session-kit/next`                | [Next.js](/docs/setups/next)                                               | [`next-app`](https://github.com/monarcode/session-kit/tree/main/examples/next-app)                                                                                                                                             |
 | Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`                | [Expo Router](/docs/setups/expo)                                           | [`expo-router`](https://github.com/monarcode/session-kit/tree/main/examples/expo-router)                                                                                                                                       |
 
-Two guides apply to more than one setup.
-[Server sessions](/docs/server-rendering/server-sessions) covers what the
-three server-rendered setups share, and [Effect and effetch](/docs/effect)
-works with any of them.
+Two guides apply to more than one setup:
+
+- [Server sessions](/docs/server-rendering/server-sessions) covers what the
+  three server-rendered setups share.
+- [Effect and effetch](/docs/effect) works with any setup.
+
+## Next steps
+
+- For a setup that keeps the session in the browser or on the device, start
+  with [Getting started](/docs/getting-started). The router guides build on
+  its app.
+- For a server-rendered setup, start with
+  [Server rendering](/docs/server-rendering).

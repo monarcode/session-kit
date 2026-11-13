@@ -3,6 +3,14 @@ title: Introduction
 description: Session kit keeps your app signed in with your backend's tokens, through reloads, expired tokens, other tabs, and outages.
 ---
 
+Session kit is a React library for apps whose own backend signs users in and
+issues access and refresh tokens. You hand it the tokens your backend
+returns, and it manages the session from there. It works with TanStack
+Router, React Router, Expo Router, TanStack Start, and Next.js.
+
+This page explains why it exists, what it does, and the terms the rest of the
+docs use. To start using it, see [Installation](/docs/installation).
+
 ## Why Session kit
 
 Signing in is the easy part. Your backend checks a password and answers with
@@ -20,17 +28,19 @@ frameworks it supports.
 
 ### What it does
 
-| When…                                             | Session kit…                                                                                                           |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage`, before the first paint. |
-| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                         |
-| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                              |
-| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token, and the other reuse what it saved.                                               |
-| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                   |
-| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                             |
-| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                              |
-| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                   |
-| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                |
+Session kit handles each of these moments for you:
+
+| When…                                             | Session kit…                                                                                                                                     |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage` and a synchronous schema, before the first render. |
+| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                                                   |
+| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                                                        |
+| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token and the other reuse what it saved, where the browser supports Web Locks.                                    |
+| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                                             |
+| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                                                       |
+| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                                                        |
+| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                                             |
+| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                                          |
 
 ### What it doesn't do
 
@@ -53,6 +63,10 @@ the left, and only state reaches the right:
  └───────────────┘      └───────────────────┘      └──────────────────┘
    issues tokens          keeps the session        state, never tokens
 ```
+
+Your backend issues the tokens. Session kit saves them, refreshes them on
+time, and attaches them to your requests. Your components and route guards
+read the session's state, and never see a token.
 
 Five terms come up throughout:
 
@@ -90,3 +104,12 @@ The session is kept in one of two places, depending on where your app renders:
 | The refresh token | Stays in that storage                                                            | Never reaches the browser                                  |
 
 Hooks, guards, and tab sync work the same in both.
+
+## Next steps
+
+- [Installation](/docs/installation): install the package and find the guide
+  for your setup.
+- [Getting started](/docs/getting-started): build a small app that signs in,
+  stays signed in, and calls an API.
+- [Server rendering](/docs/server-rendering): keep the session on the server
+  with TanStack Start, Next.js, or React Router.
