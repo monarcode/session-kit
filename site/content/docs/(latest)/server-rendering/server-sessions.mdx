@@ -29,21 +29,25 @@ use, not when the module loads, so build steps that import the module without
 the secret still work.
 
 To rotate the secret, pass a list. The first secret seals new cookies, and
-any of them opens one, so sessions survive the change:
+any of them opens one, so sessions survive the change. For example, to read
+the old secret from `OLD_SESSION_SECRET` only while it's set:
 
 ```ts title="src/auth/server.ts"
 import { createServerAuth } from "@monarcode/session-kit/server";
 import { z } from "zod";
 
+const secrets = [process.env.SESSION_SECRET, process.env.OLD_SESSION_SECRET];
+
 export const serverAuth = createServerAuth({
   name: "app",
   user: z.object({ id: z.number(), firstName: z.string() }),
-  secret: [process.env.SESSION_SECRET!, process.env.OLD_SESSION_SECRET!],
+  // A secret that isn't set is left out, so rotating only changes the env.
+  secret: secrets.filter((secret) => secret !== undefined),
 });
 ```
 
-Drop the old secret once the sessions it sealed have expired. A cookie that
-no listed secret opens reads as signed out.
+Remove `OLD_SESSION_SECRET` once the sessions it sealed have expired. A cookie
+that no listed secret opens reads as signed out.
 
 ## Cookie jars
 

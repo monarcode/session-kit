@@ -231,6 +231,7 @@ export const router = createBrowserRouter([
 Then render the router inside the provider, in `src/main.tsx`:
 
 ```tsx
+import { StrictMode } from "react";
 import { RouterProvider } from "react-router";
 
 import { createRoot } from "react-dom/client";
@@ -240,9 +241,11 @@ import { AuthProvider } from "./hooks.js";
 import { router } from "./router.js";
 
 createRoot(document.getElementById("root")!).render(
-  <AuthProvider client={auth}>
-    <RouterProvider router={router} />
-  </AuthProvider>,
+  <StrictMode>
+    <AuthProvider client={auth}>
+      <RouterProvider router={router} />
+    </AuthProvider>
+  </StrictMode>,
 );
 ```
 

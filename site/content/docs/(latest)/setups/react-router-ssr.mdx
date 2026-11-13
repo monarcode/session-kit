@@ -87,9 +87,16 @@ export async function login(username: string, password: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
   });
-  if (response.status === 401) throw new Error("Wrong username or password");
-  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
-  const body: unknown = await response.json();
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    // The backend says why, such as wrong credentials, in `message`.
+    const failure = z.object({ message: z.string() }).safeParse(body);
+    throw new Error(
+      failure.success
+        ? failure.data.message
+        : `Sign-in failed (${response.status})`,
+    );
+  }
   return { ...tokens.parse(body), user: userSchema.parse(body) };
 }
 ```

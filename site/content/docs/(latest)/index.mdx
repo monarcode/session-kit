@@ -30,17 +30,17 @@ frameworks it supports.
 
 Session kit handles each of these moments for you:
 
-| When…                                             | Session kit…                                                                                                                                     |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage` and a synchronous schema, before the first render. |
-| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                                                   |
-| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                                                        |
-| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token and the other reuse what it saved, where the browser supports Web Locks.                                    |
-| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                                             |
-| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                                                       |
-| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                                                        |
-| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                                             |
-| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                                          |
+| When…                                             | Session kit…                                                                                                                                    |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| The page reloads                                  | Restores the saved session and checks the user against your schema again. With `localStorage` and a synchronous schema, before the first paint. |
+| The access token is about to expire               | Refreshes it early, in the background, so requests don't wait.                                                                                  |
+| A request gets a 401 anyway                       | Refreshes once, however many requests failed, then replays the safe ones.                                                                       |
+| Two tabs need a refresh at the same moment        | Lets one tab spend the refresh token and the other reuse what it saved, where the browser supports Web Locks.                                   |
+| The user signs out or switches account in one tab | Follows in every tab, and remounts guarded pages so nothing of the previous account stays on screen.                                            |
+| The backend rejects the refresh token             | Signs out in every tab and clears storage.                                                                                                      |
+| The backend is down when a refresh is due         | Keeps the session, reports the error, and waits for a retry. An outage is not a sign-out.                                                       |
+| A signed-out user opens a private page            | Sends them to sign-in, and back to where they were going afterwards.                                                                            |
+| The page renders on the server                    | Reads the session from an encrypted cookie, so the first response is already signed in.                                                         |
 
 ### What it doesn't do
 

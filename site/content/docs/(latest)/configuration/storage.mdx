@@ -34,21 +34,29 @@ spent token and is signed out. With reuse detection on the backend, both are.
 ## Write your own store
 
 An `AuthStorage` has three operations: `get`, `set` and `remove`. Each can
-return a promise. For example, to save the session in a key-value store your
-app already has:
+return a promise. `set` also receives `expiresAt`: when the saved session
+stops being valid, `maxAge` after this save, in Unix milliseconds.
+
+For example, to save the session in a key-value store your app already has,
+which removes each entry when it expires:
 
 ```ts title="src/storage.ts"
 import type { AuthStorage } from "@monarcode/session-kit";
 
 declare const store: {
   get(key: string): Promise<string | undefined>;
-  put(key: string, value: string): Promise<void>;
+  put(
+    key: string,
+    value: string,
+    options: { expiresAt: number },
+  ): Promise<void>;
   delete(key: string): Promise<void>;
 };
 
 export const kvStorage: AuthStorage = {
   get: async (key) => (await store.get(key)) ?? null,
-  set: (key, value) => store.put(key, value),
+  // The store drops the session itself once it's no longer valid.
+  set: (key, value, { expiresAt }) => store.put(key, value, { expiresAt }),
   remove: (key) => store.delete(key),
 };
 ```

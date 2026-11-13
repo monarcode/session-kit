@@ -104,6 +104,12 @@ const PAGES = {
 const GROUPS = ["Functions", "Components", "Classes", "Values", "Types"];
 
 /**
+ * Types an app builds itself, beside the options and props, so their entry
+ * lists the members it has to fill in.
+ */
+const BUILT_BY_APPS = new Set(["AuthStorage", "CookieJar", "Tokens"]);
+
+/**
  * The reference pages, by path from the repository root. `program` covers
  * each entry point's source file; one is created when it's left out.
  */
@@ -132,7 +138,9 @@ export function renderReference(program = createProgram()) {
 			groups.get(groupOf(exported.name, declaration)).push({
 				name: exported.name,
 				summary: summaryOf(declaration, names),
-				table: /(Options|Props)$/.test(exported.name),
+				table:
+					/(Options|Props)$/.test(exported.name) ||
+					BUILT_BY_APPS.has(exported.name),
 			});
 		}
 		const importPath =

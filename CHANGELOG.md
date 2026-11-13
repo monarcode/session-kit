@@ -37,6 +37,11 @@
 - The compatibility page lists `effect` as a peer of `./effetch` as well as
   `./effect`, and the entry points page orders the entry points as the
   reference does.
+- The reference lists the members of `AuthStorage`, `Tokens` and
+  `CookieJar`, the types an app builds itself. The server-rendering guides'
+  sign-in shows the backend's own message for a failed sign-in, as the
+  example apps do, and the secret-rotation example works once the old secret
+  is removed.
 
 ## 0.1.0-alpha.8
 

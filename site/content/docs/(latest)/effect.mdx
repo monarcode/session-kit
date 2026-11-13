@@ -573,8 +573,8 @@ import type { CookieJar } from "@monarcode/session-kit/server";
 import { currentUser } from "../user.js";
 import { runRequest } from "./run.js";
 
-// TanStack Start: startJar(). Next.js: nextJar(await cookies(), { writable: true }).
-// React Router: routerJar(context).
+// TanStack Start: startJar(). React Router: routerJar(context).
+// Next.js: nextJar(await cookies(), { writable: true }).
 export const profileFor = (jar: CookieJar) => runRequest(jar, currentUser);
 ```
 
@@ -645,9 +645,10 @@ the mirror client.
   `ApiClientLive` or the user schema, mustn't also create a browser client or
   its layer, or the server loads it too.
 - **Name the services in `runRequest`'s signature,** as `src/server/run.ts`
-  does, rather than inferring them from `requestLayer`. With a mirror registered, the
-  registration depends on the server functions the mirror calls, which call
-  `runRequest`, and TypeScript reports a circular type. For the same reason,
+  does, rather than inferring them from `requestLayer`. With a mirror
+  registered, the registration depends on the server functions the mirror
+  calls, which call `runRequest`, and TypeScript reports a circular type. For
+  the same reason,
   the server functions the mirror is made from (its `revalidate`, `signIn`
   and `signOut`) read the session with `serverAuth`, not `Auth.session`.
 - **Keep a request's layer off a shared `memoMap`,** such as the runtime's

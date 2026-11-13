@@ -125,6 +125,12 @@ Where the session stands: `state.status` ([`AuthState`](#authstate)).
 
 Where auth saves the session: `createAuth`'s `storage` option. Use [`webStorage`](#webstorage) in browsers, `secureStorage()` from `@monarcode/session-kit/expo` in Expo apps, and [`memoryStorage`](#memorystorage) in tests. Implement it yourself for another store.
 
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="AuthStorage"
+/>
+
 ### ClientCredentials
 
 The access token as your server gives it to the browser, from `serverAuth.clientCredentials` in `@monarcode/session-kit/server`. `expiresIn` counts from when the server answered, so the browser's clock doesn't matter.
@@ -197,6 +203,12 @@ What `signIn` takes: the [`Tokens`](#tokens), plus the `user` when a schema vali
 ### Tokens
 
 The tokens your backend issues. Pass them to `signIn`, and return them from your refresh callback ([`RefreshFn`](#refreshfn)).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="Tokens"
+/>
 
 ### User
 

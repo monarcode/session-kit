@@ -4,8 +4,8 @@ description: Attach the access token with axios, ky, or any other HTTP client, u
 ---
 
 [`createAuthFetch`](/docs/client/requests) and the
-[effetch plugin](/docs/effect#6-call-your-api-with-effetch) are built on three calls,
-and any other HTTP client can use the same ones:
+[effetch plugin](/docs/effect#6-call-your-api-with-effetch) are built on three
+calls, and any other HTTP client can use the same ones:
 
 1. **Before a request**, `auth.credentials.get()` resolves the credentials to
    send, waiting for a restore or a refresh that is under way. It resolves
