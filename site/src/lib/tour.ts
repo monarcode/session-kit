@@ -58,28 +58,21 @@ async function readExample(page: string, file: string): Promise<string> {
 }
 
 /**
- * The hero's excerpt of Getting started's `src/auth.ts`: the package import
- * and the `createAuth` call, without the option comments except the one on
- * `refresh`, which the hero lets a visitor comment out.
+ * The hero's excerpt of Getting started's `src/auth.ts`: the `createAuth`
+ * call alone, without its comments, so the config and the hour it plays fit
+ * in one view. The tour under the hero shows the whole file.
  */
 function configExcerpt(code: string): string {
 	const lines = code.split("\n");
 	const start = lines.findIndex((line) => line.includes("= createAuth({"));
 	const end = lines.findIndex((line, i) => i > start && line === "});");
-	const imported = lines.find((line) =>
-		line.endsWith('from "@monarcode/session-kit";'),
-	);
-	if (start < 0 || end < 0 || !imported) {
+	if (start < 0 || end < 0) {
 		throw new Error("src/auth.ts no longer has the createAuth call");
 	}
-	const body = lines
+	return lines
 		.slice(start, end + 1)
-		.filter(
-			(line, i, all) =>
-				!line.trimStart().startsWith("//") ||
-				all[i + 1]?.trimStart().startsWith("refresh:"),
-		);
-	return [imported, "", ...body].join("\n");
+		.filter((line) => !line.trimStart().startsWith("//"))
+		.join("\n");
 }
 
 /** The line elements of a highlighted block, without the newlines between. */

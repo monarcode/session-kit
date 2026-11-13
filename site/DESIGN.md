@@ -144,8 +144,8 @@ numbered down a line-number gutter, and divided by hairline rules; only the
 plain-prose leads under section heads switch to Geist, the family's sans. Headings are comments, with a dim `//` in front. Copy is
 comments. The hero opens with the pitch, a lead comment and the install
 prompt at the column's edge, unnumbered; the line numbers start with the
-code: the real `createAuth` config from Getting started, lines 01 to 09,
-whose `refresh` line (08) is live. Under it, one illustrative hour plays as
+code: the real `createAuth` call from Getting started, lines 01 to 06,
+whose `refresh` line (05) is live. Under it, one illustrative hour plays as
 five lanes (signed in, refresh, storage, other tabs, route guard).
 
 The surface is ink, flat, dark only. Lime is the one colour with a voice,
@@ -183,7 +183,7 @@ signal. Everything else is a cool blue-grey ramp drawn from the ink.
   and never as a tint, fade or overlay. It marks played lane cells, the
   playhead, the `>` marker hanging left of a live line's number, the queued
   line's 2px inset bar, the edit cursor, the "applies next cycle" chip, the
-  "signed out" note, the selection highlight, the caret, Fumadocs' focus
+  selection highlight, the caret, Fumadocs' focus
   rings, the one primary action, Get started, and on docs pages the TOC's
   active segment, the reading position's playhead.
 
@@ -322,10 +322,17 @@ The hour's lanes are a two-column grid: lane names (5.5rem, 8rem from
 640px), then 68 equal cells with a 1px gap (3px from 640px): two for the
 sign-in call (08:58, 08:59), 62 for the hour, a blank column for the time
 skipped, then three for "later". Rows are 26px (30px from 640px). The
-status line sits 20px under the axis, with the footnote just below it.
-The playhead spans the
+status line heads the figure, 12px above the lanes, next to the config it
+reports on; the footnote sits 16px under the axis. The playhead spans the
 lanes, not the axis. Axis times sit at the start of their minute's column,
 so 09:00 marks the handover.
+
+Short screens (640px and wider, at most 800px tall, such as a 1280×720
+laptop; the `short:` variant): the hero tightens so the config, the lanes
+and the axis fit in one view. It opens 24px under the navbar, the lead sits
+12px under the H1 at a 1.625 line height, the actions 20px below, the config
+20px below that at a 1.55 line height, the hairline takes 12px either side,
+and lane rows are 26px.
 
 Phones (below 640px): the gutter narrows, the config's "click to comment
 out" tag drops to its own row under the code, the tour's file tabs become
@@ -470,7 +477,9 @@ Clicking it comments the line out (the whole line turns comment grey behind
 line keeps a veil and a 2px lime inset bar, a lime block cursor blinks at
 its end (1s, stepped), and the tag becomes the lime "applies next cycle"
 chip. The edit lands at the next cycle boundary, never mid-hour. Paused,
-it applies at once.
+it applies at once. Once a visitor has queued an edit, the playhead hurries
+to the boundary (about 25ms a minute, no holds), so the effect shows within
+about two seconds; cancelling the edit returns it to its pace.
 
 ### Session Lanes (signature)
 
@@ -487,11 +496,12 @@ in red at 09:15 and the guard redirects at 09:16. Bar
 lanes (signed in, other tabs) hold a state; hit lanes (refresh, storage)
 mark moments. Cells that have played are lime; a moment's cell is lime only
 in the minute it fires, then settles to lane-played grey. A 2px lime
-playhead sweeps the lanes. Under them: a time axis in comment grey, then a
-status line (caption; running or paused; refresh on or off; cycle; the
-clock in foreground; a pause or play text control) and a footnote comment
-saying the hour is illustrative. Without refresh, the signed-in bar ends at
-09:15 with a lime "signed out" note. The footnote carries a key: a blue
+playhead sweeps the lanes. Above them: a status line (caption; running or
+paused; refresh on or off; cycle; the clock in foreground; a pause or play
+text control). Under them: a time axis in comment grey and a footnote
+comment saying the hour is illustrative. Without refresh, the signed-in bar
+ends at 09:15 with a red "signed out" note, which appears once the playhead
+reaches 09:15. The footnote carries a key: a blue
 swatch for your app signing in with your backend, a lime one for Session
 kit from 09:00, and a red one for the session ending.
 
@@ -499,8 +509,11 @@ kit from 09:00, and a red one for the session ending.
 between cycles. Each cycle starts at 08:58. The playhead holds for 1.7s on
 each moment (the 08:58 sign-in call, the 09:00 handover, every refresh, the
 09:20 reload, the 09:31 second tab, and the three moments later) while its
-tooltip shows. The clock reads "later" past the hour. The page demos the edit itself in cycle 1 and every third
-cycle after, until a visitor touches it. Cells ease colour over 200ms. The
+tooltip shows. After the hour's last moment the playhead hurries to the
+end. The clock reads "later" past the hour. The page demos the edit itself,
+until a visitor touches it: it queues the edit in the rest after cycle 1 and
+after every third cycle, and restores the line in the rest after the cycle
+without it, so the config and the hour under it always agree. Cells ease colour over 200ms. The
 hour stops when off screen. Reduced motion shows the complete hour, still,
 with the playhead hidden and the cursor steady.
 

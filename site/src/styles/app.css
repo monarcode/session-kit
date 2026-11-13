@@ -16,12 +16,18 @@
 	--color-buffer-line: #262833;
 	--color-buffer-cell: #1f2129;
 	--color-buffer-mark: #4d5160;
+	/* A lane's hairline track, and a held state the playhead hasn't reached. */
+	--color-buffer-track: #2b2d37;
 	/* Your own code, such as the entry points and your app's sign-in call in
 	   the lanes. Charbox's identifier blue, as in the code blocks. */
 	--color-buffer-blue: #83a598;
 	/* What ends the session in the lanes. Charbox's keyword red. */
 	--color-buffer-red: #fb4934;
 }
+
+/* A wide but short screen, such as a 1280×720 laptop. The hero tightens
+   there, so its config and the hour it plays fit in one view. */
+@custom-variant short (@media (min-width: 40rem) and (max-height: 50rem));
 
 /* The cursor on a queued edit. */
 @keyframes buffer-blink {

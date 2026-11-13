@@ -38,6 +38,12 @@ const COLUMNS = PRE + END;
 const EXPIRES = 15;
 /** Real milliseconds per minute of the hour. */
 const MINUTE_MS = 140;
+/**
+ * Real milliseconds per minute while the playhead hurries: through what is
+ * left of the hour after its last moment, and to the cycle boundary once a
+ * visitor has queued an edit.
+ */
+const HURRY_MS = 25;
 /** A short rest between cycles, in minutes of the hour. */
 const REST = 8;
 /** How long the playhead holds on a moment, so its tooltip can be read. */
@@ -159,13 +165,24 @@ function watchReducedMotion(onChange: () => void) {
 	return () => query.removeEventListener("change", onChange);
 }
 
-type Edits = { refresh: boolean; queued: boolean | null; cycle: number };
+type Edits = {
+	refresh: boolean;
+	queued: boolean | null;
+	cycle: number;
+	/** Whether the hour has played out and rests before the next cycle. */
+	resting: boolean;
+};
 type Edit =
 	| { type: "boundary" }
+	| { type: "restart" }
+	| { type: "rest" }
 	| { type: "queue"; refresh: boolean }
 	| { type: "set"; refresh: boolean };
 
-/** The config's edits: a queued one only lands at a cycle boundary. */
+/**
+ * The config's edits: a queued one only lands where an hour starts, at a
+ * cycle boundary or when the hour restarts after being off screen.
+ */
 function edits(state: Edits, edit: Edit): Edits {
 	switch (edit.type) {
 		case "boundary":
@@ -173,7 +190,17 @@ function edits(state: Edits, edit: Edit): Edits {
 				refresh: state.queued ?? state.refresh,
 				queued: null,
 				cycle: state.cycle + 1,
+				resting: false,
 			};
+		case "restart":
+			return {
+				...state,
+				refresh: state.queued ?? state.refresh,
+				queued: null,
+				resting: false,
+			};
+		case "rest":
+			return { ...state, resting: true };
 		case "queue":
 			return {
 				...state,
@@ -206,7 +233,7 @@ function cellClass(lane: "bar" | "hit", kind: Cell, m: number, minute: number) {
 	// The skipped time between the hour and later is a break in every lane.
 	if (m === HOUR || kind === "") return "";
 	if (lane === "bar") {
-		return `${BAR} ${m <= minute ? "bg-fd-primary" : "bg-[#2b2d37]"}`;
+		return `${BAR} ${m <= minute ? "bg-fd-primary" : "bg-buffer-track"}`;
 	}
 	const shape = "rounded-[1px]";
 	if (kind === "end") {
@@ -223,8 +250,10 @@ const CODE =
 
 /**
  * The hero's live config and the hour it plays. Commenting out the `refresh`
- * line takes effect at the next cycle, never mid-hour. Until a visitor
- * touches it, the page makes that edit itself every third cycle.
+ * line takes effect at the next cycle, never mid-hour: the playhead hurries
+ * there once a visitor has made the edit. Until a visitor touches it, the
+ * page makes that edit itself as a cycle ends, so the config and the hour
+ * under it always agree.
  */
 export function LiveConfig({
 	lines,
@@ -233,10 +262,11 @@ export function LiveConfig({
 	lines: ConfigLine[];
 	start: number;
 }) {
-	const [{ refresh, queued, cycle }, dispatch] = useReducer(edits, {
+	const [{ refresh, queued, cycle, resting }, dispatch] = useReducer(edits, {
 		refresh: true,
 		queued: null,
 		cycle: 1,
+		resting: false,
 	});
 	const [minute, setMinute] = useState(END);
 	// The server and the first render show a still hour; the browser decides.
@@ -252,6 +282,8 @@ export function LiveConfig({
 	const figure = useRef<HTMLElement>(null);
 	const head = useRef<HTMLDivElement>(null);
 	const stops = useRef(STOPS.on);
+	// Whether a visitor's edit is queued, so the playhead hurries to land it.
+	const hurry = useRef(false);
 	const captionId = useId();
 	// The moment the playhead holds on, and the one under the pointer.
 	const [held, setHeld] = useState<number | null>(null);
@@ -281,27 +313,52 @@ export function LiveConfig({
 	}, []);
 
 	useEffect(
+		function hurryForTheVisitor() {
+			hurry.current = touched && queued !== null;
+		},
+		[touched, queued],
+	);
+
+	useEffect(
 		function playTheHour() {
 			if (!playing || !visible) return;
+			// The hour starts over from 08:58, so an edit still queued lands.
+			dispatch({ type: "restart" });
 			let frame = 0;
 			let previous = performance.now();
-			// Minutes into the cycle, the next moment to hold on, and when the
-			// current hold ends.
+			// Minutes into the cycle, the next moment to hold on, when the
+			// current hold ends, and whether the hour has played out.
 			let t = -PRE;
 			let next = 0;
 			let holdUntil = 0;
+			let rested = false;
 			let last: number | null = null;
 			function tick(now: number) {
 				const elapsed = now - previous;
 				previous = now;
+				const hurried = hurry.current;
+				// A hurried playhead leaves the moment it was holding on.
+				if (hurried && holdUntil) holdUntil = now;
 				if (now >= holdUntil) {
 					if (holdUntil) {
 						holdUntil = 0;
 						setHeld(null);
 					}
-					const advanced = t + elapsed / MINUTE_MS;
 					const stop = stops.current[next];
-					if (stop !== undefined && advanced >= stop) {
+					// After the hour's last moment there is nothing left to show,
+					// so the playhead hurries to the end. The rest keeps its pace:
+					// it is the beat in which the page's own edit shows as queued.
+					const pace =
+						hurried || (stop === undefined && t < END)
+							? HURRY_MS
+							: MINUTE_MS;
+					const advanced = t + elapsed / pace;
+					if (hurried) {
+						// No holds: pass every moment on the way to the boundary.
+						while ((stops.current[next] ?? Infinity) <= advanced)
+							next += 1;
+						t = advanced;
+					} else if (stop !== undefined && advanced >= stop) {
 						t = stop;
 						next += 1;
 						holdUntil = now + HOLD_MS;
@@ -310,13 +367,20 @@ export function LiveConfig({
 						t = advanced;
 					}
 				}
+				if (t >= END && !rested) {
+					rested = true;
+					dispatch({ type: "rest" });
+				}
 				if (t >= END + REST) {
-					// The cycle boundary: a queued edit lands here. The first stop,
-					// the sign-in call, is the same in both scores, so the new
-					// score's stops are in place by the time the hold there ends.
+					// The cycle boundary: a queued edit lands here, so there is
+					// nothing left to hurry for. The first stop, the sign-in call,
+					// is the same in both scores, so the new score's stops are in
+					// place by the time the hold there ends.
 					t = -PRE;
 					next = 0;
 					last = null;
+					rested = false;
+					hurry.current = false;
 					dispatch({ type: "boundary" });
 				}
 				const shown = Math.min(t, END) + PRE;
@@ -336,23 +400,16 @@ export function LiveConfig({
 		[playing, visible],
 	);
 
-	// The page's own demo: early in the first cycle, then every third cycle, it
-	// drops `refresh` for one cycle and puts it back.
+	// The page's own demo: as the first cycle ends, then every third cycle, it
+	// drops `refresh` for one cycle and puts it back. The edit is made once the
+	// hour has played out, so the config never disagrees with the hour shown.
 	useEffect(
 		function demoTheEdit() {
-			if (touched || !playing) return;
+			if (touched || !playing || !resting) return;
 			if (refresh && cycle % 3 !== 1) return;
-			const timer = setTimeout(
-				() => {
-					dispatch({ type: "queue", refresh: !refresh });
-				},
-				refresh ? 3000 : 2400,
-			);
-			return function cancel() {
-				clearTimeout(timer);
-			};
+			dispatch({ type: "queue", refresh: !refresh });
 		},
-		[cycle, refresh, touched, playing],
+		[resting, cycle, refresh, touched, playing],
 	);
 
 	function toggle() {
@@ -372,7 +429,7 @@ export function LiveConfig({
 
 	return (
 		<>
-			<div className="mt-7 text-[13px] leading-[1.8] sm:mt-8 sm:text-[15px] sm:leading-[1.7]">
+			<div className="mt-7 text-[13px] leading-[1.8] sm:mt-8 sm:text-[15px] sm:leading-[1.7] short:mt-5 short:leading-[1.55]">
 				{lines.map((line, i) => {
 					const live = line.text.trimStart().startsWith("refresh:");
 					const n = start + i;
@@ -444,7 +501,7 @@ export function LiveConfig({
 			<figure
 				ref={figure}
 				aria-labelledby={captionId}
-				className="mt-5 border-t border-buffer-line pt-5"
+				className="mt-5 border-t border-buffer-line pt-5 short:mt-3 short:pt-3"
 			>
 				<p className="sr-only">
 					Before 09:00, your app signs in with your backend, then hands the
@@ -459,13 +516,48 @@ export function LiveConfig({
 					access expires at 09:15, and the guard redirects at 09:16.
 				</p>
 
-				<div aria-hidden="true">
+				{/* The status line heads the figure: it sits by the config it reports
+				    on, and no tooltip, which opens under a lane, covers it. */}
+				<div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground">
+					<figcaption id={captionId} className="text-pretty">
+						One illustrative hour, as Session kit runs it
+					</figcaption>
+					<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-buffer-dim">
+						<span>{playing ? "running" : "paused"}</span>
+						<span>refresh {refresh ? "on" : "off"}</span>
+						{!refresh && shownMinute >= EXPIRES && (
+							<span className="text-buffer-red sm:hidden">
+								signed out at 09:15
+							</span>
+						)}
+						<span>
+							cycle{" "}
+							<span className="text-fd-foreground tabular-nums">
+								{cycle}
+							</span>
+						</span>
+						<span
+							className="text-sm text-fd-foreground tabular-nums"
+							aria-hidden="true"
+						>
+							{clock(shownMinute)}
+						</span>
+						<button
+							type="button"
+							onClick={pauseOrPlay}
+							className="underline decoration-buffer-dim underline-offset-4 transition-colors hover:text-fd-foreground"
+						>
+							{playing ? "pause" : "play"}
+						</button>
+					</div>
+				</div>
+				<div aria-hidden="true" className="mt-3">
 					{/* The playhead spans the lanes, not the axis under them. */}
 					<div className="relative">
 						{LANES.map(([lane, kind], k) => (
 							<div
 								key={lane}
-								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-[5px] sm:grid-cols-[8rem_1fr]"
+								className="grid grid-cols-[5.5rem_1fr] items-center gap-3 py-[5px] sm:grid-cols-[8rem_1fr] short:py-[3px]"
 							>
 								<span className="text-xs text-fd-muted-foreground">
 									{lane}
@@ -480,14 +572,14 @@ export function LiveConfig({
 									    broken where the hour skips to later. Only the
 									    signed-in lane starts before 09:00. */}
 									<span
-										className="absolute top-1/2 -z-10 h-px bg-[#2b2d37]"
+										className="absolute top-1/2 -z-10 h-px bg-buffer-track"
 										style={{
 											left: columnAt(k === 0 ? -PRE : 0),
 											right: `calc(100% - ${columnAt(HOUR)})`,
 										}}
 									/>
 									<span
-										className="absolute top-1/2 right-0 -z-10 h-px bg-[#2b2d37]"
+										className="absolute top-1/2 right-0 -z-10 h-px bg-buffer-track"
 										style={{ left: columnAt(HOUR + 1) }}
 									/>
 									{/* Before 09:00 only the signed-in lane has anything:
@@ -501,7 +593,7 @@ export function LiveConfig({
 												key={m}
 												onPointerEnter={() => setHovered(-PRE)}
 												onPointerLeave={() => setHovered(null)}
-												className={`${BAR} cursor-help transition-colors duration-200 ${m <= shownMinute ? "bg-buffer-blue" : "bg-[#2b2d37]"}`}
+												className={`${BAR} cursor-help transition-colors duration-200 ${m <= shownMinute ? "bg-buffer-blue" : "bg-buffer-track"}`}
 											/>
 										);
 									})}
@@ -528,7 +620,7 @@ export function LiveConfig({
 											/>
 										);
 									})}
-									{k === 0 && !refresh && (
+									{k === 0 && !refresh && shownMinute >= EXPIRES && (
 										<span
 											className="absolute top-1/2 -translate-y-1/2 bg-fd-background ps-2 pe-1 text-xs whitespace-nowrap text-buffer-red max-sm:hidden"
 											style={{ left: columnAt(EXPIRES) }}
@@ -539,7 +631,7 @@ export function LiveConfig({
 								</div>
 							</div>
 						))}
-						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.625rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.875rem]">
+						<div className="pointer-events-none absolute inset-y-0 right-0 left-[calc(5.5rem+0.75rem)] [--row:1.625rem] sm:left-[calc(8rem+0.75rem)] sm:[--row:1.875rem] short:[--row:1.625rem]">
 							<div
 								ref={head}
 								className="absolute inset-y-[-4px] w-0.5 bg-fd-primary"
@@ -574,42 +666,8 @@ export function LiveConfig({
 					</div>
 				</div>
 
-				{/* The status line, under the lanes it describes. */}
-				<div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 text-xs text-fd-muted-foreground">
-					<figcaption id={captionId} className="text-pretty">
-						One illustrative hour, as Session kit runs it
-					</figcaption>
-					<div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-buffer-dim">
-						<span>{playing ? "running" : "paused"}</span>
-						<span>refresh {refresh ? "on" : "off"}</span>
-						{!refresh && (
-							<span className="text-buffer-red sm:hidden">
-								signed out at 09:15
-							</span>
-						)}
-						<span>
-							cycle{" "}
-							<span className="text-fd-foreground tabular-nums">
-								{cycle}
-							</span>
-						</span>
-						<span
-							className="text-sm text-fd-foreground tabular-nums"
-							aria-hidden="true"
-						>
-							{clock(shownMinute)}
-						</span>
-						<button
-							type="button"
-							onClick={pauseOrPlay}
-							className="underline decoration-buffer-dim underline-offset-4 transition-colors hover:text-fd-foreground"
-						>
-							{playing ? "pause" : "play"}
-						</button>
-					</div>
-				</div>
-				<p className="mt-2 max-w-[110ch] text-xs leading-relaxed text-buffer-dim">
-					{"// "}Illustrative:{" "}
+				<p className="mt-4 max-w-[110ch] text-xs leading-relaxed text-buffer-dim">
+					<span aria-hidden="true">{"// "}</span>Illustrative:{" "}
 					<span
 						aria-hidden="true"
 						className="inline-block h-1.5 w-3 bg-buffer-blue align-middle sm:h-2"
@@ -624,9 +682,9 @@ export function LiveConfig({
 						aria-hidden="true"
 						className="inline-block h-1.5 w-3 bg-buffer-red align-middle sm:h-2"
 					/>{" "}
-					it ends. Access tokens last 15 minutes, the page reloads at
-					09:20, a second tab opens at 09:31, and later the refresh token
-					expires too.
+					it ends. Access tokens last 15 minutes. With refresh, the page
+					reloads at 09:20, a second tab opens at 09:31, and later the
+					refresh token expires too.
 				</p>
 			</figure>
 		</>
