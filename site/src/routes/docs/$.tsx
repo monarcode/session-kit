@@ -31,7 +31,7 @@ export const Route = createFileRoute("/docs/$")({
 	component: Page,
 	loader: async ({ params }) => {
 		const slugs = params._splat?.split("/") ?? [];
-		const data = await loader({ data: slugs });
+		const data = await pageData(slugs);
 		await docs.getPage(data.path)?.preload();
 		return data;
 	},
@@ -51,6 +51,19 @@ export const Route = createFileRoute("/docs/$")({
 			: [],
 	}),
 });
+
+/**
+ * In the browser, a page's data is a JSON file. A missing page has none, so
+ * the host answers with its 404 page, which fails to parse.
+ */
+async function pageData(slugs: string[]) {
+	try {
+		return await loader({ data: slugs });
+	} catch (error) {
+		if (error instanceof SyntaxError) throw notFound();
+		throw error;
+	}
+}
 
 const loader = createServerFn({ method: "GET" })
 	.validator((slugs: string[]) => slugs)

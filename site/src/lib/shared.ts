@@ -28,6 +28,10 @@ export function pageMeta(title: string, description: string) {
 	];
 }
 
+/** The route prerendered to `404.html`, and the meta tag that marks it. */
+export const NOT_FOUND_PATH = "/404";
+export const NOT_FOUND_MARK = "session-kit-not-found";
+
 export const gitConfig = {
 	user: "monarcode",
 	repo: "session-kit",
