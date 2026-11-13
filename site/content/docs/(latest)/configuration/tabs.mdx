@@ -1,0 +1,32 @@
+---
+title: Tabs
+description: How open tabs follow each other's sign-ins and sign-outs, and share one refresh between them.
+---
+
+In a browser, each open tab runs its own client over the same saved session.
+This page explains how the tabs stay in step, and how they share one refresh.
+
+## Sign-ins and sign-outs
+
+While the client is [mounted](/docs/client), each tab follows the others
+through `storage` events:
+
+- A sign-out in one tab signs out every tab.
+- A sign-in or an account switch switches every tab.
+- A profile update or a refresh shows in every tab.
+
+## One refresh at a time
+
+The client refreshes under the `<name>:auth:refresh`
+[Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API). One tab
+at a time spends the refresh token, and the others reuse the tokens it saved.
+Rotating refresh tokens therefore work with several tabs open.
+
+Without Web Locks, two tabs that refresh at the same instant can both spend
+the token. A short reuse window on your backend covers that case.
+
+## Expo apps and locking
+
+An Expo app has one JavaScript context, so it has no tabs to follow and needs
+no lock. With [`locking`](/docs/client/locking) on, tabs don't follow each
+other.

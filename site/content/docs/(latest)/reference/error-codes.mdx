@@ -1,0 +1,58 @@
+---
+title: Error codes
+description: Every AuthErrorCode, what it means and when you'll see it.
+---
+
+Every error Session kit throws or reports is an `AuthError`. Match on its
+`code`; the `message` is for people, and may change.
+
+```ts title="src/error-codes.ts"
+import { AuthError } from "@monarcode/session-kit";
+
+export function isLocked(error: unknown): boolean {
+  return error instanceof AuthError && error.code === "LOCKED";
+}
+```
+
+How errors reach your app, and how to show them:
+[Errors](/docs/configuration/errors).
+
+## USER_VALIDATION_FAILED
+
+The user couldn't be accepted. `issues` holds the schema's issues when it rejected the user, and `cause` holds the error when something else failed, such as an `updateUser` function or, in the browser of a server-rendered app, signing in on the server. Otherwise `message` says why, such as a user that isn't a plain JSON object.
+
+## INVALID_SESSION
+
+Tokens or a saved session that can't be used, such as an access token that already expired at sign-in.
+
+## PERSISTENCE_FAILED
+
+Storage couldn't be read, written or cleared. In the browser of a server-rendered app, signing out on the server failed.
+
+## REFRESH_FAILED
+
+The refresh failed: your refresh callback threw, or there was no `refresh` option or refresh token to use. In the browser of a server-rendered app, reading the session or the access token from the server failed.
+
+## REVOKE_FAILED
+
+Your `revoke` callback failed. It shows in `state.error`, and `signOut()` still resolves.
+
+## SESSION_CHANGED
+
+The session changed while the call ran: a newer sign-in, a sign-out, or another tab replaced it.
+
+## UNAUTHENTICATED
+
+The call needs someone signed in, and no one is.
+
+## LOCKED
+
+The session is locked. Call `unlock()` first.
+
+## UNLOCK_FAILED
+
+`locking.open` failed, so the session stays locked.
+
+## INVALID_OPTIONS
+
+An option or argument Session kit can't use, or a method called without the option it needs.

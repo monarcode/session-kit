@@ -1,0 +1,54 @@
+---
+title: "React"
+description: "React hooks and the provider that read a client's state."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/react";
+```
+
+Guide: [Read the session in React](/docs/getting-started#4-read-the-session-in-react).
+
+## Functions
+
+### createAuthHooks
+
+Creates React hooks typed for one auth client. Each call has its own context, so an app with several clients calls it once per client. With TanStack Router, pass `useRouterAuth` as `useClient` instead of rendering `AuthProvider`. See [`AuthHooksOptions`](#authhooksoptions).
+
+### useMirrorAuth
+
+Creates a `createMirrorAuth` client once, from the session the page was rendered with, and keeps it in step with your server. Call it in the component that renders `AuthProvider`.
+
+## Types
+
+### AuthHooks
+
+The provider and hooks [`createAuthHooks`](#createauthhooks) returns, typed for one client.
+
+### AuthHooksOptions
+
+Options for [`createAuthHooks`](#createauthhooks).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react/index.d.ts"
+  name="AuthHooksOptions"
+/>
+
+### AuthProviderProps
+
+Props for the `AuthProvider` that [`createAuthHooks`](#createauthhooks) returns.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react/index.d.ts"
+  name="AuthProviderProps"
+/>
+
+### AuthSource
+
+What the React bindings need from an auth client: its `state`, and `mount` to start background work while rendered. A `createAuth` or `createMirrorAuth` client fits.
+
+### StateOf
+
+The state type of a client: what `useAuth()` returns (`AuthState`).

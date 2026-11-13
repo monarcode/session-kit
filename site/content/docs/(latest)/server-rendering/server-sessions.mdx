@@ -1,0 +1,133 @@
+---
+title: Server sessions
+description: How the server keeps the session in every framework, from the cookie and its secret to refreshing, signing out and limits.
+---
+
+This page covers what every server-rendered setup shares: the cookie and its
+secret, cookie jars, refreshes, sign-out, and limits. Read it once your app
+works, to deploy it. The setup guides show the code:
+[TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next),
+and [React Router with server rendering](/docs/setups/react-router-ssr).
+
+## The cookie
+
+`createServerAuth` from `@monarcode/session-kit/server` keeps both tokens and
+the user in one cookie, `<name>.session`, sealed with AES-256-GCM through Web
+Crypto. It's `httpOnly`, so page scripts can't read it, and `Secure` and
+`SameSite=Lax` unless you pass other `cookie` options. It takes the options
+`createAuth` does, except `storage` and `locking`, plus `secret`, `cookie`
+and `clientCredentials`.
+
+Keep the module that creates it on the server: each setup page shows how
+its framework keeps such a module out of the browser bundle.
+
+## The secret
+
+Use 32 or more random characters from an environment variable. To make one,
+run `openssl rand -base64 32`. `createServerAuth` checks the secret on first
+use, not when the module loads, so build steps that import the module without
+the secret still work.
+
+To rotate the secret, pass a list. The first secret seals new cookies, and
+any of them opens one, so sessions survive the change. For example, to read
+the old secret from `OLD_SESSION_SECRET` only while it's set:
+
+```ts title="src/auth/server.ts"
+import { createServerAuth } from "@monarcode/session-kit/server";
+import { z } from "zod";
+
+const secrets = [process.env.SESSION_SECRET, process.env.OLD_SESSION_SECRET];
+
+export const serverAuth = createServerAuth({
+  name: "app",
+  user: z.object({ id: z.number(), firstName: z.string() }),
+  // A secret that isn't set is left out, so rotating only changes the env.
+  secret: secrets.filter((secret) => secret !== undefined),
+});
+```
+
+Remove `OLD_SESSION_SECRET` once the sessions it sealed have expired. A cookie
+that no listed secret opens reads as signed out.
+
+## Cookie jars
+
+Every `serverAuth` method takes the request's `CookieJar`, which each
+framework's adapter gives you. Use one jar per request: calls with the same
+jar share what it read and wrote and one refresh, so a jar kept at module
+level would show one request's session to the next.
+
+A jar is read-only where the framework can't set cookies, as while a Server
+Component renders or a page streams. There, nothing is refreshed or saved:
+see `CookieJar.writable` for which calls reject and with what. Refresh before
+rendering, in middleware or a proxy, with `serverAuth.refreshIfDue`. For
+another server, build a [`CookieJar`](/docs/reference/server#cookiejar) over
+its cookies.
+
+## Code that takes a client
+
+`serverAuth.forRequest(jar)` is one request's session shaped like a client
+(`RequestAuth`). Code written for a client works on the server with it:
+`createAuthFetch(serverAuth.forRequest(jar), baseUrl)` sends the cookie's
+token and saves a renewed one after a 401, and Effect's `Auth.layer` takes
+it ([Effect on the server](/docs/effect#on-the-server)). Make it per request,
+like the jar.
+
+## Token refresh
+
+Parallel requests to one instance that carry the same cookie share one
+refresh. For ten seconds afterwards, a request still carrying the old cookie
+gets the new tokens rather than refreshing again.
+
+Each `createServerAuth` call is its own instance, and a framework may make
+several on one server, one per bundle. Separate processes, servers, and
+serverless functions are separate instances too. Instances share nothing, so
+with rotating refresh tokens, give your backend a short reuse window. Two
+instances that refresh the same session then don't sign it out.
+
+## Sign-out
+
+`serverAuth.signOut` clears the cookie in this browser, then calls your
+`revoke`. The cookie holds the whole session and the server keeps no list of
+sessions, so a copy of the cookie made before sign-out still reads as signed
+in. For ten seconds, the instance that signed out treats such a copy as
+signed out, as it treats an old cookie after a refresh. After that, the copy
+works for as long as its tokens do.
+
+`revoke` is what ends the session: have your backend revoke the refresh
+token there, so a copy can't refresh, and keep access tokens short-lived,
+since the backend accepts one until it expires unless it checks for
+revocation.
+
+## The access token in the browser
+
+Server code calls your API with `serverAuth.credentials`. To call it from the
+browser too, with `createAuthFetch` or effetch's `sessionBearer`, opt in with
+`clientCredentials: true` and expose `serverAuth.clientCredentials.get` and
+`.renew` through your own same-origin endpoint, passed to `createMirrorAuth`
+as `credentials`. Page scripts then hold the access token in memory, never the
+refresh token, so a script injected into the page can use the API while the
+page is open, as it could with any token the browser holds.
+
+Accept requests to that endpoint from your own site only. Where the framework
+doesn't check, compare `Sec-Fetch-Site` to `same-origin`: browsers send it
+since 2023 (Safari 16.4), and older ones are refused.
+
+## Limits
+
+- **Size.** The cookie can take about 7.5 KB across two cookies, since
+  servers and proxies refuse larger request headers (nginx: 8 KB for the
+  `Cookie` line, shared with the site's other cookies), and go on refusing
+  every page until the cookie is cleared. A larger user rejects at sign-in
+  with `PERSISTENCE_FAILED`, so keep the user small.
+- **Plain http.** The cookie is `Secure` by default. Browsers accept that on
+  `http://localhost` except Safari: pass `cookie: { secure: false }` for
+  local development there, never in production.
+- **Locking.** `locking` isn't available: the server keeps the tokens, so
+  there is nothing on the device to lock.
+
+## Next steps
+
+- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+  request's session.
+- [Security](/docs/security): what Session kit protects, and what stays your
+  backend's job.

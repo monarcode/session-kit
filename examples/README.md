@@ -69,7 +69,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   and the profile query, which `src/ui.tsx` uses with `useMutation` and
   `useQuery`, and the root route gives each session its own query cache. The
   hooks and the guards are the SPA app's. See
-  [the guide](../docs/effect.md).
+  [the guide](https://session-kit.pages.dev/docs/effect).
 - **TanStack Start with server rendering** keeps the session in an encrypted
   `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
   with DummyJSON from a server function, and refreshes in request middleware
@@ -80,7 +80,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   random characters) to run `vite preview`; `vite dev` uses a development
   secret. The cookie is `Secure` outside `vite dev`, which Safari refuses
   over `http://localhost`: try `vite preview` in another browser. See
-  [the guide](../docs/tanstack-start.md).
+  [the guide](https://session-kit.pages.dev/docs/setups/tanstack-start).
 - **Next.js** keeps the session the same way: Proxy refreshes it
   (`proxy.ts`), Server Components read it through `lib/auth/session.ts`, and
   Server Functions in `app/actions.ts` sign in and out. `useMirrorAuth` in
@@ -88,7 +88,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   page again when the session changes in the browser, so the pages'
   redirects run. The browser gets the access token from a Route Handler.
   `SESSION_SECRET` and Safari work as for TanStack Start, with `next start`
-  and `next dev`. See [the guide](../docs/next.md).
+  and `next dev`. See [the guide](https://session-kit.pages.dev/docs/setups/next).
 - **React Router with server rendering** keeps the session the same way.
   Root middleware (`app/auth/middleware.server.ts`) gives each request a
   cookie jar and refreshes, the root loader reads the session, and the sign-in
@@ -99,7 +99,7 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   and gets the access token through the resource routes in
   `app/routes/auth.*.ts`. `SESSION_SECRET` and Safari work as for TanStack
   Start, with `pnpm start` (after `pnpm build`) and `react-router dev`. See
-  [the guide](../docs/react-router-ssr.md).
+  [the guide](https://session-kit.pages.dev/docs/setups/react-router-ssr).
 - **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
   `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
   after a failed refresh, and re-checks the session when the app returns to

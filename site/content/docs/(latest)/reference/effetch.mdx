@@ -1,0 +1,32 @@
+---
+title: "effetch"
+description: "An effetch plugin that sends the access token."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/effetch";
+```
+
+Guide: [Effect and effetch](/docs/effect).
+
+## Functions
+
+### sessionBearer
+
+An effetch plugin that sends the current access token as `Authorization: Bearer`. After a 401, it gets a new access token once. `GET` and `HEAD` requests are then sent again; other requests return the 401 for you to retry. If the request sent again gets a 401 too, the user is signed out, unless `signOutOnRepeated401` is off. If the renewal ends the session, the call returns the 401.
+
+## Types
+
+### SessionBearerOptions
+
+Options for [`sessionBearer`](#sessionbearer).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/effetch/index.d.ts"
+  name="SessionBearerOptions"
+/>
+
+### SessionBearerPlugin
+
+The plugin [`sessionBearer`](#sessionbearer) returns. Its calls can fail with `AuthFailure`, and `Fetch.make` needs the `Auth` service.

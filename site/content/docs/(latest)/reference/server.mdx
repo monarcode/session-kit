@@ -1,0 +1,80 @@
+---
+title: "Server"
+description: "Sessions kept on the server, in an encrypted cookie."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/server";
+```
+
+Guide: [Server sessions](/docs/server-rendering/server-sessions).
+
+## Functions
+
+### createServerAuth
+
+Creates the server side of Session kit ([`ServerAuth`](#serverauth)). It keeps both tokens and the user in an encrypted, `httpOnly` cookie, so page scripts never see the refresh token.
+
+## Types
+
+### ClientCredentials
+
+The access token as your server gives it to the browser, from `serverAuth.clientCredentials` in `@monarcode/session-kit/server`. `expiresIn` counts from when the server answered, so the browser's clock doesn't matter.
+
+### CookieJar
+
+Reads and writes one request's cookies, for `createServerAuth`'s methods. The framework adapters, such as `nextJar` and `startJar`, build one. Elsewhere, wrap the request's cookies and the response's `Set-Cookie`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="CookieJar"
+/>
+
+### CookieOptions
+
+The session cookie's attributes, as [`CookieJar`](#cookiejar)'s `set` and `delete` receive them. Every framework's cookie API takes this shape, or maps from it in a line.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="CookieOptions"
+/>
+
+### RefreshIfDueOptions
+
+Options for [`ServerAuth`](#serverauth)'s `refreshIfDue`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="RefreshIfDueOptions"
+/>
+
+### RequestAuth
+
+One request's session, shaped like a client. Get it from `serverAuth.forRequest(jar)`, and pass it to code that expects a client, such as `createAuthFetch` from `@monarcode/session-kit/http`. Make one per request, never at module level.
+
+### ServerAuth
+
+The server side of Session kit, from [`createServerAuth`](#createserverauth). It keeps the session in an encrypted cookie. Each method takes the request's [`CookieJar`](#cookiejar), and `forRequest(jar)` gives one request's session shaped like a client ([`RequestAuth`](#requestauth)).
+
+### ServerAuthOptions
+
+Options for [`createServerAuth`](#createserverauth). `user`, `refresh`, `revoke`, `maxAge` and `debug` work as they do for `createAuth`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="ServerAuthOptions"
+/>
+
+### SessionCookieOptions
+
+The session cookie's attributes: the `cookie` option of [`ServerAuthOptions`](#serverauthoptions). The cookie is always `httpOnly`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="SessionCookieOptions"
+/>

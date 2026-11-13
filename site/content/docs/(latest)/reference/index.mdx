@@ -1,0 +1,40 @@
+---
+title: Entry points
+description: Every import path Session kit publishes, and what each one exports.
+---
+
+Session kit publishes one entry point for each part of the package. This page
+lists them, with what each one exports. Each entry point's page documents its
+exports, with their options and types.
+
+## Entry points
+
+Import from these paths only. Internal `dist` paths aren't part of the public
+API.
+
+| Import                                                                                  | Exports                                                                                                                |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| [`@monarcode/session-kit`](/docs/reference/core)                                        | `createAuth`, `createMirrorAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, types |
+| [`@monarcode/session-kit/react`](/docs/reference/react)                                 | `createAuthHooks`, `useMirrorAuth`, types                                                                              |
+| [`@monarcode/session-kit/tanstack-router`](/docs/reference/tanstack-router)             | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useRouterAuth`, types                         |
+| [`@monarcode/session-kit/react-router`](/docs/reference/react-router)                   | `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useAuthRevalidation`, types                                  |
+| [`@monarcode/session-kit/react-router/server`](/docs/reference/react-router-server)     | `cookieJarMiddleware`, `routerJar`, types                                                                              |
+| [`@monarcode/session-kit/http`](/docs/reference/http)                                   | `createAuthFetch`, types                                                                                               |
+| [`@monarcode/session-kit/server`](/docs/reference/server)                               | `createServerAuth`, types                                                                                              |
+| [`@monarcode/session-kit/tanstack-start`](/docs/reference/tanstack-start)               | `sessionHydration`, `loadSession`, types                                                                               |
+| [`@monarcode/session-kit/tanstack-start/server`](/docs/reference/tanstack-start-server) | `startJar`                                                                                                             |
+| [`@monarcode/session-kit/next`](/docs/reference/next)                                   | `nextJar`, `proxyJar`, types                                                                                           |
+| [`@monarcode/session-kit/expo`](/docs/reference/expo)                                   | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                              |
+| [`@monarcode/session-kit/effect`](/docs/reference/effect)                               | `Auth`, `AuthFailure`, types                                                                                           |
+| [`@monarcode/session-kit/effetch`](/docs/reference/effetch)                             | `sessionBearer`, types                                                                                                 |
+
+## Bundle size
+
+The package is tree-shakeable, so a bundle holds only what you import. An
+entry point you don't import adds nothing.
+
+## Errors
+
+Errors from Session kit's own logic are `AuthError`s. In `./effect` and
+`./effetch`, Effects fail with `AuthFailure`, which carries the same code.
+See [Error codes](/docs/reference/error-codes) for every `AuthErrorCode`.

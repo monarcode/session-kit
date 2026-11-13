@@ -1,0 +1,16 @@
+---
+title: "TanStack Start server"
+description: "TanStack Start's server-side cookie access."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/tanstack-start/server";
+```
+
+Guide: [TanStack Start](/docs/setups/tanstack-start).
+
+## Functions
+
+### startJar
+
+The `CookieJar` for the request TanStack Start is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. Use it in a server function, request middleware, a server route, or `beforeLoad` and loaders while they run on the server. Every call during one request returns the same jar.

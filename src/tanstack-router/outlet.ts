@@ -35,7 +35,7 @@ import {
 export type SessionOutletProps = {
 	/**
 	 * Shown while the guard checks the session again, such as after a
-	 * sign-out. Default: nothing.
+	 * sign-out.
 	 */
 	pending?: ReactNode | undefined;
 	/**

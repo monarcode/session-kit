@@ -1,209 +1,18 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import ts from "typescript";
 
-/** What TanStack Router's generator would write for its guide's routes. */
-const ROUTE_TREE = `
-import { Route as rootRoute } from "./routes/__root.js";
-import { Route as loginRouteImport } from "./routes/login.js";
-import { Route as authenticatedRouteImport } from "./routes/_authenticated.js";
-import { Route as authenticatedIndexRouteImport } from "./routes/_authenticated/index.js";
-
-const loginRoute = loginRouteImport.update({
-  id: "/login",
-  path: "/login",
-  getParentRoute: () => rootRoute,
-} as any);
-const authenticatedRoute = authenticatedRouteImport.update({
-  id: "/_authenticated",
-  getParentRoute: () => rootRoute,
-} as any);
-const authenticatedIndexRoute = authenticatedIndexRouteImport.update({
-  id: "/",
-  path: "/",
-  getParentRoute: () => authenticatedRoute,
-} as any);
-
-export const routeTree = rootRoute.addChildren([
-  loginRoute,
-  authenticatedRoute.addChildren([authenticatedIndexRoute]),
-]);
-
-declare module "@tanstack/react-router" {
-  interface FileRoutesByPath {
-    "/login": {
-      id: "/login";
-      path: "/login";
-      fullPath: "/login";
-      preLoaderRoute: typeof loginRouteImport;
-      parentRoute: typeof rootRoute;
-    };
-    "/_authenticated": {
-      id: "/_authenticated";
-      path: "";
-      fullPath: "/";
-      preLoaderRoute: typeof authenticatedRouteImport;
-      parentRoute: typeof rootRoute;
-    };
-    "/_authenticated/": {
-      id: "/_authenticated/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof authenticatedIndexRouteImport;
-      parentRoute: typeof authenticatedRoute;
-    };
-  }
-}
-`;
-
-/**
- * The parts of `@noble/ciphers` and `expo-crypto` the Expo guide's locking
- * example uses. They are the app's dependencies, not session-kit's.
- */
-const LOCKING_DEPS = `
-declare module "@noble/ciphers/aes.js" {
-  export function gcm(
-    key: Uint8Array,
-    nonce: Uint8Array,
-    AAD?: Uint8Array,
-  ): {
-    encrypt(plaintext: Uint8Array): Uint8Array;
-    decrypt(ciphertext: Uint8Array): Uint8Array;
-  };
-}
-declare module "@noble/ciphers/utils.js" {
-  export function bytesToHex(bytes: Uint8Array): string;
-  export function hexToBytes(hex: string): Uint8Array;
-  export function utf8ToBytes(text: string): Uint8Array;
-  export function bytesToUtf8(bytes: Uint8Array): string;
-}
-declare module "expo-crypto" {
-  export function getRandomBytes(byteCount: number): Uint8Array;
-}
-`;
-
-/** What TanStack Router's generator would write for the Start guide's routes. */
-const START_ROUTE_TREE = `
-import { Route as rootRoute } from "./routes/__root";
-import { Route as authenticatedRouteImport } from "./routes/_authenticated";
-
-const authenticatedRoute = authenticatedRouteImport.update({
-  id: "/_authenticated",
-  getParentRoute: () => rootRoute,
-} as any);
-
-export const routeTree = rootRoute.addChildren([authenticatedRoute]);
-
-declare module "@tanstack/react-router" {
-  interface FileRoutesByPath {
-    "/_authenticated": {
-      id: "/_authenticated";
-      path: "";
-      fullPath: "/";
-      preLoaderRoute: typeof authenticatedRouteImport;
-      parentRoute: typeof rootRoute;
-    };
-  }
-}
-`;
-
-/** The part of Node's types the Start guide's server code uses. */
-const SERVER_ENV = `
-declare const process: { env: Record<string, string | undefined> };
-`;
-
-/**
- * Markdown documents whose TypeScript examples, marked with a
- * `<!-- file: path -->` comment, form one small app per document: they can
- * import each other, with `fixtures` standing in for generated files and the
- * app's other dependencies. A guide that builds on another document's app
- * names the files it uses as `shared`; its own file replaces a shared one of
- * the same path. `requires` skips a document when an installed package is
- * older than it needs.
- */
-const documents = [
-	{
-		path: "README.md",
-		resolutions: ["NodeNext", "Bundler"],
-		dom: true,
-		fixtures: {},
-	},
-	{
-		path: "docs/tanstack-router.md",
-		resolutions: ["NodeNext", "Bundler"],
-		dom: true,
-		fixtures: { "src/routeTree.gen.ts": ROUTE_TREE },
-		shared: {
-			from: "README.md",
-			files: ["src/backend.ts", "src/auth.ts", "src/sign-in.tsx"],
-		},
-	},
-	{
-		path: "docs/react-router.md",
-		resolutions: ["NodeNext", "Bundler"],
-		dom: true,
-		fixtures: {},
-		shared: {
-			from: "README.md",
-			files: [
-				"src/backend.ts",
-				"src/auth.ts",
-				"src/hooks.ts",
-				"src/sign-in.tsx",
-			],
-			// Framework mode keeps its code in `app`.
-			directories: ["src", "app"],
-		},
-	},
-	{
-		path: "docs/expo.md",
-		// Metro resolves like a bundler, and Expo apps import without extensions.
-		resolutions: ["Bundler"],
-		// No DOM, so browser-only code fails as it would on a device.
-		dom: false,
-		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
-	},
-	{
-		path: "docs/tanstack-start.md",
-		// Vite resolves like a bundler, and Start apps import without extensions.
-		resolutions: ["Bundler"],
-		dom: true,
-		fixtures: {
-			"src/routeTree.gen.ts": START_ROUTE_TREE,
-			"src/env.d.ts": SERVER_ENV,
-		},
-	},
-	{
-		path: "docs/next.md",
-		// Next apps resolve like a bundler: `next` has no `exports`.
-		resolutions: ["Bundler"],
-		// The App Router runs React 19, and the guide uses its APIs.
-		requires: { "@types/react": "19.0" },
-		dom: true,
-		fixtures: {
-			"env.d.ts": SERVER_ENV,
-			// What `next build` generates: Next's global types, such as `server-only`.
-			"next-env.d.ts": '/// <reference types="next" />',
-		},
-	},
-	{
-		path: "docs/react-router-ssr.md",
-		// React Router's Vite plugin resolves like a bundler.
-		resolutions: ["Bundler"],
-		// The guide's code is React Router 8's, with the `url` argument.
-		requires: { "react-router": "8.0" },
-		dom: true,
-		fixtures: { "app/env.d.ts": SERVER_ENV },
-	},
-	{
-		path: "docs/effect.md",
-		resolutions: ["NodeNext", "Bundler"],
-		dom: true,
-		fixtures: {},
-	},
-];
+import {
+	compilerSettings,
+	documents,
+	installedAtLeast,
+	markedExamples,
+	PAGES,
+	pageApp,
+	root,
+} from "./docs-pages.mjs";
+import { renderReference } from "./reference-docs.mjs";
 
 /**
  * How each subpath's JSDoc examples compile, where it differs from the
@@ -216,8 +25,6 @@ const subpathOptions = {
 	// `next/headers` resolves only that way.
 	"./next": { bundlerOnly: true },
 };
-
-const root = fileURLToPath(new URL("../", import.meta.url));
 
 /**
  * Each subpath in `package.json`'s `exports`: its published declarations,
@@ -277,13 +84,14 @@ const sourceProgram = ts.createProgram(
 	{ ...readCompilerOptions(), noEmit: true },
 );
 const exportCount = checkExportDocs(sourceProgram);
+checkReference(sourceProgram);
 const jsdocExamples = extractJsdocExamples(sourceProgram);
 compileExamples("JSDoc", jsdocExamples, ["NodeNext", "Bundler"]);
 const checkedDocuments = documents.filter(checkDocument).length;
-const excerpts = documents.reduce(
-	(count, document) => count + checkExcerpts(document.path),
-	0,
-);
+// Only Markdown can hold the `<!-- from: -->` marker, so only the README
+// has excerpts.
+const excerpts = checkExcerpts("README.md");
+checkPagesListed();
 checkLinks();
 
 if (problems.length > 0) {
@@ -399,6 +207,24 @@ function checkExportDocs(program) {
 	return seen.size;
 }
 
+/**
+ * The reference pages are what `scripts/reference-docs.mjs` renders from the
+ * JSDoc, whitespace aside (Oxfmt may wrap them), so they can't fall behind it.
+ */
+function checkReference(program) {
+	const squash = (text) => text.replace(/\s+/g, "");
+	for (const [path, body] of renderReference(program)) {
+		const file = join(root, path);
+		if (
+			!existsSync(file) ||
+			squash(readFileSync(file, "utf8")) !== squash(body)
+		)
+			problems.push(
+				`${path}: out of date with the JSDoc. Run \`pnpm run docs:reference\`.`,
+			);
+	}
+}
+
 /** The fenced `ts` and `tsx` blocks in `src`'s JSDoc comments. */
 function extractJsdocExamples(program) {
 	const examples = [];
@@ -435,57 +261,35 @@ function extractJsdocExamples(program) {
 	return examples;
 }
 
-/** A document's examples marked with a `<!-- file: path -->` comment. */
-function markedExamples(path, dom) {
-	const text = readFileSync(join(root, path), "utf8");
-	const files = [];
-	for (const match of text.matchAll(
-		/<!-- file: ([\w/()+.-]+\.tsx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
-	)) {
-		const codeStart = match.index + match[0].indexOf("```");
-		files.push({
-			origin: join(root, path),
-			line: text.slice(0, codeStart).split("\n").length + 1,
-			path: match[1],
-			dom,
-			code: match[2],
-		});
-	}
-	return files;
-}
-
 /**
- * The files a document shares from another's app, where that document has
- * them or, given `directories`, under each of those in place of their own.
+ * Every site page with a titled example is in `documents`, so a new page
+ * can't skip the check. Pages of older release lines are skipped: their
+ * examples compiled when their line was current.
  */
-function sharedExamples(path, { from, files, directories }, dom) {
-	const theirs = markedExamples(from, dom);
-	return files.flatMap((name) => {
-		const file = theirs.find((candidate) => candidate.path === name);
-		if (!file) {
-			problems.push(`${path}: ${from} has no example named ${name}`);
-			return [];
-		}
-		const slash = name.indexOf("/");
-		if (!directories || slash === -1) return [file];
-		return directories.map((directory) => ({
-			...file,
-			path: directory + name.slice(slash),
-		}));
-	});
+function checkPagesListed() {
+	const listed = new Set(documents.map(({ path }) => path));
+	const pages = readdirSync(join(root, PAGES), { recursive: true })
+		.filter((name) => name.endsWith(".mdx"))
+		.map((name) => `${PAGES}/${name.split(sep).join("/")}`);
+	for (const page of pages) {
+		if (listed.has(page)) continue;
+		if (markedExamples(page, true).length > 0)
+			problems.push(`${page}: has titled examples but isn't in documents`);
+	}
 }
 
 /**
- * An example marked `<!-- from: path -->` is an excerpt of that document's
- * marked examples, which compile: it must match part of one, whitespace
- * aside, so the two can't drift apart. Returns how many `path` has.
+ * An example marked `<!-- from: path -->` in a Markdown file is an excerpt of
+ * that page's marked examples, which compile: it must match part of one,
+ * whitespace aside, so the two can't drift apart. Returns how many `path`
+ * has.
  */
 function checkExcerpts(path) {
 	const text = readFileSync(join(root, path), "utf8");
 	const squash = (code) => code.replace(/\s+/g, "");
 	const excerpts = [
 		...text.matchAll(
-			/<!-- from: ([\w/.-]+\.md) -->\s*```tsx?\n([\s\S]*?)\n```/g,
+			/<!-- from: ([\w/.()-]+\.mdx?) -->\s*```tsx?\n([\s\S]*?)\n```/g,
 		),
 	];
 	const marked = text.match(/<!-- from: /g)?.length ?? 0;
@@ -535,32 +339,9 @@ function checkDocument({
 		);
 		return false;
 	}
-	const files = markedExamples(path, dom);
-	if (files.length === 0) {
-		problems.push(`${path}: no TypeScript examples found`);
-		return true;
-	}
-	for (const [fixture, code] of Object.entries(fixtures))
-		files.push({
-			origin: join(root, path),
-			line: 0,
-			path: fixture,
-			dom,
-			code,
-			fixture: true,
-		});
-	const names = new Set();
-	for (const file of files) {
-		if (names.has(file.path))
-			problems.push(`${path}: two examples are named ${file.path}`);
-		names.add(file.path);
-	}
-	if (shared)
-		files.push(
-			...sharedExamples(path, shared, dom).filter(
-				(file) => !names.has(file.path),
-			),
-		);
+	const report = (message) => problems.push(message);
+	const files = pageApp({ path, dom, fixtures, shared }, report);
+	if (files.length === 0) return true;
 	compileExamples(path, files, resolutions, { together: true });
 	return true;
 }
@@ -624,53 +405,16 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 	}
 }
 
-/**
- * Whether the installed `name` is at least `minimum`: `major.minor`, or a
- * full version, whose prerelease (`-rc.2`) is ordered by its last number.
- */
-function installedAtLeast(name, minimum) {
-	const manifest = readFileSync(
-		join(root, "node_modules", name, "package.json"),
-		"utf8",
-	);
-	const parts = (version) => {
-		const [core, prerelease] = version.split("-");
-		const [major = 0, minor = 0, patch = 0] = core.split(".").map(Number);
-		// A release comes after its own prereleases.
-		const order =
-			prerelease === undefined
-				? Infinity
-				: Number(prerelease.split(".").at(-1));
-		return [major, minor, patch, order];
-	};
-	const have = parts(JSON.parse(manifest).version);
-	const want = parts(minimum);
-	const first = have.findIndex((part, index) => part !== want[index]);
-	return first === -1 || have[first] > want[first];
-}
-
 function compilerOptions(resolution, dom) {
-	return {
-		target: ts.ScriptTarget.ES2022,
-		lib: [
-			"lib.es2022.d.ts",
-			...(dom ? ["lib.dom.d.ts", "lib.dom.iterable.d.ts"] : []),
-		],
-		module:
-			resolution === "NodeNext"
-				? ts.ModuleKind.NodeNext
-				: ts.ModuleKind.ESNext,
-		moduleResolution:
-			resolution === "NodeNext"
-				? ts.ModuleResolutionKind.NodeNext
-				: ts.ModuleResolutionKind.Bundler,
-		jsx: ts.JsxEmit.ReactJSX,
-		strict: true,
-		exactOptionalPropertyTypes: true,
-		noEmit: true,
-		skipLibCheck: true,
-		types: [],
-	};
+	const { options, errors } = ts.convertCompilerOptionsFromJson(
+		compilerSettings(resolution, dom),
+		root,
+	);
+	if (errors.length > 0)
+		throw new Error(
+			ts.flattenDiagnosticMessageText(errors[0].messageText, "\n"),
+		);
+	return options;
 }
 
 /** A compiler host that serves `virtual` files and caches real ones. */

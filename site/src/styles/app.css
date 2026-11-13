@@ -1,0 +1,518 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-twoslash/twoslash.css";
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+
+/* One family across the site: Geist for prose, Geist Mono for code. The
+   landing page is a code buffer in the mono, with a dim grey for comments and
+   line numbers (4.6:1 on ink) and hairline rules. */
+@theme {
+	--font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+	--font-mono:
+		"Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--color-buffer-dim: #7f828e;
+	--color-buffer-line: #262833;
+	--color-buffer-cell: #1f2129;
+	/* A moment still ahead in the lanes: 3:1 on ink, the floor for a mark. */
+	--color-buffer-mark: #626676;
+	/* A line commented out in the hero: Charbox's comment colour, as in the
+	   code blocks (6.4:1 on ink, 5.9:1 on a hovered or queued line). */
+	--color-buffer-comment: #a89984;
+	/* A lane's hairline track, and a held state the playhead hasn't reached. */
+	--color-buffer-track: #2b2d37;
+	/* Your own code, such as the entry points and your app's sign-in call in
+	   the lanes. Charbox's identifier blue, as in the code blocks. */
+	--color-buffer-blue: #83a598;
+	/* What ends the session in the lanes. Charbox's keyword red. */
+	--color-buffer-red: #fb4934;
+}
+
+/* A wide but short screen, such as a 1280×720 laptop. The hero tightens
+   there, so its config and the hour it plays fit in one view. */
+@custom-variant short (@media (min-width: 40rem) and (max-height: 50rem));
+
+/* The cursor on a queued edit. */
+@keyframes buffer-blink {
+	0%,
+	49% {
+		opacity: 1;
+	}
+	50%,
+	100% {
+		opacity: 0;
+	}
+}
+
+/* A lane tooltip settling into place. */
+@keyframes buffer-tip-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
+	}
+}
+
+/* The landing page is set in the mono; its prose opts back into the sans. */
+.live-source {
+	font-family: var(--font-mono);
+}
+
+/* Keyboard focus on the landing: one lime outline, set off from the control.
+   Fumadocs' controls take it in place of their ring, and the tour's panel,
+   which Fumadocs leaves without one, gets it too. */
+.live-source :is(a, button, [tabindex]):focus-visible {
+	outline: 2px solid var(--brand-lime);
+	outline-offset: 2px;
+	--tw-ring-shadow: 0 0 #0000;
+}
+/* Inside a box that clips: the tour's tabs and its code, which scroll. */
+.live-source :is([role="tab"], figure.shiki [role="region"]):focus-visible {
+	outline-offset: -2px;
+}
+
+/* The site is dark only, built on the brand's two colours: the background
+   #16171d and the lime #d5f70d. Fumadocs' dark tokens are retinted to the
+   background's blue-grey; every text pairing keeps at least 4.5:1. */
+.dark {
+	--brand-lime: #d5f70d;
+	--brand-ink: #16171d;
+
+	--color-fd-background: var(--brand-ink);
+	--color-fd-foreground: #e8e9ee;
+	--color-fd-muted: #1d1e25;
+	--color-fd-muted-foreground: #9a9ca8;
+	--color-fd-popover: #1b1c23;
+	--color-fd-popover-foreground: #e2e3e8;
+	--color-fd-card: #1c1d24;
+	--color-fd-card-foreground: #f4f4f6;
+	--color-fd-border: hsla(230, 12%, 60%, 0.16);
+	--color-fd-primary: var(--brand-lime);
+	--color-fd-primary-foreground: var(--brand-ink);
+	--color-fd-secondary: #22232b;
+	--color-fd-secondary-foreground: #e8e9ee;
+	--color-fd-accent: hsla(230, 12%, 50%, 0.22);
+	--color-fd-accent-foreground: #eeeff3;
+	--color-fd-ring: var(--brand-lime);
+}
+
+/* Fumadocs' neutral theme greys the sidebar with a more specific rule. */
+.dark #nd-sidebar {
+	--color-fd-muted: #1d1e25;
+	--color-fd-secondary: #22232b;
+	--color-fd-muted-foreground: #9a9ca8;
+}
+
+/* The landing's navbar is solid ink: a blurred lime button behind it would
+   read as a tint of the brand colour. */
+.live-source #nd-nav > nav {
+	background-color: var(--brand-ink);
+	backdrop-filter: none;
+}
+
+/* The docs pages: the same buffer, opened at a file. The world owns the frame
+   (sidebar, TOC, title, headings, code, tables) and the reading column stays
+   Geist on ink. These rules are unlayered, so they win over Fumadocs'
+   utilities without !important. */
+
+/* One ink plane: the sidebar is not a panel, and the phone header and TOC bar
+   are solid, never blurred. */
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile),
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile) > div,
+.docs-source #nd-subnav,
+.docs-source [data-toc-popover] > header {
+	background-color: var(--brand-ink);
+	backdrop-filter: none;
+}
+/* Also square and flat when a collapsed sidebar opens on hover. */
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile) {
+	border-color: var(--color-buffer-line);
+	border-radius: 0;
+	box-shadow: none;
+}
+
+/* The sidebar and the TOC are the buffer's controls, in the mono. */
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile) :is(a, button),
+.docs-source #nd-toc,
+.docs-source [data-toc-popover] {
+	font-family: var(--font-mono);
+	font-size: 0.8125rem;
+	border-radius: 0;
+}
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile) :is(a, button):hover {
+	color: var(--color-fd-foreground);
+}
+
+/* The current page is selection, not live: foreground with a 2px rule. */
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile) a[data-active="true"] {
+	background-color: transparent;
+	color: var(--color-fd-foreground);
+	box-shadow: inset 2px 0 0 var(--color-fd-foreground);
+}
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile)
+	a[data-active="true"]::before {
+	background-color: var(--color-fd-foreground);
+}
+
+/* Search, the version switch and the GitHub link: square, hairline, ink. */
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile)
+	:is([data-search-full], [aria-haspopup="dialog"]),
+:is(.docs-source #nd-sidebar, #nd-sidebar-mobile)
+	div:has(> a[aria-label="GitHub"]),
+.docs-source .docs-actions :is(a, button) {
+	border-radius: 0;
+	border-color: var(--color-buffer-line);
+	background-color: var(--brand-ink);
+	font-family: var(--font-mono);
+}
+.docs-source .docs-actions :is(a, button) {
+	color: var(--color-fd-muted-foreground);
+}
+.docs-source .docs-actions :is(a, button):hover {
+	color: var(--color-fd-foreground);
+	background-color: var(--color-fd-accent);
+}
+.docs-source kbd {
+	border-radius: 0;
+	border-color: var(--color-buffer-line);
+}
+
+/* The TOC's active segment is the page's playhead: a 2px lime rule beside
+   the headings in view. The text it marks turns foreground. */
+.docs-source #nd-toc #toc-title {
+	color: var(--color-buffer-dim);
+	font-size: 0.75rem;
+}
+.docs-source :is(#nd-toc, [data-toc-popover]) a[data-active="true"] {
+	color: var(--color-fd-foreground);
+}
+.docs-source :is(#nd-toc, [data-toc-popover]) path.stroke-fd-primary {
+	stroke-width: 2;
+}
+.docs-source :is(#nd-toc, [data-toc-popover]) div.rounded-full.bg-fd-primary {
+	display: none;
+}
+
+/* Headings are comments: H2 behind a comment-grey `//`, hidden from screen
+   readers. H3s, mostly export names, are set in the mono without it. */
+.docs-source .prose :is(h2, h3, h4) {
+	font-family: var(--font-mono);
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	text-wrap: balance;
+}
+.docs-source .prose h2 {
+	/* Fumadocs sets headings as a flex row; baseline keeps the `//` on the
+	   first line when a heading wraps. */
+	align-items: baseline;
+	font-size: 1.375rem;
+	line-height: 1.3;
+}
+.docs-source .prose h2::before {
+	content: "//" / "";
+	margin-inline-end: 0.5ch;
+	color: var(--color-buffer-dim);
+	font-weight: 300;
+}
+.docs-source .prose h3 {
+	font-size: 1.0625rem;
+}
+
+/* The reading column: a real measure for prose; code and tables may run the
+   article's full width. */
+.docs-source .prose > :is(p, ul, ol, blockquote):not(.not-prose) {
+	max-width: 36rem;
+}
+.docs-source .prose a:not([data-card]) {
+	color: var(--color-fd-foreground);
+	text-decoration-color: var(--color-buffer-dim);
+	text-underline-offset: 4px;
+	transition: text-decoration-color 150ms;
+}
+.docs-source .prose a:not([data-card]):hover {
+	text-decoration-color: var(--color-fd-foreground);
+}
+/* Not in type tables, whose names sit flush, nor in Twoslash popups. */
+.docs-source
+	.prose
+	:not(pre)
+	> code:not(.docs-types code, .twoslash-popup-code) {
+	border: 0;
+	border-radius: 0;
+	background-color: var(--color-buffer-cell);
+	padding: 0.125rem 0.3rem;
+}
+
+/* Tables: rows between hairlines, a label-type header, no outer box. */
+.docs-source .prose table {
+	border: 0;
+	border-radius: 0;
+}
+.docs-source .prose :is(table, thead, tr, th, td) {
+	background-color: transparent;
+}
+.docs-source .prose :is(th, td) {
+	border-inline: 0;
+	border-color: var(--color-buffer-line);
+}
+.docs-source .prose :is(th, td):first-child {
+	padding-inline-start: 0;
+}
+.docs-source .prose th {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 400;
+	color: var(--color-fd-muted-foreground);
+}
+
+/* Type tables: square, on hairlines, with no fill. Prop names are names,
+   not live state, so they take the foreground. */
+.docs-source .docs-types,
+.docs-source .docs-types > div {
+	box-shadow: none;
+	border-radius: 0;
+	border-color: var(--color-buffer-line);
+	background-color: transparent;
+}
+.docs-source .docs-types {
+	padding: 0;
+	border-inline: 0;
+}
+.docs-source .docs-types > div:not(:first-child) {
+	border-inline: 0;
+	border-bottom: 0;
+}
+.docs-source .docs-types .text-fd-primary {
+	color: var(--color-fd-foreground);
+}
+.docs-source .docs-types > div:first-child {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 400;
+}
+
+/* Code is set as on the landing's tour: flat on ink, square, between
+   hairlines. A titled block is an open file, its path a tab on a rail. */
+.docs-source figure.shiki {
+	border-radius: 0;
+	border-inline: 0;
+	border-color: var(--color-buffer-line);
+	background-color: transparent;
+}
+.docs-source figure.shiki:has(figcaption) {
+	border-top: 0;
+}
+.docs-source figure.shiki > div:has(> figcaption) {
+	padding-inline: 0;
+	border-color: var(--color-buffer-line);
+}
+.docs-source figure.shiki > div:has(> figcaption) > div:first-child {
+	display: none;
+}
+/* Without the header's side padding, the copy button's negative margin
+   would push it past the clipped edge. */
+.docs-source figure.shiki > div:has(> figcaption) > div:last-child {
+	margin-inline-end: 0;
+}
+.docs-source figure.shiki figcaption {
+	flex: 0 1 auto;
+	align-self: stretch;
+	display: flex;
+	align-items: center;
+	margin-inline-end: auto;
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--color-fd-foreground);
+	box-shadow: inset 0 -2px 0 var(--color-fd-foreground);
+}
+.docs-source figure.shiki [role="region"] {
+	font-size: 0.8125rem;
+	line-height: 1.7;
+}
+/* On phones every block shows whole: a capped box would trap the page's
+   scroll, as on the landing's tour. */
+@media (width < 40rem) {
+	.docs-source figure.shiki [role="region"] {
+		max-height: none;
+	}
+}
+
+/* Only files are numbered: a titled block gets the comment-grey gutter.
+   Shell commands get the install field's `$` instead. Both are left out of
+   copies and screen readers. */
+.docs-source figure.shiki:has(figcaption) code {
+	counter-reset: line;
+}
+.docs-source figure.shiki:has(figcaption) .line::before {
+	counter-increment: line;
+	content: counter(line, decimal-leading-zero) / "";
+	display: inline-block;
+	width: 2ch;
+	margin-inline-end: 2.5ch;
+	text-align: end;
+	color: var(--color-buffer-dim);
+	user-select: none;
+}
+.docs-source figure.shiki .line[data-command]::before {
+	content: "$" / "";
+	margin-inline-end: 1ch;
+	color: var(--color-buffer-dim);
+	user-select: none;
+}
+
+/* The copy button on an untitled block: square, with no blur behind it. */
+.docs-source figure.shiki > div.absolute {
+	border-radius: 0;
+	backdrop-filter: none;
+	background-color: var(--brand-ink);
+}
+
+/* Package-manager tabs are the landing's switch: names in label type, the
+   pressed one foreground with a 2px foreground underline. */
+.docs-source .prose div:has(> [role="tablist"]) {
+	border: 0;
+	border-radius: 0;
+	background-color: transparent;
+}
+.docs-source .prose [role="tablist"] {
+	gap: 1.25rem;
+	padding-inline: 0;
+	border-bottom: 1px solid var(--color-buffer-line);
+}
+.docs-source .prose [role="tab"] {
+	padding-inline: 0;
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	font-weight: 400;
+	color: var(--color-buffer-dim);
+}
+.docs-source .prose [role="tab"]:hover,
+.docs-source .prose [role="tab"][aria-selected="true"] {
+	color: var(--color-fd-foreground);
+}
+.docs-source .prose [role="tab"] > div {
+	inset-inline: 0;
+	height: 2px;
+}
+.docs-source .prose [role="tab"][aria-selected="true"] > div {
+	background-color: var(--color-fd-foreground);
+}
+/* MDX `Tabs` mark the pressed tab with a border and box their panels. */
+.docs-source .prose [role="tab"][aria-selected="true"] {
+	border-color: var(--color-fd-foreground);
+}
+.docs-source .prose [role="tabpanel"] {
+	border-radius: 0;
+}
+
+/* Hover targets show only while the pointer is in the block, on one dim
+   dotted rule rather than one in each token's colour. */
+.docs-source .twoslash:hover .twoslash-hover {
+	border-color: var(--color-buffer-mark);
+}
+.docs-source .twoslash .twoslash-hover:hover {
+	border-color: var(--color-fd-foreground);
+}
+
+/* Prev and next: two hairline-ruled rows, not cards. */
+.docs-source .docs-pager > a {
+	border-radius: 0;
+	border-inline: 0;
+	border-color: var(--color-buffer-line);
+}
+.docs-source .docs-pager > a > div:first-child {
+	font-family: var(--font-mono);
+}
+
+/* The folder above a page's title is where the file lives, in the mono and
+   comment grey: it isn't live, so it isn't lime. */
+.docs-source .docs-breadcrumb {
+	font-family: var(--font-mono);
+	font-size: 0.75rem;
+	color: var(--color-buffer-dim);
+}
+.docs-source .docs-breadcrumb .text-fd-primary {
+	font-weight: 400;
+	color: inherit;
+}
+
+/* A type hover is one square panel: the type flush at the top in the code's
+   size, with no box or copy button of its own, and its docs below a hairline.
+   On a phone it fits the screen. */
+.fd-twoslash-popover {
+	max-width: min(36rem, calc(100vw - 2rem));
+	/* As tall as the room below the name allows, so a long type rarely
+	   scrolls its docs out of view. */
+	max-height: min(30rem, var(--available-height, 30rem));
+	padding: 0;
+	border-color: var(--color-buffer-line);
+	border-radius: 0;
+	background-color: var(--brand-ink);
+	box-shadow: none;
+}
+.fd-twoslash-popover figure.shiki {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background-color: transparent;
+}
+.fd-twoslash-popover figure.shiki > div:has(> button) {
+	display: none;
+}
+.fd-twoslash-popover figure.shiki > div {
+	padding-block: 0.625rem;
+	font-size: 0.8125rem;
+}
+.fd-twoslash-popover .line {
+	padding-inline: 0.875rem;
+}
+/* A one-line type is inline code, not a block. */
+.fd-twoslash-popover .twoslash-popup-code {
+	display: block;
+	padding: 0.625rem 0.875rem;
+}
+.fd-twoslash-popover .twoslash-popup-docs {
+	margin: 0;
+	max-width: none;
+	padding: 0.625rem 0.875rem 0.75rem;
+	border-top: 1px solid var(--color-buffer-line);
+	font-size: 0.8125rem;
+	color: var(--color-fd-muted-foreground);
+}
+
+/* Site-wide overlays, portaled out of both layouts: the search dialog and
+   popovers sit square on the popover surface with a hairline, and nothing
+   behind them is blurred. A checked item is selection, so not lime. */
+:is(#fd-search-dialog-content, [data-side] > [role="dialog"]),
+:is(#fd-search-dialog-content, [data-side] > [role="dialog"]) * {
+	border-radius: 0;
+}
+:is(#fd-search-dialog-content, [data-side] > [role="dialog"]) {
+	border-color: var(--color-buffer-line);
+	box-shadow: none;
+}
+[data-side] > [role="dialog"] .text-fd-primary {
+	color: var(--color-fd-foreground);
+}
+div.fixed.inset-0.bg-fd-overlay {
+	background-color: rgb(22 23 29 / 0.8);
+}
+div.fixed.inset-0:is(.bg-fd-overlay, .backdrop-blur-xs) {
+	backdrop-filter: none;
+}
+
+html {
+	scrollbar-gutter: stable;
+	scrollbar-color: #3a3c48 var(--brand-ink);
+	caret-color: var(--brand-lime);
+}
+
+::selection {
+	background: var(--brand-lime);
+	color: var(--brand-ink);
+}
+
+html > body[data-scroll-locked] {
+	margin-right: 0px !important;
+	--removed-body-scroll-bar-size: 0px !important;
+}

@@ -18,7 +18,7 @@
 		"tanstack",
 		"tanstack-start"
 	],
-	"homepage": "https://github.com/monarcode/session-kit#readme",
+	"homepage": "https://session-kit.pages.dev",
 	"bugs": {
 		"url": "https://github.com/monarcode/session-kit/issues"
 	},
@@ -105,6 +105,7 @@
 		"clean": "node scripts/clean.mjs",
 		"build": "pnpm run clean && tsc -p tsconfig.json",
 		"build:examples": "pnpm run build && pnpm --filter \"./examples/*\" run build",
+		"build:site": "pnpm run build && pnpm --dir site run build",
 		"dev": "tsc -p tsconfig.json --watch",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"test": "pnpm run test:sync && pnpm run test:async",
@@ -112,6 +113,7 @@
 		"test:async": "node --env-file=tests/async-storage.env --conditions=development --test tests/*.test.ts",
 		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && tsc -p tests/tsconfig.json --exactOptionalPropertyTypes false && tsc -p tests/tsconfig.mirror.json && tsc -p tests/tsconfig.mirror.bundler.json && tsc -p tests/tsconfig.mirror.json --exactOptionalPropertyTypes false && pnpm run test:docs",
 		"test:docs": "node scripts/check-docs.mjs",
+		"docs:reference": "node scripts/reference-docs.mjs && oxfmt --write \"site/content/docs/(latest)/reference\"",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",
 		"prepack": "pnpm run check"
 	},

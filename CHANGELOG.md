@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The guides moved to the documentation site,
+  [session-kit.pages.dev](https://session-kit.pages.dev), with an API
+  reference for every entry point and every error code. The README is now a
+  short introduction and quick start, and each `docs/*.md` file points to its
+  page on the site.
+- Option defaults in the JSDoc are `@default` tags, which editors show in
+  hovers, instead of a "Default: x." sentence. Defaults that take words, such
+  as "the nearest `AuthProvider`'s", are still written out.
+- The Effect guide calls the API with effetch alone. The app's API client
+  is one `Fetch.make`, shared as a service in the app's runtime, and Effect
+  code yields it and calls `get` or `post`. The refresh has a `Fetch.make`
+  of its own. `Fetch.endpoint` appears only with effetch-query, and Effect's
+  `FetchHttpClient`, which effetch sends with, is provided where the runtime
+  is made. The guide
+  and the `tanstack-start-spa-effetch` example now pass the client's
+  `defaultError` to effetch-query's `endpoints`. `sessionBearer`'s example
+  calls the client's methods too.
+- `AuthErrorCode`'s docs say which codes the browser client of a
+  server-rendered app rejects with: `USER_VALIDATION_FAILED` when signing in
+  on the server fails, `PERSISTENCE_FAILED` when signing out there fails, and
+  `REFRESH_FAILED` when reading the session or the access token from the
+  server fails.
+- The setup guides are corrected against the code and the example apps. The
+  TanStack Start guard renders `SessionOutlet`, the Next.js guard sends users
+  back to the page they asked for after sign-in, and the React Router layout
+  with server rendering has a loader, so its middleware runs on navigation. React
+  Router's `SessionOutlet` is described as it behaves, and smaller facts are
+  corrected: `keychainAccessible`'s default, the ten-second reuse window,
+  which requests are sent again after a refresh, and when a sign-out reaches
+  other tabs.
+- The compatibility page lists `effect` as a peer of `./effetch` as well as
+  `./effect`, and the entry points page orders the entry points as the
+  reference does.
+- The reference lists the members of `AuthStorage`, `Tokens` and
+  `CookieJar`, the types an app builds itself. The server-rendering guides'
+  sign-in shows the backend's own message for a failed sign-in, as the
+  example apps do, and the secret-rotation example works once the old secret
+  is removed.
+
 ## 0.1.0-alpha.8
 
 ### Added

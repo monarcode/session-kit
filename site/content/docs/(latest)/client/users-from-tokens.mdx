@@ -1,0 +1,50 @@
+---
+title: Users from the access token
+description: Read the user from a JWT access token's claims, instead of from your backend's sign-in response.
+---
+
+If your backend puts the user in a JWT access token, read it from there with
+`fromAccessToken`. `signIn` then takes tokens only, the refresh callback
+returns them, and the user changes whenever the token does:
+
+```ts title="src/token-auth.ts"
+import {
+  createAuth,
+  fromAccessToken,
+  webStorage,
+} from "@monarcode/session-kit";
+import { z } from "zod";
+
+const claimsSchema = z.object({ sub: z.string(), email: z.string() });
+
+export const tokenAuth = createAuth({
+  name: "my-token-app",
+  // The claims are validated, then mapped to the user the app sees.
+  user: fromAccessToken(claimsSchema, (claims) => ({
+    id: claims.sub,
+    email: claims.email,
+  })),
+  storage: webStorage(),
+});
+
+export const signInWithTokens = (tokens: {
+  accessToken: string;
+  refreshToken: string;
+}) => tokenAuth.signIn(tokens);
+```
+
+- **No `updateUser`.** The token is the only source of the user, so call
+  `auth.refresh()` to pick up a change.
+- **The signature isn't verified.** That suits a browser, which trusts a user
+  object in a JSON response to the same degree. Pass `{ decode }` as the third
+  argument to verify or decode the token yourself.
+- **Leave out claims that change on every refresh**, such as `exp`, `iat`, or
+  `jti`, so the user stays the same object across refreshes.
+- **For backends you control.** OAuth providers can change their access token
+  format without notice.
+
+The
+[`tanstack-start-spa`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa)
+and
+[`react-router-data`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-data)
+examples read their user this way.

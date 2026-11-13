@@ -1,0 +1,124 @@
+---
+title: Other HTTP clients
+description: Attach the access token with axios, ky, or any other HTTP client, using the client's credentials calls.
+---
+
+[`createAuthFetch`](/docs/client/requests) and the
+[effetch plugin](/docs/effect#6-call-your-api-with-effetch) are built on three
+calls, and any other HTTP client can use the same ones:
+
+1. **Before a request**, `auth.credentials.get()` resolves the credentials to
+   send, waiting for a restore or a refresh that is under way. It resolves
+   `null` when nobody is signed in.
+2. **After a 401**, `auth.credentials.renew(credentials)` takes the
+   credentials that request was sent with, and resolves new ones. However many
+   requests failed, they share one refresh. It resolves `null` when the user
+   was signed out instead.
+3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
+   session, unless a newer one has replaced it.
+
+With [axios](https://axios-http.com), that's two interceptors:
+
+```ts title="src/axios.ts"
+import type { Credentials } from "@monarcode/session-kit";
+import axios, { type InternalAxiosRequestConfig } from "axios";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+type Config = InternalAxiosRequestConfig & { replayed?: boolean };
+
+// One instance for one API, so the token goes nowhere else.
+export const http = axios.create({ baseURL: API });
+
+/** The credentials each request was sent with. */
+const sent = new WeakMap<Config, Credentials>();
+
+http.interceptors.request.use(async (config) => {
+  const credentials = await auth.credentials.get();
+  // Signed out, the request goes without a token, as a public one would.
+  if (credentials) {
+    config.headers.set("Authorization", `Bearer ${credentials.accessToken}`);
+    sent.set(config, credentials);
+  }
+  return config;
+});
+
+http.interceptors.response.use(undefined, async (error: unknown) => {
+  if (!axios.isAxiosError(error) || error.response?.status !== 401) throw error;
+  const config: Config | undefined = error.config;
+  const used = config && sent.get(config);
+  if (!config || !used) throw error;
+
+  if (config.replayed) {
+    // The new token was refused too: end the session.
+    await auth.credentials.reject(used);
+    throw error;
+  }
+  const fresh = await auth.credentials.renew(used);
+  // As with authFetch, only a GET or HEAD is sent twice. For anything else
+  // the caller decides.
+  if (!fresh || !["get", "head"].includes(config.method ?? "")) throw error;
+  const replay: Config = { ...config, replayed: true };
+  return http.request(replay);
+});
+```
+
+With [ky](https://github.com/sindresorhus/ky), two hooks do the same. The
+request's `context` carries the credentials from one hook to the other:
+
+```ts title="src/ky.ts"
+import type { Credentials } from "@monarcode/session-kit";
+import ky from "ky";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+export const api = ky.create({
+  baseUrl: `${API}/`,
+  hooks: {
+    beforeRequest: [
+      async ({ request, options }) => {
+        const credentials = await auth.credentials.get();
+        if (!credentials) return;
+        options.context.credentials = credentials;
+        request.headers.set(
+          "Authorization",
+          `Bearer ${credentials.accessToken}`,
+        );
+      },
+    ],
+    afterResponse: [
+      async ({ request, options, response }) => {
+        const used = options.context.credentials as Credentials | undefined;
+        if (response.status !== 401 || !used) return;
+
+        if (options.context.replayed) {
+          // The new token was refused too: end the session.
+          await auth.credentials.reject(used);
+          return;
+        }
+        const fresh = await auth.credentials.renew(used);
+        // As with authFetch, only a GET or HEAD is sent twice.
+        if (!fresh || !["GET", "HEAD"].includes(request.method)) return;
+        options.context.credentials = fresh;
+        options.context.replayed = true;
+        const headers = new Headers(request.headers);
+        headers.set("Authorization", `Bearer ${fresh.accessToken}`);
+        return ky.retry({ request: new Request(request, { headers }) });
+      },
+    ],
+  },
+});
+```
+
+Three things `createAuthFetch` does for you are yours to keep here:
+
+- **Keep the token on one origin.** Give the client one base URL, and don't
+  pass it absolute URLs to other hosts.
+- **Don't read the token early.** Ask for credentials in the request hook,
+  never once at startup: a token saved in a variable goes stale at the next
+  refresh.
+- **Check the account after slow work.** `auth.isCurrent(credentials)` tells
+  whether the session that sent a request is still the signed-in one, before
+  you show its answer.

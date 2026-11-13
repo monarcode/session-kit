@@ -1,0 +1,34 @@
+---
+title: Sessions and credentials
+description: Ask the client who is signed in, and keep the access token apart from code that only needs the user.
+---
+
+A **session** is who is signed in, `{ sessionId, user }`, and never holds
+tokens. `getSession()` is how code outside React asks for it. It waits for a
+restore or a refresh that is under way, so a loader never acts on a stale
+answer:
+
+```ts title="src/cart.ts"
+import { authFetch } from "./api.js";
+import { auth } from "./auth.js";
+
+/** A loader: it runs outside React, so it asks the client. */
+export async function loadCart(): Promise<unknown> {
+  const session = await auth.getSession();
+  if (!session) return null;
+  const response = await authFetch(`auth/carts/user/${session.user.id}`);
+  if (!response.ok) throw new Error(`Cart failed (${response.status})`);
+  return response.json();
+}
+```
+
+**Credentials** are the access token, `{ sessionId, accessToken, expiresAt }`,
+kept apart so that code which only needs the user never holds one.
+[`createAuthFetch`](/docs/client/requests) reads them for you. Code that
+sends requests another way uses `auth.credentials`: `get` before a request,
+`renew` after a 401, and `reject` after a second one.
+[Other HTTP clients](/docs/client/other-http-clients) explains the three,
+with axios and ky.
+
+`auth.isCurrent({ sessionId })` tells whether a session you're holding is
+still the signed-in one, for work that might finish after an account switch.

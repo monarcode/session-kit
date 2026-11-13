@@ -1,0 +1,52 @@
+---
+title: Security
+description: What Session kit protects, what stays your backend's job, and where tokens live in each setup.
+---
+
+Session kit saves the tokens your backend issues and manages the session
+around them. This page explains what stays your backend's job, where tokens
+live in each setup, and where the client sends them.
+
+## Your backend decides what's allowed
+
+Your backend must authenticate every request and authorize private
+operations. Route guards, screen guards and the user's fields in the client
+decide what to show, not what's allowed.
+
+## Where tokens live
+
+Each setup saves the tokens in a different place:
+
+| Setup                                      | Where the tokens live                                       |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| Browser app                                | `localStorage` or `sessionStorage`, through `webStorage()`  |
+| [Server rendering](/docs/server-rendering) | An encrypted `httpOnly` cookie                              |
+| [Expo app](/docs/setups/expo)              | The iOS keychain, or encrypted with an Android Keystore key |
+
+- **In a browser app**, any JavaScript on your origin can read the tokens, as
+  with any credential a browser saves. They never go in cookies, so the
+  browser doesn't send them on its own.
+- **With server rendering**, page scripts can't read the cookie. Only the
+  access token reaches page scripts, and only with `clientCredentials`.
+- **In an Expo app**, `secureStorage()` keeps the session out of Android
+  backups with the `expo-secure-store` config plugin. It also removes a
+  session that an earlier install left in the iOS keychain.
+
+## Where tokens go
+
+[`authFetch`](/docs/client/requests) and the effetch plugin
+[`sessionBearer`](/docs/effect#6-call-your-api-with-effetch) send the access
+token only to your API's origin:
+
+- A request to another origin, or with a username or password in its URL,
+  fails with `INVALID_OPTIONS` before anything is sent.
+- A redirect fails rather than carrying the token on.
+
+[Debug events](/docs/configuration/debugging) leave out tokens unless you
+turn on `sensitive`.
+
+## Keep tokens out of page data
+
+Sessions, the auth state, route context and the loader results Session kit
+makes hold no tokens: a `Session` has the user and its `sessionId` only.
+Don't put tokens in loader results or hydrated page data yourself.

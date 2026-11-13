@@ -1,0 +1,72 @@
+---
+title: "React Router"
+description: "Route guards and revalidation for React Router."
+---
+
+```ts
+import { … } from "@monarcode/session-kit/react-router";
+```
+
+Guide: [React Router](/docs/setups/react-router).
+
+## Functions
+
+### redirectIfSignedIn
+
+Guards your sign-in page in its loader, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`.
+
+### requireSession
+
+Guards a route in its loader, in data or framework mode, so only signed-in users get through. They get `{ session }`, which holds no tokens.
+
+### useAuthRevalidation
+
+Runs your loaders again when the session changes, so guards such as `requireSession` check it again. That's on sign-in, sign-out, a switch of account, a profile update, a lock, or a refresh that fails once the access token has expired. A token refresh alone doesn't, nor does a failed refresh while the token is still valid.
+
+## Components
+
+### SessionOutlet
+
+Renders child routes only while someone is signed in, in any mode. It needs an `AuthProvider` above it, or a `client`.
+
+## Types
+
+### RedirectIfSignedInOptions
+
+Options for [`redirectIfSignedIn`](#redirectifsignedin).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="RedirectIfSignedInOptions"
+/>
+
+### RequireSessionOptions
+
+Options for [`requireSession`](#requiresession).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="RequireSessionOptions"
+/>
+
+### SessionOutletProps
+
+Props for [`SessionOutlet`](#sessionoutlet).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="SessionOutletProps"
+/>
+
+### UnavailableProps
+
+What the `unavailable` render prop of an adapter component, such as React Router's `SessionOutlet` or Expo's `SessionGate`, receives.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="UnavailableProps"
+/>

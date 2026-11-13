@@ -100,3 +100,12 @@ jobs:
                 --title "v$RELEASE_VERSION" \
                 --prerelease --latest=false \
                 --notes-file "$RUNNER_TEMP/release/release-notes.md"
+         # Cloudflare Pages deploys the `site` branch as the live docs, so the
+         # docs change with the release that publishes their API.
+         - name: Move the docs site to the release
+           env:
+              GH_TOKEN: ${{ github.token }}
+              RELEASE_COMMIT: ${{ github.sha }}
+           run: |
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/site" \
+                -f sha="$RELEASE_COMMIT" -F force=true

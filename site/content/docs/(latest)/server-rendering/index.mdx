@@ -1,0 +1,58 @@
+---
+title: Overview
+description: With server rendering, the session lives in an encrypted cookie on the server, and the first page renders signed in.
+---
+
+If your app renders pages on the server, with TanStack Start, Next.js, or
+React Router's framework mode, Session kit keeps the session on the server.
+This page explains how the pieces fit, then sends you to your framework's
+guide.
+
+Both tokens and the user sit in one `httpOnly` cookie that page scripts can't
+read, so the refresh token never reaches the browser. The server refreshes
+before rendering, so pages never show a "Checking session…" state.
+
+## The pieces
+
+- **On the server**, `createServerAuth` from `@monarcode/session-kit/server`
+  seals the cookie with your secret and refreshes before rendering. Each of
+  its methods takes the request's cookie jar, which each framework's adapter
+  gives you.
+- **In the browser**, `createMirrorAuth` makes a client that starts from the
+  session the server rendered. `AuthProvider`, the hooks, and the TanStack
+  Router guards work with it, and sign-ins and sign-outs reach every tab.
+- **Your server code** signs in and out with your backend and calls your API
+  with the access token. `serverAuth.forRequest(jar)` gives code written for
+  a client, such as `createAuthFetch` or Effect's `Auth`, one request's
+  session. To call your API from the browser too, opt in with
+  `clientCredentials`: page scripts then get the access token in memory,
+  never the refresh token.
+
+The engine is the same `createServerAuth` call in every framework:
+[Create the server engine](/docs/setups/tanstack-start#1-create-the-server-engine)
+on the TanStack Start page shows one. The browser's client mirrors what the
+server rendered, and asks the server to sign in and out through your own
+server code, as in
+[Create the browser client](/docs/setups/tanstack-start#4-create-the-browser-client).
+
+## Frameworks
+
+What differs between frameworks is how the cookie jar reaches the engine, and
+how the session reaches the browser:
+
+| Framework                             | On the server                                   | In the browser                                      | Setup                                                               |
+| ------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| TanStack Start                        | `startJar()`, refreshing in request middleware  | `sessionHydration`, `loadSession`                   | [TanStack Start](/docs/setups/tanstack-start)                       |
+| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
+| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
+
+Locking isn't available with server rendering. For another server, such as
+the Next.js Pages Router, build a `CookieJar` over its cookies and use
+`createServerAuth` directly.
+
+## Next steps
+
+- Follow the guide for your framework in the table, from installation to
+  calling your API.
+- [Server sessions](/docs/server-rendering/server-sessions): the secret,
+  cookie jars, refreshes across server instances, sign-out, and limits.

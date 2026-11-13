@@ -1,0 +1,233 @@
+---
+title: "Core"
+description: "The client and storage: create one auth client per app."
+---
+
+```ts
+import { … } from "@monarcode/session-kit";
+```
+
+Guide: [Getting started](/docs/getting-started).
+
+## Functions
+
+### createAuth
+
+Creates an auth client. It keeps the session your backend issued, saves it, refreshes its tokens, and tells your app when it changes.
+
+### createMirrorAuth
+
+Creates a browser client ([`MirrorAuth`](#mirrorauth)) for a session your server keeps in an encrypted cookie, with `createServerAuth` from `@monarcode/session-kit/server`.
+
+### fromAccessToken
+
+Reads the user from the access token, rather than from what `signIn` is given. Pass the result as `createAuth`'s `user` option.
+
+### memoryStorage
+
+Keeps the session in memory only. It ends when the page unloads, and other tabs never see it. Use it in tests, or where tokens must never be written to disk. Each call has its own entries.
+
+### safeReturnTo
+
+Makes a "send me back here after sign-in" path safe to redirect to, such as a `?redirectTo=` search param. It returns the path, normalized, when it leads somewhere in your app, query and fragment included.
+
+### webStorage
+
+Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. Tabs follow each other's changes, such as a sign-out, and take turns to refresh where the browser supports Web Locks.
+
+## Classes
+
+### AuthError
+
+The error Session kit throws, rejects with, or shows in `state.error`.
+
+## Types
+
+### AccessTokenUser
+
+A user read from the access token, made by [`fromAccessToken`](#fromaccesstoken). Pass it as `createAuth`'s `user` option. `C` is the token's claims, and `U` is the user made from them.
+
+### AuthClient
+
+The auth client that `createAuth` returns. It holds the session, saves it, refreshes it, and tells your app when it changes.
+
+### AuthDebug
+
+What `createAuth`'s `debug` option takes:
+
+- `true`: log every event to the console.
+- A function: receive every [`AuthDebugEvent`](#authdebugevent).
+- [`AuthDebugOptions`](#authdebugoptions): choose where events go, and whether they include secrets.
+- `false`, or leaving it out: no logging.
+
+### AuthDebugEvent
+
+One thing auth did, sent to the `debug` option ([`AuthDebug`](#authdebug)).
+
+### AuthDebugOptions
+
+The object form of `createAuth`'s `debug` option ([`AuthDebug`](#authdebug)): where events go, and whether they include secrets.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="AuthDebugOptions"
+/>
+
+### AuthDebugType
+
+Which part of auth an [`AuthDebugEvent`](#authdebugevent) comes from, such as `refresh` or `storage`. These names don't change between releases, so filter on them.
+
+### AuthErrorCode
+
+What went wrong: the `code` of every [`AuthError`](#autherror). Match on it rather than on the message, which may change in any release.
+
+### AuthErrorOptions
+
+Options for creating an [`AuthError`](#autherror) yourself, such as in a test or a custom storage adapter: the standard `cause`, plus schema `issues`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="AuthErrorOptions"
+/>
+
+### AuthLocking
+
+Encrypts the saved tokens with a key your app holds, such as one behind Face ID. Pass it as the `locking` option of [`AuthOptions`](#authoptions).
+
+### AuthOptions
+
+Options for `createAuth`. The client's user types ([`User`](#user), [`UserInput`](#userinput)) are inferred from the `user` option.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="AuthOptions"
+/>
+
+### AuthState
+
+The current auth state, from `state.get()` or `useAuth()`. It holds no tokens.
+
+### AuthStatus
+
+Where the session stands: `state.status` ([`AuthState`](#authstate)).
+
+- `initializing`: the saved session hasn't been read yet.
+- `authenticated`: signed in, with an access token that hasn't expired or been rejected.
+- `refreshing`: signed in, and replacing an access token that expired or was rejected.
+- `locked`: signed in, but the tokens wait for `unlock()` (with `locking`).
+- `unauthenticated`: signed out.
+- `unavailable`: the access token expired or was rejected and couldn't be refreshed, or the saved session couldn't be read. `state.error` usually says why. On a client, `retry()` tries again.
+
+### AuthStorage
+
+Where auth saves the session: `createAuth`'s `storage` option. Use [`webStorage`](#webstorage) in browsers, `secureStorage()` from `@monarcode/session-kit/expo` in Expo apps, and [`memoryStorage`](#memorystorage) in tests. Implement it yourself for another store.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="AuthStorage"
+/>
+
+### ClientCredentials
+
+The access token as your server gives it to the browser, from `serverAuth.clientCredentials` in `@monarcode/session-kit/server`. `expiresIn` counts from when the server answered, so the browser's clock doesn't matter.
+
+### Credentials
+
+The current access token, from `credentials.get()`, to send with your API requests. `createAuthFetch` from `@monarcode/session-kit/http` does this for you.
+
+### FromAccessTokenOptions
+
+Options for [`fromAccessToken`](#fromaccesstoken).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="FromAccessTokenOptions"
+/>
+
+### MirrorAuth
+
+The browser client that [`createMirrorAuth`](#createmirrorauth) returns. It mirrors a session your server keeps in a cookie.
+
+### MirrorAuthOptions
+
+Options for [`createMirrorAuth`](#createmirrorauth). Each function is your own server function, action, or `fetch` to a route handler, which calls `serverAuth` from `@monarcode/session-kit/server`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="MirrorAuthOptions"
+/>
+
+### MirrorCredentials
+
+How a [`MirrorAuth`](#mirrorauth) gets the access token from your server. It's the `credentials` option of [`MirrorAuthOptions`](#mirrorauthoptions).
+
+### RefreshFn
+
+Exchanges a refresh token for new tokens. It's the `refresh` option of [`AuthOptions`](#authoptions).
+
+### RefreshResult
+
+What your refresh callback ([`RefreshFn`](#refreshfn)) returns:
+
+- [`Tokens`](#tokens): the new tokens. They must last at least five seconds. Leave out `refreshToken` or `user` to keep the current one.
+- `null`: your backend rejected the refresh token. The user is signed out.
+
+### RevokeFn
+
+Asks your backend to revoke the tokens of a session that just signed out. It's the `revoke` option of [`AuthOptions`](#authoptions).
+
+### SafeReturnToOptions
+
+Options for [`safeReturnTo`](#safereturnto).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="SafeReturnToOptions"
+/>
+
+### Session
+
+Who is signed in: the session ID and the user, from `getSession()`. It holds no tokens, so it's safe to keep in route context or pass around.
+
+### SignInInput
+
+What `signIn` takes: the [`Tokens`](#tokens), plus the `user` when a schema validates it. With `fromAccessToken` (`I` is `never`), it takes tokens only.
+
+### Tokens
+
+The tokens your backend issues. Pass them to `signIn`, and return them from your refresh callback ([`RefreshFn`](#refreshfn)).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="Tokens"
+/>
+
+### User
+
+The signed-in user's type, inferred from the `user` option: what `state.user` and `session.user` hold.
+
+### UserInput
+
+The user that `signIn` and `updateUser` accept, inferred from the `user` option. It differs from [`User`](#user) when the schema has defaults or transforms.
+
+### UserSource
+
+What `createAuth`'s `user` option takes: a schema, such as Zod's, that checks the `user` passed to `signIn`, or [`fromAccessToken`](#fromaccesstoken), which reads the user from the access token.
+
+### WebStorageOptions
+
+Options for [`webStorage`](#webstorage).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/index.d.ts"
+  name="WebStorageOptions"
+/>

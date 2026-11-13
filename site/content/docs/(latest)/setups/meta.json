@@ -1,0 +1,12 @@
+{
+	"title": "Setups",
+	"defaultOpen": true,
+	"pages": [
+		"tanstack-router",
+		"tanstack-start",
+		"react-router",
+		"react-router-ssr",
+		"next",
+		"expo"
+	]
+}

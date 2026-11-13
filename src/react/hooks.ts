@@ -71,7 +71,7 @@ export type AuthHooksOptions<Client extends AuthSource> = {
 export type AuthProviderProps<Client extends AuthSource> = {
 	/** The client for this tree. On a server, create one per request. */
 	client: Client;
-	/** The tree that reads `client` through the hooks. Default: none. */
+	/** The tree that reads `client` through the hooks. */
 	children?: ReactNode | undefined;
 };
 

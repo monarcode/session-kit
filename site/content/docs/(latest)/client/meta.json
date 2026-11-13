@@ -1,0 +1,14 @@
+{
+	"title": "Using the client",
+	"pages": [
+		"index",
+		"state",
+		"sessions",
+		"signing-in-and-out",
+		"updating-the-user",
+		"requests",
+		"other-http-clients",
+		"users-from-tokens",
+		"locking"
+	]
+}

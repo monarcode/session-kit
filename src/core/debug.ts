@@ -94,7 +94,8 @@ export type AuthDebugOptions = {
 	/**
 	 * Also puts tokens, saved values, user fields, whole deep-link paths and
 	 * error details in events. Anyone who reads such logs can act as the user,
-	 * so use it only in development. Default: `false`.
+	 * so use it only in development.
+	 * @default false
 	 */
 	sensitive?: boolean | undefined;
 };

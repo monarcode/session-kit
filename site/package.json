@@ -1,0 +1,39 @@
+{
+	"name": "session-kit-site",
+	"private": true,
+	"description": "The session-kit documentation site",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build && tsc --noEmit",
+		"preview": "vite preview"
+	},
+	"dependencies": {
+		"@fontsource-variable/geist": "5.3.0",
+		"@fontsource-variable/geist-mono": "5.3.0",
+		"@monarcode/session-kit": "workspace:*",
+		"@tanstack/react-router": "1.170.46",
+		"@tanstack/react-start": "1.169.5",
+		"@tanstack/start-static-server-functions": "1.167.44",
+		"@types/hast": "3.0.4",
+		"fumadocs-core": "16.19.0",
+		"fumadocs-mdx": "15.6.0",
+		"fumadocs-twoslash": "4.0.4",
+		"fumadocs-typescript": "5.6.0",
+		"fumadocs-ui": "npm:@fumadocs/base-ui@16.19.0",
+		"lucide-react": "1.72.0",
+		"react": "19.3.1",
+		"react-dom": "19.3.1"
+	},
+	"devDependencies": {
+		"@tailwindcss/vite": "4.3.5",
+		"@types/mdx": "2.0.14",
+		"@types/node": "22.20.4",
+		"@types/react": "19.3.0",
+		"@types/react-dom": "19.3.0",
+		"@vitejs/plugin-react": "6.3.0",
+		"tailwindcss": "4.3.5",
+		"typescript": "6.0.3",
+		"vite": "8.3.7"
+	}
+}

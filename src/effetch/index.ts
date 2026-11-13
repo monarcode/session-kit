@@ -43,13 +43,15 @@ export interface SessionBearerOptions {
 	 * Whether a call made while signed out is sent without an `Authorization`
 	 * header, rather than failing with `UNAUTHENTICATED`. Set `true` when one
 	 * client serves public and private endpoints. A locked client still fails
-	 * with `LOCKED`. Calls can override it. Default: `false`.
+	 * with `LOCKED`. Calls can override it.
+	 * @default false
 	 */
 	optional?: boolean | undefined;
 	/**
 	 * Whether a second 401, after a successful refresh, signs the user out.
 	 * Set `false` when some endpoints answer 401 for reasons other than a
-	 * rejected token. Calls can override it. Default: `true`.
+	 * rejected token. Calls can override it.
+	 * @default true
 	 */
 	signOutOnRepeated401?: boolean | undefined;
 }
@@ -125,20 +127,29 @@ const refuseRedirects = <A, E, R>(
  *
  * @example
  * ```ts
- * import * as Effect from "effect/Effect";
- * import * as FetchHttpClient from "effect/http/FetchHttpClient";
+ * import type * as Effect from "effect/Effect";
+ * import * as Schema from "effect/Schema";
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  * import { sessionBearer } from "@monarcode/session-kit/effetch";
  *
  * const baseUrl = "https://api.example.com";
+ * const Profile = Schema.Struct({ email: Schema.String });
  *
  * export const makeApi = Fetch.make({
  * 	baseUrl,
  * 	plugins: [retry(), sessionBearer({ baseUrl })],
- * }).pipe(Effect.provide(FetchHttpClient.layer));
- * // Skip it for a call that needs no token:
- * // api.post("/auth/login", { body, plugins: { sessionBearer: false } })
+ * });
+ * type Api = Effect.Success<typeof makeApi>;
+ *
+ * export const getProfile = (api: Api) => api.get("/me", { output: Profile });
+ *
+ * // Signing in needs no token: skip the plugin.
+ * export const login = (api: Api, username: string, password: string) =>
+ * 	api.post("/login", {
+ * 		body: { username, password },
+ * 		plugins: { sessionBearer: false },
+ * 	});
  * ```
  *
  * @see {@link SessionBearerOptions} for `optional` and `signOutOnRepeated401`

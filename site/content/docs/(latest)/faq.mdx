@@ -1,0 +1,57 @@
+---
+title: Common questions
+description: Short answers about refresh tokens, expiry, storing tokens, caches, bundle size, and other ways to sign in.
+---
+
+These are short answers to questions that come up when you adopt Session kit.
+Each links to the page with the full answer.
+
+## Do I need a refresh token?
+
+No. Without a refresh token or a `refresh` callback, the user is signed out
+when the access token expires or your API rejects it.
+
+## What if my backend doesn't say when the token expires?
+
+The client still works. See [Expiry](/docs/configuration/expiry) for where
+the client looks for the expiry, and what it does when it finds none.
+
+## Is it safe to keep tokens in `localStorage`?
+
+Any script on your origin can read them, as [Security](/docs/security)
+explains. If that isn't acceptable, keep the session on the server with
+[server rendering](/docs/server-rendering).
+
+## How do I use it with TanStack Query, or another cache?
+
+Put [`state.sessionId`](/docs/client/state) in the query key, or clear the
+cache when it changes, so one account never reads another's data. With
+effetch-query, [`resetKey`](/docs/effect#cache-with-effetch-query) does it.
+
+## Why does TanStack Start in SPA mode flash my pending component?
+
+The build prerenders an HTML shell, which the browser shows before any
+JavaScript runs. The client restores the session as soon as the script loads.
+Plain TanStack Router shows a blank page for the same moment. Give the shell
+a neutral pending component, as
+[TanStack Start in SPA mode](/docs/setups/tanstack-router#tanstack-start-in-spa-mode)
+does.
+
+## What if some endpoints answer 401 for other reasons?
+
+Pass `{ signOutOnRepeated401: false }` to `createAuthFetch`, so that those
+endpoints can't sign users out. See
+[Authenticated requests](/docs/client/requests).
+
+## How much does it add to my bundle?
+
+About 11 kB gzipped for a single-page app with a router adapter and
+`createAuthFetch`. With server rendering, where the session work happens on
+the server, it's about 5 kB. The routers you don't use add nothing: see
+[Entry points](/docs/reference).
+
+## Can I sign users in with Google, or a magic link?
+
+Yes, through your backend. Whatever your backend does to sign a user in,
+Session kit starts from the tokens it answers with. See
+[What it doesn't do](/docs#what-it-doesnt-do).

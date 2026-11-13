@@ -1,0 +1,64 @@
+---
+title: User schemas
+description: How the user schema checks every user the client accepts, and what restoring a session requires of it.
+---
+
+The schema you pass as `createAuth`'s `user` option checks each user the
+client accepts and gives the user its type. This page explains when it runs,
+and the two rules it must follow so that a saved session can be restored.
+
+Any [Standard Schema](https://standardschema.dev) library works, such as Zod,
+Valibot or ArkType. If your backend puts the user in the access token
+instead, see [Users from tokens](/docs/client/users-from-tokens).
+
+## When the schema runs
+
+The client runs the schema on every user it accepts:
+
+- At sign-in.
+- After a refresh that returns a user.
+- When it restores a saved session.
+- When another tab saves a session.
+
+It keeps a frozen copy of each user it accepts. To change the user, call
+[`updateUser`](/docs/client/updating-the-user).
+
+## The user's type
+
+`createAuth` infers the user's type from the schema's output. Hover `user` to
+see it:
+
+```ts twoslash
+import { createAuth, memoryStorage } from "@monarcode/session-kit";
+import { z } from "zod";
+
+const auth = createAuth({
+  name: "my-app",
+  user: z.object({ id: z.number(), firstName: z.string() }),
+  storage: memoryStorage(),
+});
+
+const { user } = auth.state.get();
+//      ^?
+```
+
+## Rules for restoring
+
+The client saves the user beside the tokens, and runs the schema on it again
+when it restores the session. That sets two rules for the schema:
+
+- **Its output is a plain JSON object.** Dates, `Map`s and class instances
+  can't be saved.
+- **It accepts its own output and returns it unchanged.** A one-way
+  transform, such as one that renames a field, breaks this rule.
+
+`signIn` rejects a schema that breaks either rule with
+`USER_VALIDATION_FAILED`. That way the problem shows up when you sign in,
+not as users being signed out on their next reload.
+
+## Users the schema rejects
+
+A deploy can change the schema so that it rejects users saved before it. The
+client doesn't restore such a user: the user signs in again. A user saved by
+another tab that the schema rejects signs every tab out, with
+`USER_VALIDATION_FAILED` in `state.error`.

@@ -1,0 +1,77 @@
+---
+title: Storage
+description: Where the client saves the session, from localStorage to the device's secure store or your own.
+---
+
+`createAuth`'s `storage` option chooses where the client saves the session.
+This page helps you pick a built-in store, or write your own.
+
+## Built-in stores
+
+The `storage` option takes one of Session kit's stores, or any object that
+implements `AuthStorage`:
+
+| Storage                           | Saved in                                  | Use it for                                           |
+| --------------------------------- | ----------------------------------------- | ---------------------------------------------------- |
+| `webStorage()`                    | `localStorage`                            | Browsers. One session, shared by every tab.          |
+| `webStorage({ area: "session" })` | `sessionStorage`                          | One session per tab, ending with the tab.            |
+| `secureStorage()`                 | The iOS keychain, or encrypted on Android | Expo apps. From `@monarcode/session-kit/expo`.       |
+| `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
+| Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
+
+For Expo, `secureStorage()` splits a session larger than SecureStore's
+2048-byte limit across several keys. See
+[Secure storage](/docs/setups/expo#secure-storage) in the Expo guide.
+
+## Rotating refresh tokens
+
+If your backend rotates refresh tokens, use `localStorage`, not
+`sessionStorage`. A browser copies `sessionStorage` into a duplicated tab, and
+into a window opened with `window.open`. Both then start with the same
+refresh token but never see each other's saves. The second to refresh sends a
+spent token and is signed out. With reuse detection on the backend, both are.
+
+## Write your own store
+
+An `AuthStorage` has three operations: `get`, `set` and `remove`. Each can
+return a promise. `set` also receives `expiresAt`: when the saved session
+stops being valid, `maxAge` after this save, in Unix milliseconds.
+
+For example, to save the session in a key-value store your app already has,
+which removes each entry when it expires:
+
+```ts title="src/storage.ts"
+import type { AuthStorage } from "@monarcode/session-kit";
+
+declare const store: {
+  get(key: string): Promise<string | undefined>;
+  put(
+    key: string,
+    value: string,
+    options: { expiresAt: number },
+  ): Promise<void>;
+  delete(key: string): Promise<void>;
+};
+
+export const kvStorage: AuthStorage = {
+  get: async (key) => (await store.get(key)) ?? null,
+  // The store drops the session itself once it's no longer valid.
+  set: (key, value, { expiresAt }) => store.put(key, value, { expiresAt }),
+  remove: (key) => store.delete(key),
+};
+```
+
+The client runs your store's operations one at a time, in the order it
+issued them. A store that several tabs share also needs `subscribe` and
+`lock`, so that [tabs follow each other](/docs/configuration/tabs). See
+[`AuthStorage`](/docs/reference/core#authstorage) for each member.
+
+## What the client saves
+
+The client saves the tokens and the user in one `<name>:auth:session` entry.
+Each save is then a single write, which other tabs see whole. A
+[user read from the access token](/docs/client/users-from-tokens) isn't
+saved: the client reads it from the token again on restore.
+
+Sessions saved by 0.1.0-alpha.3 or earlier aren't restored. Users of those
+versions sign in once after upgrading.

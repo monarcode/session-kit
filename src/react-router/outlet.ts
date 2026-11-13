@@ -50,13 +50,13 @@ export type SessionOutletProps = {
 	loginPath: string;
 	/**
 	 * Shown while the saved session is read and, in data mode, until the
-	 * loader has accepted a new session. Default: nothing.
+	 * loader has accepted a new session.
 	 */
 	pending?: ReactNode | undefined;
 	/**
 	 * Shown when the session is `unavailable`, such as after a failed
 	 * refresh ({@link UnavailableProps}). Without it, the error is thrown to
-	 * the nearest error boundary or error element. Default: none.
+	 * the nearest error boundary or error element.
 	 */
 	unavailable?: ((props: UnavailableProps) => ReactNode) | undefined;
 	/** The client to watch. Default: the nearest `AuthProvider`'s. */

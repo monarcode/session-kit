@@ -1,0 +1,41 @@
+---
+title: State
+description: Read the client's state outside React, follow its changes, and know what each field holds.
+---
+
+`auth.state` holds what `useAuth` reads in components. Outside React, read it
+once with `get`, or follow it with `subscribe`:
+
+```ts title="src/status-log.ts"
+import { auth } from "./auth.js";
+
+/** Logs each change of status. Returns a function that stops it. */
+export function logStatus() {
+  let last = auth.state.get().status;
+  const { unsubscribe } = auth.state.subscribe(({ status }) => {
+    if (status === last) return;
+    last = status;
+    console.info(`Auth is ${status}`);
+  });
+  return unsubscribe;
+}
+```
+
+`subscribe` reports later changes, not the current value. A listener that
+throws doesn't interrupt auth: its error is rethrown asynchronously, where
+error reporting can catch it.
+
+| Field       | Holds                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `status`    | Where the session stands. [How it works](/docs#how-it-works) lists each one.          |
+| `user`      | The signed-in user, or `null`. Checking `status` narrows it.                          |
+| `sessionId` | New on every sign-in, and stable across refreshes and profile updates.                |
+| `error`     | The latest failure, as an [`AuthError`](/docs/configuration/errors), or `null`.       |
+| `version`   | Changes when guards must run again. `connectAuth` and `useAuthRevalidation` watch it. |
+
+Two habits follow from these fields:
+
+- **Scope private cached data to `sessionId`**, such as TanStack Query
+  results, so one account never sees another's.
+- **Check `status`, not `user`, to know whether access is usable.** A
+  [locked](/docs/client/locking) session keeps its user.

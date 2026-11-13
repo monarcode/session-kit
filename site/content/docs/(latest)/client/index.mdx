@@ -1,0 +1,73 @@
+---
+title: Using the client
+description: The client's methods at a glance, for loaders, event handlers, request code, and anything else outside React.
+---
+
+This section is for code outside React components. Components read the
+session with hooks. Everything else, such as loaders, event handlers, and
+request code, calls the client that `createAuth` returned. These are its
+methods:
+
+| Call                               | What it does                                                               |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `auth.state.get()`, `.subscribe()` | Reads the [state](/docs/client/state), or follows its changes.             |
+| `auth.getSession()`                | Resolves who is signed in, restoring or refreshing first, or `null`.       |
+| `auth.signIn(tokens)`              | Saves a new session, replacing any current one.                            |
+| `auth.signOut()`                   | Ends the session, clears storage, and tells other tabs.                    |
+| `auth.updateUser(user)`            | Replaces the user and keeps the session.                                   |
+| `auth.refresh()`                   | Refreshes now, even while the access token is usable.                      |
+| `auth.retry()`                     | Tries again after a failed refresh.                                        |
+| `auth.isCurrent(session)`          | Tells whether a session is still the signed-in one.                        |
+| `auth.credentials.get()`           | Resolves the access token, for code that sends requests.                   |
+| `auth.lock()`, `auth.unlock()`     | Locks and unlocks a saved session, with [`locking`](/docs/client/locking). |
+| `auth.mount()`                     | Starts timers and tab sync. `AuthProvider` and the routers call it.        |
+
+Each method's JSDoc says what it resolves and which `AuthError` it rejects
+with, so your editor shows the details where you use them.
+
+The examples in this section build on the app from
+[Getting started](/docs/getting-started): `auth` is its client, and
+`authFetch` its `fetch`.
+
+<Cards>
+  <Card
+    title="State"
+    href="/docs/client/state"
+    description="Read the state outside React, and what each field holds."
+  />
+  <Card
+    title="Sessions and credentials"
+    href="/docs/client/sessions"
+    description="Ask who is signed in, and keep the access token apart from the user."
+  />
+  <Card
+    title="Signing in and out"
+    href="/docs/client/signing-in-and-out"
+    description="Save a new session, end it, and revoke its tokens."
+  />
+  <Card
+    title="Updating the user"
+    href="/docs/client/updating-the-user"
+    description="Replace the user without ending the session."
+  />
+  <Card
+    title="Authenticated requests"
+    href="/docs/client/requests"
+    description="A fetch that sends the access token to one API, and refreshes on a 401."
+  />
+  <Card
+    title="Other HTTP clients"
+    href="/docs/client/other-http-clients"
+    description="Attach the access token with axios, ky, or any other client."
+  />
+  <Card
+    title="Users from the access token"
+    href="/docs/client/users-from-tokens"
+    description="Read the user from a JWT's claims instead of the sign-in response."
+  />
+  <Card
+    title="Locking"
+    href="/docs/client/locking"
+    description="Ask a returning user to unlock, for example with biometrics, in native apps."
+  />
+</Cards>
