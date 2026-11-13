@@ -714,6 +714,60 @@ test("forRequest gives one request's session, shaped like a client", async (t) =
 	assert.equal(await app.getSession(tab.request()), null);
 });
 
+test("forRequest signs in, updates the user, refreshes when due and serves the browser's token", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"] });
+	let refreshes = 0;
+	const app = server({
+		clientCredentials: true,
+		refresh: async () => {
+			refreshes++;
+			return { accessToken: `access-${refreshes + 1}`, expiresIn: 900 };
+		},
+	});
+	const tab = browser();
+	const view = app.forRequest(tab.request());
+	assert.ok(Object.isFrozen(view.clientCredentials));
+
+	const signedIn = await view.signIn(tokens());
+	assert.deepEqual(await app.getSession(tab.request(false)), signedIn);
+	const updated = await view.updateUser({ ...user, role: "admin" });
+	assert.equal(updated.sessionId, signedIn.sessionId);
+	assert.equal((await app.getSession(tab.request(false)))?.user.role, "admin");
+
+	const forBrowser = await view.clientCredentials.get();
+	assert.equal(forBrowser?.accessToken, "access-1");
+	// Not due yet: nothing is refreshed.
+	assert.deepEqual(await view.refreshIfDue(), updated);
+	assert.equal(refreshes, 0);
+	const renewed = await view.clientCredentials.renew({
+		sessionId: forBrowser!.sessionId,
+		accessToken: "access-1",
+	});
+	assert.equal(renewed?.accessToken, "access-2");
+
+	// Within the window, a later request's view refreshes once.
+	t.mock.timers.tick(850_000);
+	const later = app.forRequest(tab.request());
+	await later.refreshIfDue({ within: 60 });
+	await later.refreshIfDue({ within: 60 });
+	assert.equal(refreshes, 2);
+
+	// A request that can't set cookies can't sign in or refresh.
+	const render = app.forRequest(tab.request(false));
+	await assert.rejects(render.signIn(tokens()), code("INVALID_OPTIONS"));
+	await assert.rejects(render.refreshIfDue(), code("INVALID_OPTIONS"));
+	await assert.rejects(render.updateUser(user), code("INVALID_OPTIONS"));
+});
+
+test("with fromAccessToken, a request's session has no updateUser", () => {
+	const app = createServerAuth({
+		name: "test",
+		user: fromAccessToken(z.object({ sub: z.string() })),
+		secret: SECRET,
+	});
+	assert.equal("updateUser" in app.forRequest(browser().request()), false);
+});
+
 test("forRequest renews and rejects as serverAuth's credentials do", async () => {
 	let refreshes = 0;
 	const app = server({

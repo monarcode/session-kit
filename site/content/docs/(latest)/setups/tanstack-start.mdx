@@ -34,12 +34,14 @@ npm install @monarcode/session-kit @tanstack/react-start zod
 ## 1. Create the server engine
 
 `createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-a cookie sealed with your `secret`, and refreshes it with your backend. Create
-it in a server-only module, so Start refuses to bundle it for the browser:
+a cookie sealed with your `secret`, and refreshes it with your backend.
+`startAuth` gives the session of the request Start is handling. Create both
+in a server-only module, so Start refuses to bundle it for the browser:
 
 ```ts title="src/auth/server.ts"
 import "@tanstack/react-start/server-only";
 import { createServerAuth } from "@monarcode/session-kit/server";
+import { startAuth } from "@monarcode/session-kit/tanstack-start/server";
 import { z } from "zod";
 
 const API = "https://api.example.com";
@@ -47,7 +49,7 @@ const API = "https://api.example.com";
 const userSchema = z.object({ id: z.number(), firstName: z.string() });
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
 
-export const serverAuth = createServerAuth({
+const serverAuth = createServerAuth({
   name: "app",
   user: userSchema,
   secret: process.env.SESSION_SECRET!,
@@ -64,6 +66,9 @@ export const serverAuth = createServerAuth({
     return tokens.parse(await response.json());
   },
 });
+
+/** The session of the request Start is handling, found on each call. */
+export const session = startAuth(serverAuth);
 
 /** Signs in with your backend, from the server. */
 export async function login(username: string, password: string) {
@@ -92,36 +97,33 @@ setup shares.
 
 ## 2. Add server functions
 
-Every `serverAuth` method takes the request's cookie jar, and `startJar()`
-from `@monarcode/session-kit/tanstack-start/server` gives it. Your server
-functions decide what the browser may ask for:
+`session` finds the request each time it's called, so one object serves
+every request. Your server functions decide what the browser may ask for:
 
 ```ts title="src/auth/functions.ts"
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { login, serverAuth } from "./server";
+import { login, session } from "./server";
 
 export const getSessionFn = createServerFn().handler(() =>
-  serverAuth.getSession(startJar()),
+  session.getSession(),
 );
 
 export const signInFn = createServerFn({ method: "POST" })
   .validator(z.object({ username: z.string(), password: z.string() }))
   .handler(async ({ data }) =>
-    serverAuth.signIn(startJar(), await login(data.username, data.password)),
+    session.signIn(await login(data.username, data.password)),
   );
 
 export const signOutFn = createServerFn({ method: "POST" }).handler(() =>
-  serverAuth.signOut(startJar()),
+  session.signOut(),
 );
 ```
 
 `getSession` and `signIn` resolve `{ sessionId, user }`, never tokens, so
 their results are safe to send to the browser. Start's compiler replaces each
-handler with a request in the browser bundle, and leaves `startJar` and
-`serverAuth` out of it.
+handler with a request in the browser bundle, and leaves `session` out of it.
 
 ## 3. Refresh before rendering
 
@@ -132,19 +134,18 @@ then, such as in a deferred loader's promise, would spend the refresh token
 and drop the new one:
 
 ```ts title="src/start.ts"
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 import {
   createCsrfMiddleware,
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
 
-import { serverAuth } from "./auth/server";
+import { session } from "./auth/server";
 
 const sessionMiddleware = createMiddleware({ type: "request" }).server(
   async ({ next }) => {
     // A failed refresh shows up when a route reads the session.
-    await serverAuth.refreshIfDue(startJar()).catch(() => {});
+    await session.refreshIfDue().catch(() => {});
     return next();
   },
 );
@@ -262,8 +263,8 @@ export const Route = createFileRoute("/_authenticated")({
 explains `SessionOutlet`, and an error component for a failed refresh.
 
 Guards decide what a page shows. Server functions that return private data
-must check the session themselves, with `serverAuth.getSession(startJar())`
-or `serverAuth.credentials.get(startJar())`.
+must check the session themselves, with `session.getSession()` or
+`session.credentials.get()`.
 
 ## Sign in
 
@@ -296,7 +297,7 @@ gives you `auth`, from Router context.
 In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, for
 example through a provider's SDK, have `signInFn` take the tokens and the user
-instead and pass them to `serverAuth.signIn`. It seals what it's given: until a
+instead and pass them to `session.signIn`. It seals what it's given: until a
 refresh or `updateUser` replaces it, the user in the cookie is what the browser
 sent. Use it to show who is signed in, and let your backend authorize requests
 with the access token, or check the tokens in `signInFn` first.
@@ -307,14 +308,13 @@ On the server, get the access token in a server function.
 `credentials.get` refreshes it first when it has expired:
 
 ```ts title="src/orders.ts"
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { serverAuth } from "./auth/server";
+import { session } from "./auth/server";
 
 export const getOrdersFn = createServerFn().handler(async () => {
-  const credentials = await serverAuth.credentials.get(startJar());
+  const credentials = await session.credentials.get();
   if (!credentials) throw new Error("Sign in first");
   const response = await fetch("https://api.example.com/orders", {
     headers: { Authorization: `Bearer ${credentials.accessToken}` },
@@ -326,7 +326,7 @@ export const getOrdersFn = createServerFn().handler(async () => {
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-Expose `serverAuth.clientCredentials.get` and `.renew` through two POST server
+Expose `session.clientCredentials.get` and `.renew` through two POST server
 functions, and pass them as the client's `credentials`. The browser then
 keeps the access token in memory, never the refresh token. The example app
 does this.
@@ -336,8 +336,10 @@ does this.
 - **Signing out ends the session only with `revoke`.** A copy of the cookie
   works again ten seconds after sign-out: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
-- **One jar per request.** `startJar()` returns the same jar for every call
-  while Start handles a request.
+- **One session per request.** Each call to `session` reads the request
+  Start is handling, and calls during one request share what it read and
+  one refresh. Outside a request, such as in the browser, they reject with
+  `INVALID_OPTIONS`.
 - **Caching.** Pages and server functions that read the session differ per
   user, and Start sends no `Cache-Control` for them. Behind a CDN or proxy
   that caches responses, mark them private, for example with

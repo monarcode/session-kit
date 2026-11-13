@@ -32,6 +32,31 @@
   `useAuthClient`, which read the client from Router context and are typed
   by the Router you register. They need no `AuthProvider` and no
   registration of their own.
+- One request's session on the server, without passing its cookie jar.
+  `startAuth(serverAuth)` in `@monarcode/session-kit/tanstack-start/server`
+  finds the request on each call, so it's made once, at module level, and
+  one `createAuthFetch` over it serves every request.
+  `routerAuth(serverAuth)` in `@monarcode/session-kit/react-router/server`
+  takes the route's `context`. The guides use these. The jar-first methods
+  stay, for servers without an adapter.
+
+  ```ts
+  // Before
+  await serverAuth.signIn(startJar(), tokens);
+  // After
+  export const session = startAuth(serverAuth);
+  await session.signIn(tokens);
+  ```
+
+- `serverAuth.forRequest(jar)` has every method now: `signIn`,
+  `updateUser`, `refreshIfDue` and `clientCredentials` join the rest.
+- `SessionOf<T>` and `UserOf<T>` in `@monarcode/session-kit` give the
+  session and user types of any client: one from `createAuth`,
+  `createMirrorAuth` or `createServerAuth`, or a request's session.
+
+  ```ts
+  type AppSession = SessionOf<typeof serverAuth>; // { sessionId, user }
+  ```
 
 ### Changed
 
@@ -133,6 +158,14 @@
   it throws when there's none. A hooks file made with
   `createAuthHooks({ useClient: useRouterAuth })` can go: import `useAuth`
   and `useAuthClient` from `@monarcode/session-kit/tanstack-router` instead.
+- **Breaking:** `RequestAuth` takes the user `signIn` accepts as a second
+  type parameter, as `ServerAuth` does: `RequestAuth<User, User>`, or
+  `RequestAuth<User, never>` when the user comes from the access token. Most
+  apps write `SessionOf` or `UserOf` instead.
+- Effect's `Auth.layer` binds a session from `startAuth` to the request
+  that's current when it's called, and throws `INVALID_OPTIONS` outside
+  one. `Auth.signIn` and `Auth.updateUser` still die on a request's session,
+  and now point at its own `signIn` and `updateUser`.
 
 - The guides moved to the documentation site,
   [session-kit.pages.dev](https://session-kit.pages.dev), with an API

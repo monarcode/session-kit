@@ -1,11 +1,8 @@
 import { redirect, type MiddlewareFunction } from "react-router";
 
-import {
-	cookieJarMiddleware,
-	routerJar,
-} from "@monarcode/session-kit/react-router/server";
+import { cookieJarMiddleware } from "@monarcode/session-kit/react-router/server";
 
-import { serverAuth } from "./session.server";
+import { auth } from "./session.server";
 
 /**
  * Refreshes access that is about to expire before loaders and actions read
@@ -17,8 +14,8 @@ const refreshSession: MiddlewareFunction<Response> = async (
 	next,
 ) => {
 	// The example's tokens live a minute: refresh in their last 15 seconds.
-	await serverAuth
-		.refreshIfDue(routerJar(context), { within: 15 })
+	await auth(context)
+		.refreshIfDue({ within: 15 })
 		.catch(() => {});
 	const response = await next();
 	// Every page and resource route here depends on who is signed in. A
@@ -43,7 +40,7 @@ export const requireSession: MiddlewareFunction<Response> = async ({
 	context,
 	url,
 }) => {
-	if (!(await serverAuth.getSession(routerJar(context))))
+	if (!(await auth(context).getSession()))
 		throw redirect(
 			`/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`,
 		);

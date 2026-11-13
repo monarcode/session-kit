@@ -481,6 +481,7 @@ test("on a request's server session, signIn and updateUser die, and a read-only 
 	t.mock.timers.enable({ apis: ["Date"] });
 	const { serverAuth, request } = serverSide("effect-server");
 	const signedIn = await serverAuth.signIn(request(), tokens());
+	// Its own signIn and updateUser take the server's input, not the browser's.
 	for (const effect of [
 		Auth.signIn(tokens() as never),
 		Auth.updateUser(user as never),
@@ -491,14 +492,15 @@ test("on a request's server session, signIn and updateUser die, and a read-only 
 		);
 		assert.ok(died instanceof AuthError);
 		assert.equal(died.code, "INVALID_OPTIONS");
-		assert.match(died.message, /serverAuth\./);
+		assert.match(died.message, /request's session/);
 	}
+	const updated = signedIn;
 
 	t.mock.timers.tick(901_000);
 	const render = Auth.layer(serverAuth.forRequest(request(false)));
 	assert.deepEqual(
 		await Effect.runPromise(Effect.provide(Auth.session, render)),
-		signedIn,
+		updated,
 	);
 	const failed = await Effect.runPromise(
 		Effect.provide(Effect.flip(Auth.credentials), render),

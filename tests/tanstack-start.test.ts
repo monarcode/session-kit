@@ -8,18 +8,24 @@ import {
 	type MirrorAuth,
 	type Session,
 } from "@monarcode/session-kit";
+import { Auth } from "@monarcode/session-kit/effect";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createServerAuth } from "@monarcode/session-kit/server";
 import {
 	connectSession,
 	loadSession,
 } from "@monarcode/session-kit/tanstack-start";
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
+import {
+	startAuth,
+	startJar,
+} from "@monarcode/session-kit/tanstack-start/server";
 import {
 	createServerEntry,
 	getResponseHeaders,
 } from "@tanstack/react-start/server";
+import * as Effect from "effect/Effect";
 
-import { code, SECRET, user, userSchema } from "./helpers.ts";
+import { code, deferred, SECRET, tokens, user, userSchema } from "./helpers.ts";
 
 type User = typeof user;
 
@@ -120,6 +126,129 @@ test("startJar sets and deletes every chunk of a large session", async () => {
 			.sort(),
 		["app.session", "app.session.0", "app.session.1"],
 	);
+});
+
+// Made once, at module level, as an app does.
+const session = startAuth(serverAuth);
+
+test("startAuth finds each request's session, and rejects outside a request", async () => {
+	await assert.rejects(session.getSession(), code("INVALID_OPTIONS"));
+	await assert.rejects(session.credentials.get(), code("INVALID_OPTIONS"));
+	assert.throws(() => session.state.get(), code("INVALID_OPTIONS"));
+	assert.ok(Object.isFrozen(session));
+
+	const signedIn = await handle("", () => session.signIn(tokens()));
+	assert.match(signedIn.setCookies[0]!, /^app\.session=1\./);
+	const cookie = cookieHeader(signedIn.setCookies);
+
+	const read = await handle(cookie, async () => {
+		const current = await session.getSession();
+		assert.equal(session.isCurrent(current!), true);
+		assert.equal(session.state.get().sessionId, current!.sessionId);
+		return current;
+	});
+	assert.deepEqual(read.result, signedIn.result);
+	assert.equal((await handle("", () => session.getSession())).result, null);
+
+	const updated = await handle(cookie, () =>
+		session.updateUser({ ...user, role: "admin" }),
+	);
+	assert.equal(updated.result.user.role, "admin");
+
+	const signedOut = await handle(cookieHeader(updated.setCookies), () =>
+		session.signOut(),
+	);
+	assert.match(signedOut.setCookies[0]!, /^app\.session=; Max-Age=0/);
+});
+
+test("startAuth has every member a request's session has, passed through", async () => {
+	const app = createServerAuth({
+		name: "app",
+		user: userSchema,
+		secret: SECRET,
+		clientCredentials: true,
+		refresh: async () => ({
+			accessToken: `access-${++refreshes}`,
+			expiresIn: 900,
+		}),
+	});
+	let refreshes = 1;
+	const lazy = startAuth(app);
+	const signedIn = await handle("", () => lazy.signIn(tokens()));
+	const { result } = await handle(
+		cookieHeader(signedIn.setCookies),
+		async () => {
+			const view = app.forRequest(startJar());
+			const keys = (value: object) => Object.keys(value).sort();
+			assert.deepEqual(keys(lazy), keys(view));
+			for (const member of [
+				"credentials",
+				"clientCredentials",
+				"state",
+			] as const)
+				assert.deepEqual(keys(lazy[member]), keys(view[member]));
+
+			assert.deepEqual(await lazy.refreshIfDue(), signedIn.result);
+			const credentials = await lazy.credentials.get();
+			const renewed = await lazy.credentials.renew(credentials!);
+			assert.equal(renewed?.accessToken, "access-2");
+			const forBrowser = await lazy.clientCredentials.get();
+			assert.equal(forBrowser?.accessToken, "access-2");
+			assert.equal(
+				(await lazy.clientCredentials.renew(forBrowser!))?.accessToken,
+				"access-3",
+			);
+			const seen: string[] = [];
+			const { unsubscribe } = lazy.state.subscribe((state) =>
+				seen.push(state.status),
+			);
+			await lazy.credentials.reject((await lazy.credentials.get())!);
+			unsubscribe();
+			assert.ok(seen.includes("unauthenticated"));
+			return view.state.get().sessionId;
+		},
+	);
+	assert.equal(result, null);
+});
+
+test("Auth.layer binds a startAuth session to the request that's current", async () => {
+	assert.throws(() => Auth.layer(session), code("INVALID_OPTIONS"));
+	const signedIn = await handle("", () => session.signIn(tokens()));
+	const read = await handle(cookieHeader(signedIn.setCookies), () =>
+		Effect.runPromise(Effect.provide(Auth.session, Auth.layer(session))),
+	);
+	assert.deepEqual(read.result, signedIn.result);
+});
+
+test("one module-level createAuthFetch over startAuth sends each request's own token", async (t) => {
+	const alice = await handle("", () =>
+		session.signIn(tokens({ accessToken: "alice-token" })),
+	);
+	const bob = await handle("", () =>
+		session.signIn(
+			tokens({ accessToken: "bob-token", user: { ...user, id: "bob" } }),
+		),
+	);
+	const authFetch = createAuthFetch(session, { baseUrl: "https://api.test" });
+
+	// Both requests are in flight before either answers.
+	const bothSent = deferred();
+	let sent = 0;
+	t.mock.method(globalThis, "fetch", async (request: Request) => {
+		if (++sent === 2) bothSent.resolve();
+		await bothSent.promise;
+		return new Response(request.headers.get("authorization"));
+	});
+	const [fromAlice, fromBob] = await Promise.all([
+		handle(cookieHeader(alice.setCookies), async () =>
+			(await authFetch("/me")).text(),
+		),
+		handle(cookieHeader(bob.setCookies), async () =>
+			(await authFetch("/me")).text(),
+		),
+	]);
+	assert.equal(fromAlice.result, "Bearer alice-token");
+	assert.equal(fromBob.result, "Bearer bob-token");
 });
 
 /** The app's own data, beside the session, as TanStack Query's would be. */

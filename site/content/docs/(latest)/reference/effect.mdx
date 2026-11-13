@@ -27,7 +27,7 @@ The codes an [`AuthFailure`](#authfailure) carries: every `AuthErrorCode` except
 
 ### AuthLayerClient
 
-What `Auth.layer` takes. Once you register a client in `Register`, that's your client, or on the server a `serverAuth.forRequest(jar)` view with the same user. Until then, it's any [`AuthServiceClient`](#authserviceclient).
+What `Auth.layer` takes. Once you register a client in `Register`, that's your client, or on the server a request's session with the same user (`RequestAuth`). Until then, it's any [`AuthServiceClient`](#authserviceclient).
 
 ### AuthServiceClient
 

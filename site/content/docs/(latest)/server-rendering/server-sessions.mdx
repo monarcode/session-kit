@@ -4,7 +4,7 @@ description: How the server keeps the session in every framework, from the cooki
 ---
 
 This page covers what every server-rendered setup shares: the cookie and its
-secret, cookie jars, refreshes, sign-out, and limits. Read it once your app
+secret, a request's session, refreshes, sign-out, and limits. Read it once your app
 works, to deploy it. The setup guides show the code:
 [TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next),
 and [React Router with server rendering](/docs/setups/react-router-ssr).
@@ -49,28 +49,44 @@ export const serverAuth = createServerAuth({
 Remove `OLD_SESSION_SECRET` once the sessions it sealed have expired. A cookie
 that no listed secret opens reads as signed out.
 
-## Cookie jars
+## A request's session
 
-Every `serverAuth` method takes the request's `CookieJar`, which each
-framework's adapter gives you. Use one jar per request: calls with the same
-jar share what it read and wrote and one refresh, so a jar kept at module
-level would show one request's session to the next.
+Your server code reads and changes the session through one request's
+session (`RequestAuth`). It has every `serverAuth` method, without the
+request's cookie jar to pass:
 
-A jar is read-only where the framework can't set cookies, as while a Server
-Component renders or a page streams. There, nothing is refreshed or saved:
-see `CookieJar.writable` for which calls reject and with what. Refresh before
-rendering, in middleware or a proxy, with `serverAuth.refreshIfDue`. For
-another server, build a [`CookieJar`](/docs/reference/server#cookiejar) over
-its cookies.
+- **TanStack Start:** `startAuth(serverAuth)`, made once at module level.
+  Each call finds the request Start is handling.
+- **React Router:** `routerAuth(serverAuth)` makes a function you call with
+  a loader's, action's or middleware's `context`.
+- **Next.js, and servers without an adapter:**
+  `serverAuth.forRequest(jar)`, over the request's cookie jar.
 
-## Code that takes a client
+It's shaped like a client, so code written for one works on the server with
+it. `createAuthFetch(session, { baseUrl })` sends the cookie's token and saves
+a renewed one after a 401, and Effect's `Auth.layer` takes it
+([Effect on the server](/docs/effect#on-the-server)).
 
-`serverAuth.forRequest(jar)` is one request's session shaped like a client
-(`RequestAuth`). Code written for a client works on the server with it:
-`createAuthFetch(serverAuth.forRequest(jar), { baseUrl })` sends the
-cookie's token and saves a renewed one after a 401, and Effect's
-`Auth.layer` takes it ([Effect on the server](/docs/effect#on-the-server)). Make it per request,
-like the jar.
+Some requests can't set cookies: a Next.js Server Component rendering, or a
+React Router loader once its response has left the middleware. There,
+nothing is saved, so `signIn`, `signOut` and `refreshIfDue` reject with
+`INVALID_OPTIONS`, and an expired access token rejects with
+`REFRESH_FAILED`. TanStack Start can't tell once a page has started
+streaming, so a cookie set then is lost. Refresh before rendering, in
+middleware or a proxy, with `refreshIfDue`.
+
+## Servers without an adapter
+
+Every `serverAuth` method also takes the request's `CookieJar` first:
+`serverAuth.getSession(jar)` does what a request's `getSession()` does, and
+`serverAuth.forRequest(jar)` gives that request's session. For a server
+without an adapter, build a [`CookieJar`](/docs/reference/server#cookiejar)
+over its cookies.
+
+Use one jar per request. Calls with the same jar share what it read and
+wrote and one refresh, so a jar kept at module level would show one
+request's session to the next. A jar that can't set cookies says so with
+`writable: false`.
 
 ## Token refresh
 
@@ -86,7 +102,7 @@ instances that refresh the same session then don't sign it out.
 
 ## Sign-out
 
-`serverAuth.signOut` clears the cookie in this browser, then calls your
+A request's `signOut` clears the cookie in this browser, then calls your
 `revoke`. The cookie holds the whole session and the server keeps no list of
 sessions, so a copy of the cookie made before sign-out still reads as signed
 in. For ten seconds, the instance that signed out treats such a copy as
@@ -100,11 +116,11 @@ revocation.
 
 ## The access token in the browser
 
-Server code calls your API with `serverAuth.credentials`. To call it from the
-browser too, with `createAuthFetch` or effetch's `sessionBearer`, opt in with
-`clientCredentials: true` and expose `serverAuth.clientCredentials.get` and
-`.renew` through your own same-origin endpoint, passed to `createMirrorAuth`
-as `credentials`. Page scripts then hold the access token in memory, never the
+Server code calls your API with a request's `credentials`. To call it from
+the browser too, with `createAuthFetch` or effetch's `sessionBearer`, opt in
+with `clientCredentials: true` and expose a request's `clientCredentials.get`
+and `.renew` through your own same-origin endpoint, passed to
+`createMirrorAuth` as `credentials`. Page scripts then hold the access token in memory, never the
 refresh token, so a script injected into the page can use the API while the
 page is open, as it could with any token the browser holds.
 

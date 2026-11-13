@@ -1,9 +1,8 @@
 import type { ActionFunctionArgs } from "react-router";
 
-import { routerJar } from "@monarcode/session-kit/react-router/server";
 import { z } from "zod";
 
-import { serverAuth } from "../auth/session.server";
+import { auth } from "../auth/session.server";
 
 const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
 
@@ -16,11 +15,11 @@ const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
 export async function action({ request, context }: ActionFunctionArgs) {
 	if (request.headers.get("sec-fetch-site") !== "same-origin")
 		return new Response(null, { status: 403 });
-	const jar = routerJar(context);
+	const session = auth(context);
 	const body = rejected.safeParse(await request.json().catch(() => null));
 	return Response.json(
 		body.success
-			? await serverAuth.clientCredentials.renew(jar, body.data)
-			: await serverAuth.clientCredentials.get(jar),
+			? await session.clientCredentials.renew(body.data)
+			: await session.clientCredentials.get(),
 	);
 }

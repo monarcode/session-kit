@@ -11,6 +11,10 @@ Guide: [TanStack Start](/docs/setups/tanstack-start).
 
 ## Functions
 
+### startAuth
+
+The session of the request TanStack Start is handling (`RequestAuth`), with every `serverAuth` method and no cookie jar. Each call finds the current request, so make it once, at module level, beside `serverAuth`.
+
 ### startJar
 
-The `CookieJar` for the request TanStack Start is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. Use it in a server function, request middleware, a server route, or `beforeLoad` and loaders while they run on the server. Every call during one request returns the same jar.
+The `CookieJar` for the request TanStack Start is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. [`startAuth`](#startauth) passes it for you. Use it in a server function, request middleware, a server route, or `beforeLoad` and loaders while they run on the server. Every call during one request returns the same jar.

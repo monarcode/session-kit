@@ -1,5 +1,6 @@
 // Holds the secret and the tokens: the `.server` name keeps it out of the
 // browser's bundle, and the build fails if browser code imports it.
+import { routerAuth } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 
 import { refresh, userSchema } from "./backend";
@@ -31,3 +32,9 @@ export const serverAuth = createServerAuth({
 	// `react-router dev` serves plain http; Safari drops Secure cookies there.
 	cookie: { secure: !import.meta.env.DEV },
 });
+
+/**
+ * The session of the request React Router is handling, by its `context`:
+ * `auth(context).getSession()` in a loader, action or middleware.
+ */
+export const auth = routerAuth(serverAuth);

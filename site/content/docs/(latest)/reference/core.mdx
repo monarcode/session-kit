@@ -204,6 +204,10 @@ Options for [`safeReturnTo`](#safereturnto).
 
 Who is signed in: the session ID and the user, from `getSession()`. It holds no tokens, so it's safe to keep in route context or pass around.
 
+### SessionOf
+
+The session type of a client: what its `getSession` resolves, without `null`. It takes any client: one from `createAuth` or `createMirrorAuth`, the server's from `createServerAuth`, or a request's session from it.
+
 ### SignInInput
 
 What `signIn` takes: the [`Tokens`](#tokens), plus the `user` when a schema validates it. With `fromAccessToken` (`I` is `never`), it takes tokens only.
@@ -225,6 +229,10 @@ The signed-in user's type, inferred from the `user` option: what `state.user` an
 ### UserInput
 
 The user that `signIn` and `updateUser` accept, inferred from the `user` option. It differs from [`User`](#user) when the schema has defaults or transforms.
+
+### UserOf
+
+The user type of a client, as [`SessionOf`](#sessionof) finds it: the `user` of its session.
 
 ### UserSource
 

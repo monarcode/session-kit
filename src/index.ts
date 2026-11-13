@@ -12,6 +12,7 @@ export type {
 	AuthDebugType,
 } from "./core/debug.js";
 export type { AuthErrorCode, AuthErrorOptions } from "./core/errors.js";
+export type { SessionOf, UserOf } from "./core/infer.js";
 export type {
 	ClientCredentials,
 	MirrorAuth,

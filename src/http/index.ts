@@ -5,7 +5,7 @@ import { parseUrl } from "../core/url.js";
 /**
  * The part of an auth client that {@link createAuthFetch} uses. A
  * `createAuth` or `createMirrorAuth` client fits, and so does a request's
- * session from `serverAuth.forRequest(jar)`.
+ * session on the server (`RequestAuth`).
  *
  * @example
  * ```ts

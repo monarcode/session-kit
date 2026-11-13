@@ -1,12 +1,13 @@
 import {
 	createMirrorAuth,
 	type ClientCredentials,
-	type Session,
+	type SessionOf,
 } from "@monarcode/session-kit";
 
-import type { User } from "./backend";
+// Types only: erased from the browser's bundle.
+import type { serverAuth } from "./session.server";
 
-export type AppSession = Session<User>;
+export type AppSession = SessionOf<typeof serverAuth>;
 
 /** Calls one of the resource routes in `routes/auth.*.ts`. */
 async function call<T>(method: "GET" | "POST", path: string, body?: object) {

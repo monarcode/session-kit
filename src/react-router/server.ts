@@ -1,26 +1,26 @@
 import { AuthError } from "../core/errors.js";
+import type { RequestAuth, ServerAuth } from "../server/auth.js";
 import type { CookieJar } from "../server/cookies.js";
 import { requestJar, type RequestJar } from "../server/request-jar.js";
 
 /**
  * The `context` React Router passes to server middleware, loaders and actions
  * in framework mode: a `RouterContextProvider`, one per request.
- * {@link routerJar} and {@link cookieJarMiddleware} find the request's jar by
- * it. It's typed by its shape, so this entry point doesn't depend on React
+ * {@link routerAuth} and {@link cookieJarMiddleware} find the request by it.
+ * It's typed by its shape, so this entry point doesn't depend on React
  * Router's types.
  *
  * @example
  * ```ts
- * import {
- * 	routerJar,
- * 	type RouterContextLike,
- * } from "@monarcode/session-kit/react-router/server";
- * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import type { RouterContextLike } from "@monarcode/session-kit/react-router/server";
+ * import type { RequestAuth } from "@monarcode/session-kit/server";
  *
- * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ * declare const auth: (
+ * 	context: RouterContextLike,
+ * ) => RequestAuth<{ id: number }, { id: number }>;
  *
  * export async function loader({ context }: { context: RouterContextLike }) {
- * 	return { session: await serverAuth.getSession(routerJar(context)) };
+ * 	return { session: await auth(context).getSession() };
  * }
  * ```
  *
@@ -50,25 +50,26 @@ const requests = new WeakMap<
  * first waits for a refresh under way, so its new tokens are saved. After
  * that, such as while a loader's deferred data streams, it's read-only.
  * Nothing is saved, and a call that needs a refresh rejects with
- * `REFRESH_FAILED`. Refresh before rendering, with `serverAuth.refreshIfDue`
- * in middleware.
+ * `REFRESH_FAILED`. Refresh before rendering, with `refreshIfDue` in
+ * middleware.
  *
  * @example
  * ```ts
  * import {
  * 	cookieJarMiddleware,
- * 	routerJar,
  * 	type RouterContextLike,
  * } from "@monarcode/session-kit/react-router/server";
- * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import type { RequestAuth } from "@monarcode/session-kit/server";
  *
- * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ * declare const auth: (
+ * 	context: RouterContextLike,
+ * ) => RequestAuth<{ id: number }, { id: number }>;
  *
  * // app/root.tsx: refresh access that expires within a minute.
  * export const middleware = [
  * 	cookieJarMiddleware,
  * 	async ({ context }: { context: RouterContextLike }) => {
- * 		await serverAuth.refreshIfDue(routerJar(context)).catch(() => {});
+ * 		await auth(context).refreshIfDue().catch(() => {});
  * 	},
  * ];
  * ```
@@ -91,10 +92,10 @@ export async function cookieJarMiddleware(
 
 /**
  * The {@link CookieJar} for the request React Router is handling, to pass to
- * `serverAuth` from `@monarcode/session-kit/server`. Call it with `context`
- * in server middleware, loaders and actions, after
- * {@link cookieJarMiddleware}. Every call during one request returns the
- * same jar.
+ * `serverAuth` from `@monarcode/session-kit/server`. {@link routerAuth}
+ * passes it for you. Call it with `context` in server middleware, loaders
+ * and actions, after {@link cookieJarMiddleware}. Every call during one
+ * request returns the same jar.
  *
  * Throws `INVALID_OPTIONS` when the middleware hasn't run for `context`,
  * such as in a client loader.
@@ -123,7 +124,47 @@ export function routerJar(context: RouterContextLike): CookieJar {
 	if (!current)
 		throw new AuthError(
 			"INVALID_OPTIONS",
-			"Add cookieJarMiddleware to the root route's middleware, and call routerJar(context) on the server, in middleware, loaders and actions",
+			"Add cookieJarMiddleware to the root route's middleware, and read the session on the server, in middleware, loaders and actions",
 		);
 	return current.cookies.jar;
+}
+
+/**
+ * Returns a function that gives the session of the request React Router is
+ * handling ({@link RequestAuth}), with every `serverAuth` method and no
+ * cookie jar. Call it with `context` in server middleware, loaders and
+ * actions, after {@link cookieJarMiddleware}. Make it once, at module level.
+ *
+ * Calling it throws `INVALID_OPTIONS` when the middleware hasn't run for
+ * `context`, as {@link routerJar} does.
+ *
+ * @example
+ * ```ts
+ * import { createServerAuth } from "@monarcode/session-kit/server";
+ * import {
+ * 	routerAuth,
+ * 	type RouterContextLike,
+ * } from "@monarcode/session-kit/react-router/server";
+ * import { z } from "zod";
+ *
+ * declare const secret: string;
+ *
+ * const serverAuth = createServerAuth({
+ * 	name: "app",
+ * 	user: z.object({ id: z.number(), firstName: z.string() }),
+ * 	secret,
+ * });
+ * export const auth = routerAuth(serverAuth);
+ *
+ * export async function loader({ context }: { context: RouterContextLike }) {
+ * 	return { session: await auth(context).getSession() };
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function routerAuth<U, I>(
+	serverAuth: ServerAuth<U, I>,
+): (context: RouterContextLike) => RequestAuth<U, I> {
+	return (context) => serverAuth.forRequest(routerJar(context));
 }

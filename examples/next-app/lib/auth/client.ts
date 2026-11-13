@@ -1,6 +1,7 @@
 import {
 	createMirrorAuth,
 	type ClientCredentials,
+	type SessionOf,
 } from "@monarcode/session-kit";
 
 import {
@@ -8,10 +9,10 @@ import {
 	signInAction,
 	signOutAction,
 } from "../../app/actions";
+// Types only: erased from the browser's bundle.
+import type { serverAuth } from "./server";
 
-export type AppSession = NonNullable<
-	Awaited<ReturnType<typeof getSessionAction>>
->;
+export type AppSession = SessionOf<typeof serverAuth>;
 
 /** Asks the route handler for the access token, or renews `rejected`. */
 async function credentials(rejected?: object) {

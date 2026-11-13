@@ -7,15 +7,14 @@ import {
 } from "react-router";
 
 import { safeReturnTo } from "@monarcode/session-kit";
-import { routerJar } from "@monarcode/session-kit/react-router/server";
 
 import { login } from "../auth/backend";
-import { serverAuth } from "../auth/session.server";
+import { auth } from "../auth/session.server";
 import { LoginForm } from "../ui";
 
 /** Signed in, before or after the form: the server sends the user on. */
 export async function loader({ context, url }: LoaderFunctionArgs) {
-	if (await serverAuth.getSession(routerJar(context)))
+	if (await auth(context).getSession())
 		throw redirect(safeReturnTo(url.searchParams.get("redirectTo")));
 	return null;
 }
@@ -28,8 +27,7 @@ export async function loader({ context, url }: LoaderFunctionArgs) {
 export async function action({ request, context, url }: ActionFunctionArgs) {
 	const form = await request.formData();
 	try {
-		await serverAuth.signIn(
-			routerJar(context),
+		await auth(context).signIn(
 			await login(
 				String(form.get("username")),
 				String(form.get("password")),

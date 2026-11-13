@@ -122,8 +122,8 @@ const refuseRedirects = <A, E, R>(
  * token. `Fetch.make` then needs the `Auth` service, but calls don't.
  *
  * On the server, make the effetch client per request, and provide it the
- * `Auth` layer for that request's `serverAuth.forRequest(jar)`. That view
- * reads the token from the request's cookie and saves a renewed one.
+ * `Auth` layer for that request's session (`RequestAuth`). It reads the
+ * token from the request's cookie and saves a renewed one.
  *
  * @example
  * ```ts

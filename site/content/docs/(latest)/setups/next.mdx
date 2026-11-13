@@ -206,17 +206,17 @@ the browser.
 session the layout read and your Server Functions:
 
 ```ts title="lib/auth/client.ts"
-import { createMirrorAuth } from "@monarcode/session-kit";
+import { createMirrorAuth, type SessionOf } from "@monarcode/session-kit";
 
 import {
   getSessionAction,
   signInAction,
   signOutAction,
 } from "../../app/actions";
+// Types only: left out of the browser's bundle.
+import type { serverAuth } from "./server";
 
-export type AppSession = NonNullable<
-  Awaited<ReturnType<typeof getSessionAction>>
->;
+export type AppSession = SessionOf<typeof serverAuth>;
 
 export function createAppAuth(session: AppSession | null) {
   return createMirrorAuth({

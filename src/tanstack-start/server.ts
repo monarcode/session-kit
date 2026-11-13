@@ -6,6 +6,11 @@ import {
 } from "@tanstack/react-start/server";
 
 import { AuthError } from "../core/errors.js";
+import {
+	lazyRequestAuth,
+	type RequestAuth,
+	type ServerAuth,
+} from "../server/auth.js";
 import type { CookieJar, CookieOptions } from "../server/cookies.js";
 
 /** `options` without unset attributes, which Start's types don't accept. */
@@ -22,10 +27,10 @@ const jars = new WeakMap<Request, CookieJar>();
 
 /**
  * The {@link CookieJar} for the request TanStack Start is handling, to pass
- * to `serverAuth` from `@monarcode/session-kit/server`. Use it in a server
- * function, request middleware, a server route, or `beforeLoad` and loaders
- * while they run on the server. Every call during one request returns the
- * same jar.
+ * to `serverAuth` from `@monarcode/session-kit/server`. {@link startAuth}
+ * passes it for you. Use it in a server function, request middleware, a
+ * server route, or `beforeLoad` and loaders while they run on the server.
+ * Every call during one request returns the same jar.
  *
  * Start adds its cookies to the response, a redirect's included, but not
  * once it has started streaming a page. A cookie set after that is lost, so
@@ -59,7 +64,7 @@ export function startJar(): CookieJar {
 	} catch (cause) {
 		throw new AuthError(
 			"INVALID_OPTIONS",
-			"Call startJar() on the server while TanStack Start handles a request, such as in a server function or request middleware",
+			"There's no request here: use the session on the server, while TanStack Start handles a request, such as in a server function or request middleware",
 			{ cause },
 		);
 	}
@@ -76,4 +81,47 @@ export function startJar(): CookieJar {
 		jars.set(request, jar);
 	}
 	return jar;
+}
+
+/**
+ * The session of the request TanStack Start is handling ({@link RequestAuth}),
+ * with every `serverAuth` method and no cookie jar. Each call finds the
+ * current request, so make it once, at module level, beside `serverAuth`.
+ *
+ * Use it in server functions, request middleware, server routes, and
+ * `beforeLoad` and loaders while they run on the server. As
+ * {@link startJar} explains, Start can't set a cookie once a page streams,
+ * so refresh before rendering, in request middleware with `refreshIfDue`.
+ *
+ * Outside a request, such as in the browser, its methods reject with
+ * `INVALID_OPTIONS`, and `isCurrent` and `state` throw it. Import it only
+ * from server code, as you do `serverAuth`.
+ *
+ * @example
+ * ```ts
+ * import { createServerAuth } from "@monarcode/session-kit/server";
+ * import { startAuth } from "@monarcode/session-kit/tanstack-start/server";
+ * import { createServerFn } from "@tanstack/react-start";
+ * import { z } from "zod";
+ *
+ * declare const secret: string;
+ *
+ * const serverAuth = createServerAuth({
+ * 	name: "app",
+ * 	user: z.object({ id: z.number(), firstName: z.string() }),
+ * 	secret,
+ * });
+ * export const session = startAuth(serverAuth);
+ *
+ * export const getSessionFn = createServerFn().handler(() =>
+ * 	session.getSession(),
+ * );
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function startAuth<U, I>(
+	serverAuth: ServerAuth<U, I>,
+): RequestAuth<U, I> {
+	return lazyRequestAuth(serverAuth, startJar);
 }

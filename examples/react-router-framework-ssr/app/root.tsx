@@ -12,11 +12,10 @@ import {
 } from "react-router";
 
 import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
-import { routerJar } from "@monarcode/session-kit/react-router/server";
 
 import { createAppAuth, type AppAuth } from "./auth/client";
 import { sessionMiddleware } from "./auth/middleware.server";
-import { serverAuth } from "./auth/session.server";
+import { auth } from "./auth/session.server";
 
 // Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
 // with this client.
@@ -30,7 +29,7 @@ export const middleware = sessionMiddleware;
 
 /** Who is signed in, from the cookie. Holds no tokens. */
 export async function loader({ context }: LoaderFunctionArgs) {
-	return { session: await serverAuth.getSession(routerJar(context)) };
+	return { session: await auth(context).getSession() };
 }
 
 export function Layout({ children }: { children: ReactNode }) {

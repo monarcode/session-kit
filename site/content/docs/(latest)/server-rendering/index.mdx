@@ -22,9 +22,9 @@ before rendering, so pages never show a "Checking session…" state.
   session the server rendered. `AuthProvider`, the hooks, and the TanStack
   Router guards work with it, and sign-ins and sign-outs reach every tab.
 - **Your server code** signs in and out with your backend and calls your API
-  with the access token. `serverAuth.forRequest(jar)` gives code written for
-  a client, such as `createAuthFetch` or Effect's `Auth`, one request's
-  session. To call your API from the browser too, opt in with
+  with the access token, through one request's session. It's shaped like a
+  client, so code written for one, such as `createAuthFetch` or Effect's
+  `Auth`, takes it. To call your API from the browser too, opt in with
   `clientCredentials`: page scripts then get the access token in memory,
   never the refresh token.
 
@@ -37,18 +37,18 @@ server code, as in
 
 ## Frameworks
 
-What differs between frameworks is how the cookie jar reaches the engine, and
-how the session reaches the browser:
+What differs between frameworks is how server code gets a request's
+session, and how the session reaches the browser:
 
-| Framework                             | On the server                                   | In the browser                                      | Setup                                                               |
-| ------------------------------------- | ----------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
-| TanStack Start                        | `startJar()`, refreshing in request middleware  | `connectSession`, `loadSession`                     | [TanStack Start](/docs/setups/tanstack-start)                       |
-| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
-| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerJar(context)`     | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
+| Framework                             | On the server                                             | In the browser                                      | Setup                                                               |
+| ------------------------------------- | --------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| TanStack Start                        | `startAuth(serverAuth)`, refreshing in request middleware | `connectSession`, `loadSession`                     | [TanStack Start](/docs/setups/tanstack-start)                       |
+| Next.js 16, App Router                | `nextJar(await cookies())`, `proxyJar` in Proxy           | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
+| React Router framework mode, with SSR | `cookieJarMiddleware`, `routerAuth(serverAuth)`           | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
 
 Locking isn't available with server rendering. For another server, such as
-the Next.js Pages Router, build a `CookieJar` over its cookies and use
-`createServerAuth` directly.
+the Next.js Pages Router, build a `CookieJar` over its cookies and pass it
+to `serverAuth.forRequest(jar)`.
 
 ## Next steps
 

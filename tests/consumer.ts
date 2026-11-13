@@ -41,12 +41,15 @@ import {
 	type MirrorAuth,
 	type RefreshFn,
 	type Session,
+	type SessionOf,
 	type UserInput,
+	type UserOf,
 } from "../dist/index.js";
 import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import {
 	cookieJarMiddleware,
+	routerAuth,
 	routerJar,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
@@ -70,7 +73,7 @@ import {
 	type RouterAuth,
 } from "../dist/tanstack-router/index.js";
 import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
-import { startJar } from "../dist/tanstack-start/server.js";
+import { startAuth, startJar } from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -125,8 +128,8 @@ void authFetch();
 
 // TanStack Router's hooks, typed by the registered Router.
 const routerClient: typeof auth = useAuthClient();
-const routerAuth: RouterAuth = routerClient;
-void routerAuth;
+const routerClientType: RouterAuth = routerClient;
+void routerClientType;
 // The hooks from `./react`, typed by the registered client.
 const registeredClient: typeof auth = react.useAuthClient();
 const registeredEmail: string | undefined = react.useAuth(
@@ -529,30 +532,72 @@ const tokenServer = createServerAuth({
 // @ts-expect-error A user read from the token has no updateUser.
 void tokenServer.updateUser;
 
-// One request's session, shaped like a client's read side.
-const requestAuth: RequestAuth<z.output<typeof userSchema>> =
-	serverAuth.forRequest(jar);
+// One request's session: every server method, without the jar.
+type AppUser = z.output<typeof userSchema>;
+const requestAuth: RequestAuth<AppUser, AppUser> = serverAuth.forRequest(jar);
 async function requestSide() {
 	const session = await requestAuth.getSession();
 	const viewEmail: string | undefined = session?.user.email;
 	const status: AuthState<unknown>["status"] = requestAuth.state.get().status;
-	return [viewEmail, status, await requestAuth.credentials.get()];
+	const signedIn: Session<AppUser> = await requestAuth.signIn({
+		accessToken: "a",
+		user: { id: "1", email: "a@example.com" },
+	});
+	// @ts-expect-error signIn needs the user the schema validates.
+	await requestAuth.signIn({ accessToken: "a" });
+	await requestAuth.updateUser({ id: "1", email: signedIn.user.email });
+	await requestAuth.updateUser(async () => ({
+		id: "1",
+		email: "b@example.com",
+	}));
+	const refreshed: Session<AppUser> | null = await requestAuth.refreshIfDue({
+		within: 30,
+	});
+	const forBrowser = await requestAuth.clientCredentials.get();
+	await requestAuth.clientCredentials.renew({
+		sessionId: "s",
+		accessToken: "a",
+	});
+	return [viewEmail, status, refreshed, forBrowser?.expiresIn];
 }
 void requestSide;
 createAuthFetch(requestAuth, { baseUrl });
 createAuthFetch(tokenServer.forRequest(jar), { baseUrl });
-// @ts-expect-error Signing in stays on serverAuth.
-void requestAuth.signIn;
-// @ts-expect-error So does updateUser.
-void requestAuth.updateUser;
+// @ts-expect-error A user read from the token has no updateUser.
+void tokenServer.forRequest(jar).updateUser;
 // @ts-expect-error The view is read-only.
 requestAuth.getSession = async () => null;
 // @ts-expect-error So is its state.
 requestAuth.state.get = () => requestAuth.state.get();
 
+// The adapters' request sessions: the same type, without a jar.
+const startSession: RequestAuth<AppUser, AppUser> = startAuth(serverAuth);
+createAuthFetch(startSession, { baseUrl });
+// @ts-expect-error A user read from the token has no updateUser.
+void startAuth(tokenServer).updateUser;
+const sessionOf = routerAuth(serverAuth);
+declare const routerContext: RouterContextLike;
+const routerSession: RequestAuth<AppUser, AppUser> = sessionOf(routerContext);
+void routerSession;
+
+// The session and user types of any client.
+const appSession: SessionOf<typeof serverAuth> = {
+	sessionId: "s",
+	user: { id: "1", email: "a@example.com" },
+};
+const fromRequest: SessionOf<typeof requestAuth> = appSession;
+const fromClient: SessionOf<typeof auth> = fromRequest;
+const appUser: UserOf<typeof startSession> = fromClient.user;
+const clientUser: UserOf<typeof auth> = appUser;
+const tokenUser: UserOf<typeof tokenServer> = { sub: "1" };
+// @ts-expect-error The user's fields come from the schema.
+const wrongUser: UserOf<typeof serverAuth> = { id: 1 };
+void [clientUser, tokenUser, wrongUser];
+
 // On the server, `Auth.layer` takes a request's session with the registered user.
 const requestLayer: Layer.Layer<Auth> = Auth.layer(serverAuth.forRequest(jar));
 void Effect.runPromise(Effect.provide(Auth.session, requestLayer));
+Auth.layer(startSession);
 // @ts-expect-error A request's session with another user doesn't fit.
 Auth.layer(tokenServer.forRequest(jar));
 // @ts-expect-error An Effect that needs the session doesn't run without it.

@@ -1,21 +1,20 @@
 import { useLoaderData, type LoaderFunctionArgs } from "react-router";
 
-import { routerJar } from "@monarcode/session-kit/react-router/server";
 import { z } from "zod";
 
 import { API } from "../auth/api";
-import { serverAuth } from "../auth/session.server";
+import { auth } from "../auth/session.server";
 import { Profile } from "../ui";
 
 /** Calls DummyJSON's `auth/me` from the server, with the cookie's token. */
 export async function loader({ context }: LoaderFunctionArgs) {
-	const jar = routerJar(context);
-	const credentials = await serverAuth.credentials.get(jar);
+	const session = auth(context);
+	const credentials = await session.credentials.get();
 	if (!credentials) return { email: "Signed out" };
 	let response = await me(credentials.accessToken);
 	if (response.status === 401) {
 		// Refreshes once, then tries again.
-		const renewed = await serverAuth.credentials.renew(jar, credentials);
+		const renewed = await session.credentials.renew(credentials);
 		if (!renewed) return { email: "Signed out" };
 		response = await me(renewed.accessToken);
 	}

@@ -28,6 +28,7 @@ import {
 } from "@monarcode/session-kit/react-router";
 import {
 	cookieJarMiddleware,
+	routerAuth,
 	routerJar,
 } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -43,7 +44,10 @@ import {
 	connectSession,
 	loadSession,
 } from "@monarcode/session-kit/tanstack-start";
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
+import {
+	startAuth,
+	startJar,
+} from "@monarcode/session-kit/tanstack-start/server";
 
 const packageRoot = new URL("../", import.meta.url);
 
@@ -58,6 +62,7 @@ test("all public entry points import without browser globals", () => {
 		loadSession,
 		connectSession,
 		startJar,
+		startAuth,
 		nextJar,
 		proxyJar,
 		useMirrorAuth,
@@ -76,6 +81,7 @@ test("all public entry points import without browser globals", () => {
 		useAuthRevalidation,
 		cookieJarMiddleware,
 		routerJar,
+		routerAuth,
 		createAuthFetch,
 		Auth,
 		AuthFailure,

@@ -6,6 +6,7 @@ import * as reactRouter from "react-router";
 import type { Credentials, Session } from "@monarcode/session-kit";
 import {
 	cookieJarMiddleware,
+	routerAuth,
 	routerJar,
 	type RouterContextLike,
 } from "@monarcode/session-kit/react-router/server";
@@ -77,6 +78,33 @@ function handle(
 
 test("routerJar needs cookieJarMiddleware", () => {
 	assert.throws(() => routerJar(newContext()), code("INVALID_OPTIONS"));
+});
+
+test("routerAuth gives the request's session by its context", async () => {
+	const auth = routerAuth(serverAuth);
+	assert.throws(() => auth(newContext()), code("INVALID_OPTIONS"));
+
+	let signedIn: Session<User> | undefined;
+	const context = newContext();
+	const response = await cookieJarMiddleware(
+		{ request: request(), context },
+		async () => {
+			const session = auth(context);
+			assert.equal(auth(context), session);
+			assert.equal(session, serverAuth.forRequest(routerJar(context)));
+			signedIn = await session.signIn(tokens());
+			return new Response("ok");
+		},
+	);
+	const cookie = cookieHeader(response);
+	const read = newContext();
+	await cookieJarMiddleware(
+		{ request: request(cookie), context: read },
+		async () => {
+			assert.deepEqual(await auth(read).getSession(), signedIn);
+			return new Response("ok");
+		},
+	);
 });
 
 test("cookieJarMiddleware sets the cookies a request wrote on its response", async () => {

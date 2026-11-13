@@ -1,6 +1,7 @@
 // Holds the secret and the tokens: Start refuses to bundle it for the browser.
 import "@tanstack/react-start/server-only";
 import { createServerAuth } from "@monarcode/session-kit/server";
+import { startAuth } from "@monarcode/session-kit/tanstack-start/server";
 
 import { refresh, userSchema } from "./backend";
 
@@ -21,7 +22,7 @@ function sessionSecret(): string {
  * `clientCredentials`, the browser can ask for the access token too, through
  * the server functions in `functions.ts`; the refresh token stays here.
  */
-export const serverAuth = createServerAuth({
+const serverAuth = createServerAuth({
 	name: "session-kit-example",
 	user: userSchema,
 	secret: sessionSecret(),
@@ -30,3 +31,9 @@ export const serverAuth = createServerAuth({
 	// `vite dev` serves plain http; Safari drops Secure cookies there.
 	cookie: { secure: !import.meta.env.DEV },
 });
+
+/**
+ * The session of the request Start is handling: each call finds it, so one
+ * object serves every request.
+ */
+export const session = startAuth(serverAuth);

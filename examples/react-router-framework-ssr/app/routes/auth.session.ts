@@ -1,12 +1,10 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
-import { routerJar } from "@monarcode/session-kit/react-router/server";
-
-import { serverAuth } from "../auth/session.server";
+import { auth } from "../auth/session.server";
 
 /** Who is signed in, from the cookie, for the client's `revalidate`. */
 export async function loader({ context }: LoaderFunctionArgs) {
-	return Response.json(await serverAuth.getSession(routerJar(context)));
+	return Response.json(await auth(context).getSession());
 }
 
 /**
@@ -16,6 +14,6 @@ export async function loader({ context }: LoaderFunctionArgs) {
 export async function action({ request, context }: ActionFunctionArgs) {
 	if (request.headers.get("sec-fetch-site") !== "same-origin")
 		return new Response(null, { status: 403 });
-	await serverAuth.signOut(routerJar(context));
+	await auth(context).signOut();
 	return Response.json(null);
 }
