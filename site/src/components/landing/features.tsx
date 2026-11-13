@@ -1,5 +1,3 @@
-import { Link } from "@tanstack/react-router";
-
 import { COLUMN, SectionHead } from "./buffer";
 
 const FEATURES = [
@@ -49,31 +47,6 @@ export function Features() {
 					</div>
 				))}
 			</dl>
-			{/* Set as a block comment: a note on the code above, not a callout. */}
-			<aside className="mt-12 max-w-[72ch] text-sm leading-relaxed text-fd-muted-foreground">
-				<p aria-hidden="true" className="text-buffer-dim">
-					/*
-				</p>
-				<h3 className="ps-[3ch] font-semibold text-fd-foreground">
-					What it doesn't do
-				</h3>
-				<p className="mt-1 ps-[3ch] text-pretty">
-					Session kit never signs users in. It has no sign-in form, OAuth
-					flow or user database: it starts where your backend's sign-in
-					response ends.{" "}
-					<Link
-						to="/docs/$"
-						params={{ _splat: "" }}
-						hash="what-it-doesnt-do"
-						className="text-fd-foreground underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
-					>
-						Is it for you?
-					</Link>
-				</p>
-				<p aria-hidden="true" className="ps-[1ch] text-buffer-dim">
-					*/
-				</p>
-			</aside>
 		</section>
 	);
 }

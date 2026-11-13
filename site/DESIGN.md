@@ -315,8 +315,16 @@ then a hairline with 20px either side, then the lanes). The hero opens
 32px (40px from 640px) under the navbar. Sections
 below it open with 80px (112px from 640px) of space and a comment headline,
 then 32px to their content. Lists are full-width rows between hairlines with
-16px vertical padding; from 640px they become aligned columns (setups: name,
-entry point, description, "guide"; features: name, description).
+16px vertical padding; from 640px they become aligned columns (features:
+name, description; setups: name, entry point with the description under it
+as its comment, then "guide" and "example"). A setups row opens its guide wherever it is clicked; "example"
+is its own link, to that setup's app in the repository.
+
+Below the hero the page runs: the tour, the "What it doesn't do" block
+comment 48px (64px from 640px) under it, the setups, the features, and a
+closing section that repeats the hero's shape: a comment headline, two
+comment lines of evidence (npm provenance, the bundle size), then the install
+prompt and Get started.
 
 The hour's lanes are a two-column grid: lane names (5.5rem, 8rem from
 640px), then 68 equal cells with a 1px gap (3px from 640px): two for the
@@ -376,7 +384,8 @@ Set in the buffer's type, square, 48px tall.
 
 - **Shape:** square corners (0px).
 - **Primary:** Get started. Lime with ink text, bold body size, 24px side
-  padding. The only lime action on the page.
+  padding. The only lime action on the page: it appears in the hero and
+  again where the page closes.
 - **Hover / Focus:** the primary gains a 2px ink underline (4px offset); its
   colours never change. The landing's own buttons set no focus style and
   show the browser's default outline; Fumadocs' controls use the lime ring.
