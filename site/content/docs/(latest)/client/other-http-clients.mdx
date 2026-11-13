@@ -17,7 +17,7 @@ and any other HTTP client can use the same ones:
 3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
    session, unless a newer one has replaced it.
 
-With [axios](https://axios-http.com), that is two interceptors:
+With [axios](https://axios-http.com), that's two interceptors:
 
 ```ts title="src/axios.ts"
 import type { Credentials } from "@monarcode/session-kit";
@@ -99,7 +99,8 @@ export const api = ky.create({
           return;
         }
         const fresh = await auth.credentials.renew(used);
-        if (!fresh || request.method !== "GET") return;
+        // As with authFetch, only a GET or HEAD is sent twice.
+        if (!fresh || !["GET", "HEAD"].includes(request.method)) return;
         options.context.credentials = fresh;
         options.context.replayed = true;
         const headers = new Headers(request.headers);

@@ -3,7 +3,7 @@ title: Authenticated requests
 description: A fetch that sends the access token to one API, refreshes on a 401, and never leaks the token.
 ---
 
-`createAuthFetch(auth, baseUrl)` returns a `fetch` for one API. It is built so
+`createAuthFetch(auth, baseUrl)` returns a `fetch` for one API. It's built so
 that a token can't leak and a user can't be signed out by accident:
 
 | When…                                   | `authFetch`…                                                                 |

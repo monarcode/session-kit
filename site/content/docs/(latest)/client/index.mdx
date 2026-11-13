@@ -3,9 +3,10 @@ title: Using the client
 description: The client's methods at a glance, for loaders, event handlers, request code, and anything else outside React.
 ---
 
-Components read the session with hooks. Everything else, such as loaders,
-event handlers, and request code, talks to the client that `createAuth`
-returned:
+This section is for code outside React components. Components read the
+session with hooks. Everything else, such as loaders, event handlers, and
+request code, calls the client that `createAuth` returned. These are its
+methods:
 
 | Call                               | What it does                                                               |
 | ---------------------------------- | -------------------------------------------------------------------------- |
@@ -42,7 +43,7 @@ The examples in this section build on the app from
   <Card
     title="Signing in and out"
     href="/docs/client/signing-in-and-out"
-    description="Save a new session, end it in every tab, and revoke its tokens."
+    description="Save a new session, end it, and revoke its tokens."
   />
   <Card
     title="Updating the user"

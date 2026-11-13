@@ -32,5 +32,5 @@ export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
 ```
 
 A failed revocation is reported in `state.error` as `REVOKE_FAILED` without
-undoing the sign-out: the user asked to leave, and has. A session the backend
-already rejected is not revoked.
+undoing the sign-out: the user asked to leave, and has. The client doesn't
+revoke a session the backend already rejected.
