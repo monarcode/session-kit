@@ -15,6 +15,8 @@ export type TourStep = {
 	label: string;
 	file: string;
 	href: string;
+	/** The page the walkthrough link leads to, as its text names it. */
+	guide: string;
 	code: Root;
 };
 
@@ -82,7 +84,7 @@ export function Tour({ steps }: { steps: TourStep[] }) {
 							to={step.href}
 							className="mt-3 inline-block text-sm underline decoration-buffer-dim underline-offset-4 transition-colors hover:decoration-fd-foreground"
 						>
-							Read the walkthrough
+							Read the walkthrough in {step.guide}
 						</Link>
 					</TabsContent>
 				))}

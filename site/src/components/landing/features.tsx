@@ -8,12 +8,12 @@ const FEATURES = [
 		"Any Standard Schema library, such as Zod, Valibot or ArkType, checks the user at sign-in, refresh, restore and in other tabs, and types it.",
 	],
 	[
-		"Tokens stay out of reach",
-		"State holds no tokens, so it's safe to render and put in route context. Only request code sees them.",
+		"Tokens kept out of state",
+		"The auth state holds no tokens, so it's safe to render and to put in route context. Only the code that sends your requests reads them.",
 	],
 	[
-		"Every router",
-		"TanStack Router, React Router in all three modes, and Expo Router get guards that redirect with a return URL.",
+		"Guards for every router",
+		"TanStack Router, React Router in all three modes, Expo Router and Next.js send signed-out users to sign in, then back to the page they asked for.",
 	],
 	[
 		"Server rendering",
@@ -25,7 +25,7 @@ const FEATURES = [
 	],
 	[
 		"Made to be debugged",
-		"Every failure is an AuthError with a code, and debug mode logs each step without printing a token.",
+		"Every failure Session kit reports is an AuthError with a code, and debug mode logs each step without printing a token.",
 	],
 ] as const;
 

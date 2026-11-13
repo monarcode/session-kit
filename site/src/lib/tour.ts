@@ -22,18 +22,21 @@ const TOUR = [
 		page: "getting-started",
 		file: "src/auth.ts",
 		href: "/docs/getting-started#2-create-the-client",
+		guide: "Getting started",
 	},
 	{
 		label: "Guard private routes",
 		page: "setups/tanstack-router",
 		file: "src/routes/_authenticated.tsx",
 		href: "/docs/setups/tanstack-router#4-guard-private-routes",
+		guide: "the TanStack Router guide",
 	},
 	{
 		label: "Read the session in a guarded page",
 		page: "setups/tanstack-router",
 		file: "src/routes/_authenticated/index.tsx",
 		href: "/docs/setups/tanstack-router#4-guard-private-routes",
+		guide: "the TanStack Router guide",
 	},
 ] as const;
 

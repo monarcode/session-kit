@@ -37,7 +37,7 @@ const SETUPS = [
 	[
 		"Expo Router",
 		"expo",
-		"Keychain storage, a held splash screen and deep links.",
+		"Secure storage, a splash screen held while restoring, and deep links.",
 		"setups/expo",
 	],
 	[
