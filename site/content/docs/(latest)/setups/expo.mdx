@@ -3,8 +3,11 @@ title: Expo Router
 description: Save the session in the device's secure storage, hold the splash screen while it restores, and keep deep links across sign-in.
 ---
 
-Expo Router's `Stack.Protected` guards the screens, and `SessionGate` wraps
-the root navigator. It holds the splash screen while the session is restored,
+In this guide, you build an Expo Router app for iOS and Android that keeps
+the session in the device's secure storage, holds the splash screen while it
+restores, and keeps deep links across sign-in. Expo Router's
+`Stack.Protected` guards the screens, and `SessionGate` wraps the root
+navigator. It holds the splash screen while the session is restored,
 renders `unavailable` after a failed refresh, and checks the session again
 when the app returns to the foreground.
 
@@ -15,10 +18,10 @@ from scratch. It signs in against
 written. Its `src/auth.ts` takes the place of Getting started's `backend.ts`,
 `auth.ts` and `hooks.ts`. [Using the client](/docs/client),
 [Refresh](/docs/configuration/refresh) and
-[Errors](/docs/configuration/errors) explain how the client works; this page
+[Errors](/docs/configuration/errors) explain how the client works. This page
 covers what differs on Expo.
 
-## Requirements
+## Before you begin
 
 - Expo SDK 53 or newer: Expo Router 5 or newer, and React Native 0.79 or
   newer.
@@ -53,8 +56,8 @@ the session out of backups:
 
 ## 1. Create the client
 
-`secureStorage()` replaces `webStorage()`; the rest of the client is the same
-as on the web.
+`secureStorage()` replaces `webStorage()`. The rest of the client is the same
+as on the web:
 
 ```ts title="src/auth.ts"
 import { createAuth } from "@monarcode/session-kit";
@@ -118,8 +121,8 @@ export async function signInWithPassword(username: string, password: string) {
 ## 2. Gate the root layout
 
 `SessionGate` goes inside `AuthProvider`, around the root navigator. Guard the
-screens with `Stack.Protected`: signed-in users see the `(app)` group, and
-everyone else sees `login`.
+screens with `Stack.Protected`. Signed-in users see the `(app)` group, and
+everyone else sees `login`:
 
 ```tsx title="app/_layout.tsx"
 import { SessionGate } from "@monarcode/session-kit/expo";
@@ -162,8 +165,8 @@ function RootStack() {
 `AuthProvider`. The navigator mounts only once the session is restored, so the
 guards never see `initializing`.
 
-If the first screen needs more than the session, such as fonts, pass `ready`:
-the splash screen then stays up until both are done.
+If the first screen needs more than the session, such as fonts, pass `ready`.
+The splash screen then stays up until both are done:
 
 ```tsx
 const [fontsLoaded] = useFonts(fonts);
@@ -204,6 +207,8 @@ Return `path` unchanged: the link still goes to Expo Router, which shows it
 right away when the user is signed in.
 
 ## 4. Add the sign-in screen
+
+The sign-in screen calls `signInWithPassword` from `src/auth.ts`:
 
 ```tsx title="app/login.tsx"
 import { useState } from "react";
@@ -255,8 +260,9 @@ deep link `SessionGate` opens.
 
 ## 5. Add the signed-in screens
 
-Screens inside the guarded group read the user with `useAuth`, and call the
-API with `authFetch`, which attaches the access token and refreshes after a 401.
+Screens inside the guarded group read the user with `useAuth`, and call the API
+with `authFetch`, which attaches the access token and refreshes after a 401. The
+group's layout is a plain stack:
 
 ```tsx title="app/(app)/_layout.tsx"
 import { Stack } from "expo-router";
@@ -265,6 +271,8 @@ export default function AppLayout() {
   return <Stack />;
 }
 ```
+
+Its first screen shows the user's name, fetches their email, and signs out:
 
 ```tsx title="app/(app)/index.tsx"
 import { useEffect, useState } from "react";
@@ -335,6 +343,13 @@ Without `unavailable`, `SessionGate` hides the splash screen and throws the
 error to the root layout's `ErrorBoundary`. The boundary's `retry` only
 renders again, and a failed refresh stays failed until `auth.retry()`, so
 have the boundary call both.
+
+To check the app:
+
+1. Sign in. The home screen shows your name and email.
+2. Close the app and open it again. The splash screen stays up until the
+   session is restored, then the home screen shows.
+3. Sign out. The sign-in screen shows.
 
 ## Secure storage
 
@@ -423,7 +438,7 @@ the URL, and an app restart forgets it.
 
 Turn on the client's `debug` option to see what Session kit does in Metro's
 logs: restores, refreshes and why they ran, timers, storage operations, state
-changes, and why a session ended.
+changes, and why a session ended:
 
 ```ts
 export const auth = createAuth({
@@ -450,7 +465,7 @@ A returning user can be asked to unlock before the app opens: a
 "Welcome back" screen with Face ID, Touch ID, or a fingerprint, and the
 password as a fallback. With `locking`, a saved session restores as `locked`,
 with `user` and `sessionId` set and its tokens sealed by a key your app holds.
-[Locking](/docs/client/locking) covers how it behaves; this section is the
+[Locking](/docs/client/locking) covers how it behaves. This section is the
 Expo side.
 
 Keep a random key in a SecureStore item that needs biometrics to read, and
@@ -692,3 +707,10 @@ re-checks nothing on a return to the foreground, and requests through
   learns the device is back online, for example from
   `@react-native-community/netinfo`, call `auth.retry()`, or the `retry` that
   `unavailable` receives.
+
+## Next steps
+
+- [Using the client](/docs/client): updating the user, signing out, and the
+  client's other methods.
+- [Locking](/docs/client/locking): how a locked session behaves.
+- [Effect and effetch](/docs/effect): the same client as an Effect service.

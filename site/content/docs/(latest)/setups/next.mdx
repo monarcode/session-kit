@@ -3,33 +3,38 @@ title: Next.js
 description: Keep the session in an encrypted cookie with the Next.js App Router, where Server Components read it and Proxy refreshes it.
 ---
 
-Server Functions sign in and out. The first response already shows the
+In this guide, you keep the session in an encrypted cookie with the Next.js
+App Router. Server Functions sign in and out, Proxy refreshes the tokens, and
+Server Components read the session. The first response already shows the
 signed-in page, so the browser never shows a "Checking session…" state or a
 flash of signed-out content. Client Components get a small client that
 mirrors the session, and the
 [hooks](/docs/getting-started#4-read-the-session-in-react) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
-Session kit supports Next 16 and the App Router. A complete app is in
+A complete app is in
 [`examples/next-app`](https://github.com/monarcode/session-kit/tree/main/examples/next-app).
 
+## Before you begin
+
+- Next.js 16, with the App Router.
+- A secret of 32 or more random characters to seal the cookie, set as
+  `SESSION_SECRET` on the server. To make one, run
+  `openssl rand -base64 32`. `next build` doesn't need it.
+
 ## Installation
+
+To install the packages, run the following command:
 
 ```sh
 pnpm add @monarcode/session-kit next zod
 ```
 
-You also need a secret of 32 or more random characters to seal the cookie,
-such as from `openssl rand -base64 32`, set as `SESSION_SECRET` on the
-server. `next build` doesn't need it.
-
-## 1. The server engine
+## 1. Create the server engine
 
 `createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-a cookie sealed with your `secret`.
-[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
-its other options. Keep it in a server-only module: Next then refuses to
-bundle it for the browser.
+a cookie sealed with your `secret`, and refreshes it with your backend. Create
+it in a server-only module, so Next refuses to bundle it for the browser:
 
 ```ts title="lib/auth/server.ts"
 import "server-only";
@@ -71,8 +76,9 @@ export async function login(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
-rotating the secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options, rotating the secret, signing out, and the limits every
+setup shares.
 
 ## 2. Read the session in Server Components
 
@@ -136,7 +142,7 @@ export const config = {
 Server Functions are POST requests to the page that calls them, so keep the
 matcher wide enough to include those pages.
 
-## 4. Server Functions
+## 4. Add Server Functions
 
 Server Functions set cookies, so they pass `{ writable: true }`. They decide
 what the browser may ask for:
@@ -185,7 +191,7 @@ export async function signOutAction() {
 for expected errors: in production, Next hides a thrown error's message from
 the browser.
 
-## 5. The browser client
+## 5. Create the browser client
 
 `createMirrorAuth` makes the client that Client Components use, from the
 session the layout read and your Server Functions:
@@ -219,6 +225,8 @@ export function createAppAuth(session: AppSession | null) {
 
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
+
+Create the hooks, typed by that client:
 
 ```ts title="app/hooks.ts"
 import { createAuthHooks } from "@monarcode/session-kit/react";
@@ -258,6 +266,8 @@ export function Providers(props: {
 }
 ```
 
+Render the providers in the root layout, with the session it reads:
+
 ```tsx title="app/layout.tsx"
 import type { ReactNode } from "react";
 
@@ -279,7 +289,7 @@ export default async function RootLayout(props: { children: ReactNode }) {
 ## 6. Protect pages
 
 Check the session in each page, or in the data access layer, rather than in
-a layout: layouts don't render again on navigation.
+a layout. Layouts don't render again on navigation:
 
 ```tsx title="app/page.tsx"
 import { requireSession } from "../lib/auth/session";
@@ -312,6 +322,8 @@ export default async function Login({
   return <SignInForm />;
 }
 ```
+
+The form is a Client Component that calls the client's `signIn`:
 
 ```tsx title="app/login/sign-in-form.tsx"
 "use client";
@@ -350,18 +362,18 @@ export function SignInForm() {
 }
 ```
 
-Above, the server signs in with your backend, so the user in the cookie comes
-from the backend. If the browser signs in with the backend itself, have
-`signInAction` take the tokens and the user instead. It seals what it's
-given, as [Signing in](/docs/setups/tanstack-start#signing-in) on the
-TanStack Start page explains: check the tokens there first, or let your
-backend authorize requests with the access token.
+In this guide, the server signs in with your backend, so the user in the cookie
+comes from the backend. If the browser signs in with the backend itself, have
+`signInAction` take the tokens and the user instead. It seals what it's given,
+as [Sign in](/docs/setups/tanstack-start#sign-in) on the TanStack Start page
+explains: check the tokens there first, or let your backend authorize requests
+with the access token.
 
-## Calling your API
+## Call your API
 
 In Server Components, get the access token with a read-only jar. Proxy
-refreshed it before the render; a token that expired anyway rejects with
-`REFRESH_FAILED`, since the jar can't save a new one.
+refreshed it before the render. A token that expired anyway rejects with
+`REFRESH_FAILED`, since the jar can't save a new one:
 
 ```tsx title="app/orders/page.tsx"
 import { nextJar } from "@monarcode/session-kit/next";
@@ -450,3 +462,11 @@ The example app does this.
 - **More.** Several server instances, the cookie's size, and plain http
   during development: see
   [Server sessions](/docs/server-rendering/server-sessions).
+
+## Next steps
+
+- [Server sessions](/docs/server-rendering/server-sessions): the cookie,
+  signing out, and the limits every server-rendered setup shares.
+- [Using the client](/docs/client): what the browser client can do.
+- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+  request's session.

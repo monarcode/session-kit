@@ -3,8 +3,9 @@ title: React Router
 description: Guard routes in React Router's declarative, data or framework mode, with the session kept in the browser.
 ---
 
-React Router has three modes, and Session kit guards each one the way that
-mode works:
+In this guide, you add React Router to the app from Getting started, in the
+mode your app uses. React Router has three modes, and Session kit guards each
+one the way that mode works:
 
 | Mode                         | The guard                          | Beside it                              |
 | ---------------------------- | ---------------------------------- | -------------------------------------- |
@@ -12,13 +13,19 @@ mode works:
 | Data                         | `requireSession` in loaders        | `SessionOutlet`, `useAuthRevalidation` |
 | Framework, with `ssr: false` | `requireSession` in `clientLoader` | `SessionOutlet`, `useAuthRevalidation` |
 
-This page continues from [Getting started](/docs/getting-started): it uses
-the client in `src/auth.ts`, the hooks in `src/hooks.ts`, and the form in
-`src/sign-in.tsx` from there. Each mode has a complete example app. For
-framework mode with server rendering, follow
-[React Router with server rendering](/docs/setups/react-router-ssr).
+Each mode has a complete example app. For framework mode with server
+rendering, follow
+[React Router with server rendering](/docs/setups/react-router-ssr) instead.
+
+## Before you begin
+
+Follow [Getting started](/docs/getting-started) through step 4. This guide
+uses its client in `src/auth.ts`, its hooks in `src/hooks.ts`, and its form in
+`src/sign-in.tsx`.
 
 ## Installation
+
+To install the packages, run the following command:
 
 ```sh
 pnpm add @monarcode/session-kit react-router zod
@@ -26,13 +33,13 @@ pnpm add @monarcode/session-kit react-router zod
 
 React Router 7 and 8 both work.
 
-## Before the router
+## Add a page to protect
 
 In every mode, `AuthProvider` goes around the router. It mounts the client in
-a layout effect, so with `localStorage` the session is restored before the
-first paint, and nothing starts on a server.
+a layout effect, so with `localStorage` and a synchronous schema, the session
+is restored before the first paint. Nothing starts on a server.
 
-The modes below share one page to protect:
+Every mode on this page protects the same page:
 
 ```tsx title="src/home.tsx"
 import { useAuth, useAuthClient } from "./hooks.js";
@@ -55,7 +62,7 @@ export function Home() {
 
 Declarative mode has no loaders, so `SessionOutlet` is the guard. Render it
 as a layout route's element, `<Route element={<Private />}>`, and the routes
-inside it render only while someone is signed in.
+inside it render only while someone is signed in:
 
 ```tsx title="src/main.tsx"
 import { StrictMode } from "react";
@@ -126,15 +133,15 @@ going, and renders `unavailable` after a failed refresh. Without
 `unavailable`, the error is thrown to the nearest error boundary.
 
 `safeReturnTo` accepts only same-origin paths and returns `/` for anything
-else, including the sign-in page itself, so a stale `redirectTo` cannot loop.
+else, including the sign-in page itself, so a stale `redirectTo` can't loop.
 
 A complete app is in
 [`examples/react-router-declarative`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-declarative).
 
 ## Data mode
 
-In data mode, loaders run before a route renders, so the guard goes there:
-a private route's data is never fetched for a signed-out user.
+In data mode, loaders run before a route renders, so the guard goes there. A
+private route's data is never fetched for a signed-out user:
 
 ```tsx title="src/router.tsx"
 import {
@@ -249,7 +256,7 @@ A complete app is in [`examples/react-router-data`](https://github.com/monarcode
 
 Framework mode without a server is data mode with route modules: the guards
 are the same, in `clientLoader`. Keep the files from Getting started, and
-`home.tsx` from above, in `app/`.
+`home.tsx` from [Add a page to protect](#add-a-page-to-protect), in `app/`.
 
 Turn server rendering off:
 
@@ -343,6 +350,8 @@ export function ErrorBoundary() {
   );
 }
 ```
+
+Add the sign-in route, which sends signed-in users on to `redirectTo`:
 
 ```tsx title="app/routes/login.tsx"
 import { useNavigate, useSearchParams } from "react-router";
@@ -450,3 +459,11 @@ Three things follow from where `SessionOutlet` sits:
   the guards treat a locked session as signed out.
 - **Cached data.** `state.sessionId` is new on every sign-in. Scope private
   cached data, such as TanStack Query results, to it.
+
+## Next steps
+
+- [Call your API](/docs/getting-started#5-call-your-api) with `authFetch`, as
+  in Getting started. It works unchanged with the router.
+- [Using the client](/docs/client): updating the user, signing out, and the
+  client's other methods.
+- [Effect and effetch](/docs/effect): the same client as an Effect service.

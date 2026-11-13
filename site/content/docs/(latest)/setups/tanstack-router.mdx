@@ -3,18 +3,25 @@ title: TanStack Router
 description: Keep the client in Router context, guard private routes before they load, and use the hooks without a provider.
 ---
 
-Guards run in `beforeLoad`, before a private route loads or renders. The
-hooks read the client from the Router, so they need no `AuthProvider`.
+In this guide, you add TanStack Router to the app from Getting started: a
+sign-in route, private routes that redirect signed-out users, and hooks that
+read the client from the Router. Guards run in `beforeLoad`, before a private
+route loads or renders, and the hooks need no `AuthProvider`.
 
-This page continues from [Getting started](/docs/getting-started): it uses
-the client in `src/auth.ts` and the form in `src/sign-in.tsx` from there. A
-complete app is in
+A complete app is in
 [`examples/tanstack-router`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-router).
 [TanStack Start in SPA mode](#tanstack-start-in-spa-mode) differs in two
 places. For TanStack Start with server rendering, follow
-[TanStack Start](/docs/setups/tanstack-start).
+[TanStack Start](/docs/setups/tanstack-start) instead.
+
+## Before you begin
+
+Follow [Getting started](/docs/getting-started) through step 3. This guide
+uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
 
 ## Installation
+
+To install the packages, run the following commands:
 
 ```sh
 pnpm add @monarcode/session-kit @tanstack/react-router zod
@@ -41,6 +48,9 @@ The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
 
 ## 1. Create the hooks
 
+Create hooks that read the client from Router context. They replace Getting
+started's `src/hooks.ts`:
+
 ```ts title="src/hooks.ts"
 import { createAuthHooks } from "@monarcode/session-kit/react";
 import { useRouterAuth } from "@monarcode/session-kit/tanstack-router";
@@ -51,14 +61,13 @@ export const { useAuth, useAuthClient } = createAuthHooks({
 });
 ```
 
-If you followed Getting started, this replaces its `src/hooks.ts`, and routes
-take the place of its `src/app.tsx`. Router registration in step 5 gives the
-hooks your user type.
+Routes take the place of Getting started's `src/app.tsx`. Registering the
+Router in step 5 gives the hooks your user type.
 
 ## 2. Type the root route
 
-The root route declares that Router context holds the client, which is what
-gives every guard below a typed `context.auth`.
+The root route declares that Router context holds the client, so every guard
+gets a typed `context.auth`:
 
 ```tsx title="src/routes/__root.tsx"
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
@@ -72,7 +81,7 @@ export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
 
 function Root() {
   // Shows failures that outlive the page that caused them, such as a sign-out
-  // that could not clear storage.
+  // that couldn't clear storage.
   const error = useAuth((state) => state.error);
   return (
     <>
@@ -84,6 +93,9 @@ function Root() {
 ```
 
 ## 3. Add the sign-in route
+
+The sign-in route renders the form from Getting started, and sends the user
+on to the page they asked for:
 
 ```tsx title="src/routes/login.tsx"
 import { safeReturnTo } from "@monarcode/session-kit";
@@ -113,15 +125,15 @@ function Login() {
 ```
 
 `safeReturnTo` accepts only same-origin paths and returns `/` for anything
-else, including the sign-in page itself, so a stale `redirectTo` cannot loop.
+else, including the sign-in page itself, so a stale `redirectTo` can't loop.
 Pass `{ loginPath }` if sign-in lives somewhere other than `/login`.
 `redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
 same way.
 
 ## 4. Guard private routes
 
-`src/routes/_authenticated.tsx` is a pathless layout: its child routes are
-guarded without `authenticated` appearing in their URLs.
+Guard private routes with a pathless layout. Its child routes are guarded
+without `authenticated` appearing in their URLs:
 
 ```tsx title="src/routes/_authenticated.tsx"
 import {
@@ -193,6 +205,8 @@ function Home() {
 
 ## 5. Create and connect the Router
 
+Create the Router with the client in its context, then connect the two:
+
 ```tsx title="src/router.tsx"
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { createRouter } from "@tanstack/react-router";
@@ -223,6 +237,8 @@ so a sign-out in another tab redirects this one.
 
 ## 6. Render the app
 
+Render the Router:
+
 ```tsx title="src/main.tsx"
 import { StrictMode } from "react";
 
@@ -237,6 +253,12 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 ```
+
+To check the app:
+
+1. Signed out, open `/`. The Router sends you to `/login`.
+2. Sign in. You're back on `/`, with the welcome message.
+3. Open a second tab and sign out there. The first tab goes to `/login`.
 
 ## Layouts around guarded pages
 
@@ -299,7 +321,7 @@ things follow from where it sits:
 ## TanStack Start in SPA mode
 
 TanStack Start's SPA mode is TanStack Router with a build-time shell, so every
-step above applies, with two changes.
+step on this page applies, with two changes.
 
 Create the Router, and connect auth, inside `getRouter()`:
 
@@ -354,3 +376,11 @@ written with Effect and effetch, in
   the guards treat a locked session as signed out.
 - **Cached data.** `state.sessionId` is new on every sign-in. Scope private
   cached data, such as TanStack Query results, to it.
+
+## Next steps
+
+- [Call your API](/docs/getting-started#5-call-your-api) with `authFetch`, as
+  in Getting started. It works unchanged with the Router.
+- [Using the client](/docs/client): updating the user, signing out, and the
+  client's other methods.
+- [Effect and effetch](/docs/effect): the same client as an Effect service.

@@ -3,9 +3,11 @@ title: TanStack Start
 description: Keep the session in an encrypted cookie with TanStack Start, so the server renders the signed-in page first.
 ---
 
-The server refreshes the tokens before rendering, so the browser never shows
-a "Checking session…" state or a flash of signed-out content. The browser
-holds a small client that mirrors the session, and the
+In this guide, you keep the session in an encrypted cookie with TanStack
+Start. The server signs in, refreshes the tokens before rendering, and sends
+the signed-in page first, so the browser never shows a "Checking session…"
+state or a flash of signed-out content. The browser holds a small client that
+mirrors the session, and the
 [hooks](/docs/getting-started#4-read-the-session-in-react)
 and the [TanStack Router guards](/docs/setups/tanstack-router) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
@@ -15,23 +17,26 @@ For TanStack Start in SPA mode, where the browser keeps the session, follow
 instead. A complete app is in
 [`examples/tanstack-start-ssr`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-ssr).
 
+## Before you begin
+
+- Node 22.12 or newer, which Start needs.
+- A secret of 32 or more random characters to seal the cookie, set as
+  `SESSION_SECRET` on the server. To make one, run
+  `openssl rand -base64 32`.
+
 ## Installation
+
+To install the packages, run the following command:
 
 ```sh
 pnpm add @monarcode/session-kit @tanstack/react-start zod
 ```
 
-Start itself needs Node 22.12 or newer. You also need a secret of 32 or more
-random characters to seal the cookie, such as from
-`openssl rand -base64 32`, set as `SESSION_SECRET` on the server.
-
-## 1. The server engine
+## 1. Create the server engine
 
 `createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-a cookie sealed with your `secret`.
-[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
-its other options. Keep it in a server-only module: Start then refuses to
-bundle it for the browser.
+a cookie sealed with your `secret`, and refreshes it with your backend. Create
+it in a server-only module, so Start refuses to bundle it for the browser:
 
 ```ts title="src/auth/server.ts"
 import "@tanstack/react-start/server-only";
@@ -73,10 +78,11 @@ export async function login(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
-rotating the secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options, rotating the secret, signing out, and the limits every
+setup shares.
 
-## 2. Server functions
+## 2. Add server functions
 
 Every `serverAuth` method takes the request's cookie jar, and `startJar()`
 from `@monarcode/session-kit/tanstack-start/server` gives it. Your server
@@ -152,12 +158,14 @@ on other sites and from the address bar. Server routes are left out too, so
 a server route that changes the session must refuse other sites itself:
 compare its `Sec-Fetch-Site` header to `same-origin`.
 
-## 4. The browser client
+## 4. Create the browser client
 
 `createMirrorAuth` makes the client that routes and components use. Create it
 in `getRouter`, which Start calls once per request on the server and once in
 the browser, never at module level. `sessionHydration` sends the session the
-server read to the browser with the page:
+server read to the browser with the page.
+
+First, the client:
 
 ```ts title="src/auth/client.ts"
 import { createMirrorAuth } from "@monarcode/session-kit";
@@ -177,6 +185,8 @@ export function createAppAuth() {
 
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
+
+Then the Router, which creates it and connects it:
 
 ```tsx title="src/router.tsx"
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
@@ -249,7 +259,7 @@ Guards decide what a page shows. Server functions that return private data
 must check the session themselves, with `serverAuth.getSession(startJar())`
 or `serverAuth.credentials.get(startJar())`.
 
-## Signing in
+## Sign in
 
 The client's `signIn` sends what it's given to your `signInFn`, then adopts
 the session it returns, re-runs guards and tells other tabs:
@@ -271,18 +281,18 @@ export async function signIn(
 }
 ```
 
-Above, the server signs in with your backend, so the user in the cookie comes
-from the backend. If the browser signs in with the backend itself, for
+In this guide, the server signs in with your backend, so the user in the cookie
+comes from the backend. If the browser signs in with the backend itself, for
 example through a provider's SDK, have `signInFn` take the tokens and the user
-instead and pass them to `serverAuth.signIn`. It seals what it's given: until
-a refresh or `updateUser` replaces it, the user in the cookie is what the
-browser sent. Use it to show who is signed in, and let your backend authorize
-requests with the access token, or check the tokens in `signInFn` first.
+instead and pass them to `serverAuth.signIn`. It seals what it's given: until a
+refresh or `updateUser` replaces it, the user in the cookie is what the browser
+sent. Use it to show who is signed in, and let your backend authorize requests
+with the access token, or check the tokens in `signInFn` first.
 
-## Calling your API
+## Call your API
 
-On the server, get the access token in a server function. It is refreshed
-first when it has expired:
+On the server, get the access token in a server function.
+`credentials.get` refreshes it first when it has expired:
 
 ```ts title="src/orders.ts"
 import { startJar } from "@monarcode/session-kit/tanstack-start/server";
@@ -329,3 +339,11 @@ does this.
 - **More.** Several server instances, the cookie's size, and plain http
   during development: see
   [Server sessions](/docs/server-rendering/server-sessions).
+
+## Next steps
+
+- [Server sessions](/docs/server-rendering/server-sessions): the cookie,
+  signing out, and the limits every server-rendered setup shares.
+- [Using the client](/docs/client): what the browser client can do.
+- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+  request's session.

@@ -3,38 +3,41 @@ title: React Router with server rendering
 description: Keep the session in an encrypted cookie in React Router's framework mode, where middleware refreshes it and loaders read it.
 ---
 
-Actions sign in and out. The first response already shows the signed-in
+In this guide, you keep the session in an encrypted cookie in React Router's
+framework mode. Actions sign in and out, middleware refreshes the tokens, and
+loaders read the session. The first response already shows the signed-in
 page, so the browser never shows a "Checking session…" state or a flash of
 signed-out content. Components get a small client that mirrors the session,
 and the [hooks](/docs/getting-started#4-read-the-session-in-react) work with
 it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
-This needs React Router's middleware: React Router 8, or 7.9 and later with
-`future.v8_middleware`. The code below is for React Router 8; on 7, read the
-URL with `new URL(request.url)` where it uses the `url` argument. For
-framework mode with `ssr: false`, follow
+For framework mode with `ssr: false`, follow
 [React Router](/docs/setups/react-router#framework-mode-with-ssr-false)
 instead. A complete app is in
 [`examples/react-router-framework-ssr`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-framework-ssr).
 
+## Before you begin
+
+- React Router's middleware: React Router 8, or 7.9 and later with
+  `future.v8_middleware`. The code on this page is for React Router 8. On 7,
+  read the URL with `new URL(request.url)` where the code uses the `url`
+  argument.
+- A secret of 32 or more random characters to seal the cookie, set as
+  `SESSION_SECRET` on the server. To make one, run
+  `openssl rand -base64 32`. `react-router build` doesn't need it.
+
 ## Installation
+
+To install the packages, run the following command:
 
 ```sh
 pnpm add @monarcode/session-kit zod
 ```
 
-You also need a secret of 32 or more random characters to seal the cookie,
-such as from `openssl rand -base64 32`, set as `SESSION_SECRET` on the
-server. `react-router build` doesn't need it.
+## 1. Create the server engine
 
-## 1. The server engine
-
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-a cookie sealed with your `secret`.
-[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
-its other options. Keep it in a `.server` module: React Router then refuses
-to bundle it for the browser.
+Put the user schema in a module that the server and the browser both import:
 
 ```ts title="app/auth/user.ts"
 import { z } from "zod";
@@ -43,6 +46,11 @@ export const userSchema = z.object({ id: z.number(), firstName: z.string() });
 
 export type User = z.infer<typeof userSchema>;
 ```
+
+`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
+a cookie sealed with your `secret`, and refreshes it with your backend. Create
+it in a `.server` module, so React Router refuses to bundle it for the
+browser:
 
 ```ts title="app/auth/session.server.ts"
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -84,10 +92,11 @@ export async function login(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions) covers the cookie,
-rotating the secret, signing out, and the limits every setup shares.
+[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
+its other options, rotating the secret, signing out, and the limits every
+setup shares.
 
-## 2. Middleware
+## 2. Add middleware
 
 Every `serverAuth` method takes a cookie jar. `cookieJarMiddleware` from
 `@monarcode/session-kit/react-router/server` gives each request one and sets
@@ -141,8 +150,9 @@ export const requireSession: MiddlewareFunction<Response> = async ({
 
 The sign-in route's action signs in with your backend and seals the result
 into the cookie. React Router 7.12 and later refuse route actions posted from
-other sites; on 7.9 to 7.11, start the action with the `Sec-Fetch-Site` check
-the sign-out route below uses. The form works before the page's scripts load:
+other sites. On 7.9 to 7.11, start the action with the `Sec-Fetch-Site` check
+that the sign-out action in `app/routes/auth.session.ts` uses. The form works
+before the page's scripts load:
 
 ```tsx title="app/routes/login.tsx"
 import {
@@ -217,7 +227,7 @@ export async function action({ request, context }: ActionFunctionArgs) {
 
 Add it to `app/routes.ts` as `route("auth/session", "routes/auth.session.ts")`.
 
-## 4. The browser client
+## 4. Create the browser client
 
 `createMirrorAuth` makes the client that components use, from the session
 the root loader read and the resource route:
@@ -246,6 +256,8 @@ export function createAppAuth(initial: AppSession | null) {
 
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
+
+Create the hooks, typed by that client:
 
 ```ts title="app/hooks.ts"
 import { createAuthHooks } from "@monarcode/session-kit/react";
@@ -323,8 +335,8 @@ run again, so the server's redirects run.
 
 ## 5. Protect routes
 
-Guard a layout route with middleware: it runs on the server before any
-loader or action below it, which loaders on their own can't promise.
+Guard a layout route with middleware. It runs on the server before any
+loader or action nested in it, which loaders on their own can't promise:
 
 ```tsx title="app/routes/protected.tsx"
 import { Outlet } from "react-router";
@@ -333,13 +345,15 @@ import { requireSession } from "../auth/middleware.server";
 
 export const middleware = [requireSession];
 
-// So navigation in the browser runs the middleware: see below.
+// So navigation in the browser runs the middleware.
 export const loader = () => null;
 
 export default function Protected() {
   return <Outlet />;
 }
 ```
+
+A page nested in it reads the user as usual:
 
 ```tsx title="app/routes/home.tsx"
 import { useAuth } from "../hooks";
@@ -353,16 +367,16 @@ export default function Home() {
 In `app/routes.ts`, nest the routes it protects:
 `layout("routes/protected.tsx", [index("routes/home.tsx")])`. During
 navigation in the browser, server middleware runs only when a route has a
-loader to fetch, so the layout has one in case the routes below it don't.
+loader to fetch, so the layout has one in case the routes nested in it don't.
 
-Above, the server signs in with your backend, so the user in the cookie comes
-from the backend. If the browser signs in with the backend itself, have the
-action take the tokens and the user instead. It seals what it's given, as
-[Signing in](/docs/setups/tanstack-start#signing-in) on the TanStack Start
-page explains: check the tokens there first, or let your backend authorize
-requests with the access token.
+In this guide, the server signs in with your backend, so the user in the cookie
+comes from the backend. If the browser signs in with the backend itself, have
+the action take the tokens and the user instead. It seals what it's given, as
+[Sign in](/docs/setups/tanstack-start#sign-in) on the TanStack Start page
+explains: check the tokens there first, or let your backend authorize requests
+with the access token.
 
-## Calling your API
+## Call your API
 
 Loaders and actions get the access token with the request's jar, refreshing
 it first when it has expired, and can `renew` it after a 401:
@@ -442,3 +456,11 @@ The example app does this.
 - **More.** Several server instances, the cookie's size, and plain http
   during development: see
   [Server sessions](/docs/server-rendering/server-sessions).
+
+## Next steps
+
+- [Server sessions](/docs/server-rendering/server-sessions): the cookie,
+  signing out, and the limits every server-rendered setup shares.
+- [Using the client](/docs/client): what the browser client can do.
+- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+  request's session.
