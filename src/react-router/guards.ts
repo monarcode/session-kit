@@ -100,6 +100,10 @@ export type RequireSessionLoader<U> = (args: {
  * the loader does nothing else, use {@link requireSessionLoader} as the
  * loader instead.
  *
+ * Call it in a page's loader that calls your API, even under a guarded
+ * layout. React Router runs nested routes' loaders at the same time, so the
+ * page's doesn't wait for the layout's guard.
+ *
  * Signed-out users go to `loginPath`, with `?redirectTo=` set to the URL they
  * asked for. A locked session counts as signed out, as locking is for native
  * apps and the router adapters don't unlock.

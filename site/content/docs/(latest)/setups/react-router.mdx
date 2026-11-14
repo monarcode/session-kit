@@ -236,8 +236,9 @@ Three pieces work together:
   signed-out users to `/login` with `redirectTo`, and returns `{ session }`
   as the route's loader data. Pass `{ loginPath }` for another sign-in page.
   A failed refresh is rethrown for the route's error element instead,
-  because the user is still signed in. In a loader that does more, call
-  `requireSession(auth, { request })` and carry on.
+  because the user is still signed in. A loader that does more calls
+  `requireSession` instead, as [Guards in loaders](#guards-in-loaders)
+  shows.
 - **`useAuthRevalidation`** runs the loaders again after a sign-in, a
   sign-out, an account switch, or a profile update, so the guards run again.
   Call it once, in the root route.
@@ -390,6 +391,54 @@ the root route starts nothing, and the browser restores the session.
 
 A complete app is in
 [`examples/react-router-framework-spa`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-framework-spa).
+
+## Guards in loaders
+
+Two functions guard a loader, in data mode and in framework mode. Both send a
+signed-out user to `/login`, with `redirectTo`, and resolve `{ session }`,
+typed with your user:
+
+- **`requireSessionLoader(auth)`** is the whole loader. Use it on a route
+  that guards and loads nothing else, usually the layout route around your
+  private pages, as above.
+- **`requireSession(auth, { request })`** is a call inside a loader of your
+  own. Use it when the loader loads data too: data only a signed-in user may
+  load, or data that needs who is signed in.
+
+React Router runs the loaders of nested routes at the same time, so a page's
+loader doesn't wait for its layout's guard. A page whose loader calls your
+API checks the session itself:
+
+```tsx title="app/routes/profile.tsx"
+import { useLoaderData } from "react-router";
+
+import { requireSession } from "@monarcode/session-kit/react-router";
+
+import { fetchProfile } from "../api.js";
+import { auth } from "../auth.js";
+
+export async function clientLoader({ request }: { request: Request }) {
+  const { session } = await requireSession(auth, { request });
+  return { name: session.user.firstName, profile: await fetchProfile() };
+}
+
+export default function Profile() {
+  const { name, profile } = useLoaderData<typeof clientLoader>();
+  return (
+    <p>
+      {name}, your email is {profile.email}.
+    </p>
+  );
+}
+```
+
+A signed-out user is redirected before your API is called, rather than
+after a request that fails. Pass `requireSession` the same `loginPath` and
+`basename` as the layout's guard.
+
+The sign-in page has the same pair: `redirectIfSignedInLoader(auth)` as its
+loader, or `redirectIfSignedIn(auth, { redirectTo })` in a loader that does
+more.
 
 ## Layouts around guarded pages
 

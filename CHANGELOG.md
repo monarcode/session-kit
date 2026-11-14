@@ -288,6 +288,11 @@
   calls your backend and trusts its input, and which errors `signIn` and
   `updateUser` reject with. `getSession`, `signOut` and `credentials.get` say
   where to use them.
+- The React Router guide's Guards in loaders section says when to use
+  `requireSessionLoader` (the whole loader, usually a layout's) and
+  `requireSession` (inside a loader that loads data too). A page's loader that
+  calls your API checks the session itself, since React Router runs nested
+  routes' loaders at the same time.
 - A Hybrid setup page, under Server rendering: the browser signs in with
   your backend and calls your API, and the server keeps the session. It shows
   a server function that checks the tokens with your backend before
