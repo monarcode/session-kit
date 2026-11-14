@@ -1,9 +1,4 @@
-import type {
-	ActionFunction,
-	LoaderFunction,
-	LoaderFunctionArgs,
-	MiddlewareFunction,
-} from "react-router";
+import type { LoaderFunction, LoaderFunctionArgs } from "react-router";
 
 import * as Fetch from "@monarcode/effetch";
 import {
@@ -674,18 +669,12 @@ declare const routerContext: RouterContextLike;
 const routerSession: RequestAuth<AppUser, AppUser> = sessionOf(routerContext);
 void routerSession;
 
-// The adapters' middleware and guards fit the frameworks' own types.
-const rootMiddleware: MiddlewareFunction<Response>[] =
-	sessionMiddleware(serverAuth);
+// React Router's middleware types are checked in react-router-middleware.ts.
 const signedIn = requireServerSession(serverAuth, {
 	loginPath: "/login",
 	basename: "/app",
 });
-const guardMiddleware: MiddlewareFunction<Response>[] = [signedIn];
-const loginLoader: LoaderFunction = redirectIfSignedIn(serverAuth, {
-	loginPath: ["/login", "/sign-up"],
-});
-void [rootMiddleware, guardMiddleware, loginLoader];
+void redirectIfSignedIn(serverAuth, { loginPath: ["/login", "/sign-up"] });
 export function guardedLoader({ context }: LoaderFunctionArgs) {
 	const email: string = signedIn.session(context).user.email;
 	return email;
@@ -739,10 +728,7 @@ const proxied: Promise<NextResponse> = appSessionNext.refresh(
 void proxied;
 // The session route, in each framework's own route types.
 export const { GET, POST } = nextSessionRoute(serverAuth, { cookies });
-const resourceRoute = routerSessionRoute(serverAuth);
-const sessionLoader: LoaderFunction = resourceRoute.loader;
-const sessionAction: ActionFunction = resourceRoute.action;
-void [sessionLoader, sessionAction];
+void routerSessionRoute(serverAuth);
 const answered: Promise<Response> = sessionHandler(serverAuth)(
 	new Request("https://app.test/api/session"),
 	jar,

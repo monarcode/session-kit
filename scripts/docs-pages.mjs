@@ -239,6 +239,8 @@ export const documents = [
 		path: page("setups/tanstack-start"),
 		// Vite resolves like a bundler, and Start apps import without extensions.
 		resolutions: ["Bundler"],
+		// Start depends on the router its server routes need: 1.170 and later.
+		requires: { "@tanstack/react-router": "1.170" },
 		dom: true,
 		fixtures: {
 			"src/routeTree.gen.ts": START_ROUTE_TREE,
@@ -277,6 +279,7 @@ export const documents = [
 		path: page("server-rendering/hybrid"),
 		// It builds on the TanStack Start guide's app.
 		resolutions: ["Bundler"],
+		requires: { "@tanstack/react-router": "1.170" },
 		dom: true,
 		fixtures: {
 			"src/routeTree.gen.ts": START_ROUTE_TREE,
