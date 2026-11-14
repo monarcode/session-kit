@@ -392,7 +392,9 @@ export default function Orders() {
 }
 ```
 
-With an HTTP client of your own, read the token with `credentials.get()`.
+With an HTTP client of your own, such as ky or axios, see
+[Other HTTP clients](/docs/client/other-http-clients). A client without a
+`fetch` option reads the token with `credentials.get()`.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.

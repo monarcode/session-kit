@@ -262,8 +262,10 @@ deep link `SessionGate` opens.
 ## 5. Add the signed-in screens
 
 Screens inside the guarded group read the user with `useAuth`, and call the API
-with `authFetch`, which attaches the access token and refreshes after a 401. The
-group's layout is a plain stack:
+with `authFetch`, which attaches the access token and refreshes after a 401. To
+use axios or another HTTP client instead, see
+[Other HTTP clients](/docs/client/other-http-clients). The group's layout is a
+plain stack:
 
 ```tsx title="app/(app)/_layout.tsx"
 import { Stack } from "expo-router";

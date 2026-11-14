@@ -18,6 +18,10 @@ const FEATURES = [
 		"TanStack Router, React Router in all three modes, Expo Router and Next.js send signed-out users to sign in, then back to the page they asked for.",
 	],
 	[
+		"Your HTTP client",
+		"ky, axios, openapi-fetch and anything else that takes a fetch send the access token to your API's origin only, and refresh after a 401.",
+	],
+	[
 		"Server rendering",
 		"With TanStack Start, Next.js or React Router, the session lives in an encrypted httpOnly cookie, so the first render is already signed in.",
 	],

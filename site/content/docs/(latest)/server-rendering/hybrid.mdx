@@ -228,6 +228,9 @@ export function Orders() {
 }
 ```
 
+With ky, axios or openapi-fetch, pass `apiFetch` as the client's `fetch`: see
+[Other HTTP clients](/docs/client/other-http-clients).
+
 The browser keeps the access token in memory, never the refresh token. After
 a 401, the client asks the session route for a new token, and the server
 refreshes with the cookie's refresh token. Server functions can still call

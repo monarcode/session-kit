@@ -395,8 +395,9 @@ export default async function Orders() {
 
 In Server Functions and Route Handlers, pass `await session.writable()`
 instead, the request's session that can set cookies. After a 401, it renews the token, saves it in the cookie, and sends a
-`GET` again. With an HTTP client of your own, read the token with
-`credentials.get()`.
+`GET` again. With an HTTP client of your own, such as ky or axios, see
+[Other HTTP clients](/docs/client/other-http-clients). A client without a
+`fetch` option reads the token with `credentials.get()`.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
