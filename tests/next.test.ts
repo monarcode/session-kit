@@ -381,7 +381,9 @@ test("sessionRoute answers the browser client in a Route Handler, setting cookie
 	);
 	const response = NextResponse.next();
 	const store = actionStore(nextRequest(signedIn), response);
-	const { GET, POST } = sessionRoute(serverAuth, async () => store);
+	const { GET, POST } = sessionRoute(serverAuth, {
+		cookies: async () => store,
+	});
 	const toRoute = (method: string, body?: object) =>
 		new Request("https://app.test/api/session", {
 			method,
@@ -394,8 +396,9 @@ test("sessionRoute answers the browser client in a Route Handler, setting cookie
 	const signedOut = await POST(toRoute("POST", { v: 1, action: "signOut" }));
 	assert.equal(signedOut.status, 200);
 	assert.deepEqual(deleted(response), ["app.session"]);
-	assert.throws(
-		() => sessionRoute(serverAuth, undefined as never),
-		code("INVALID_OPTIONS"),
-	);
+	for (const options of [undefined, {}, { cookies: "x" }])
+		assert.throws(
+			() => sessionRoute(serverAuth, options as never),
+			code("INVALID_OPTIONS"),
+		);
 });

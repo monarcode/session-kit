@@ -660,7 +660,7 @@ const proxied: Promise<NextResponse> = appSessionNext.refresh(
 );
 void proxied;
 // The session route, in each framework's own route types.
-export const { GET, POST } = nextSessionRoute(serverAuth, cookies);
+export const { GET, POST } = nextSessionRoute(serverAuth, { cookies });
 const resourceRoute = routerSessionRoute(serverAuth);
 const sessionLoader: LoaderFunction = resourceRoute.loader;
 const sessionAction: ActionFunction = resourceRoute.action;

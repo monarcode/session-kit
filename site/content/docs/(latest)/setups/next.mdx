@@ -147,7 +147,7 @@ import { cookies } from "next/headers";
 
 import { serverAuth } from "../../../lib/auth/server";
 
-export const { GET, POST } = sessionRoute(serverAuth, cookies);
+export const { GET, POST } = sessionRoute(serverAuth, { cookies });
 ```
 
 It answers your own site's pages only, so another site can't sign the user

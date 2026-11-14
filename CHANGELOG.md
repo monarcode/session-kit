@@ -107,11 +107,11 @@
     (`StartSessionRoute`), a resource route's `loader` and `action` in
     `@monarcode/session-kit/react-router/server` (`RouterSessionRoute`), and
     a Route Handler's `GET` and `POST` in `@monarcode/session-kit/next`, with
-    Next's `cookies` (`NextSessionRoute`).
+    Next's `cookies` in `NextSessionRouteOptions` (`NextSessionRoute`).
 
   ```ts
   // app/api/session/route.ts
-  export const { GET, POST } = sessionRoute(serverAuth, cookies);
+  export const { GET, POST } = sessionRoute(serverAuth, { cookies });
   // lib/auth/client.ts
   createMirrorAuth({ name: "app", session, endpoint: "/api/session", signIn });
   ```

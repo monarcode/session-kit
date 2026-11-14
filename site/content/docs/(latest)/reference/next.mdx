@@ -25,7 +25,7 @@ The `CookieJar` for a request in Next's Proxy (`proxy.ts`). It reads `request`'s
 
 ### sessionRoute
 
-Makes the Route Handlers for your session route, which answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. Pass `cookies` from `next/headers`.
+Makes the Route Handlers for your session route, which answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. Pass `cookies` from `next/headers` ([`NextSessionRouteOptions`](#nextsessionrouteoptions)).
 
 ## Types
 
@@ -60,6 +60,16 @@ Options for [`nextSession`](#nextsession). Pass Next's own `cookies` and `redire
 ### NextSessionRoute
 
 The Route Handlers [`sessionRoute`](#sessionroute) makes, for `GET` and `POST`.
+
+### NextSessionRouteOptions
+
+Options for [`sessionRoute`](#sessionroute). Pass Next's own `cookies`, as this entry point doesn't import `next`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
+  name="NextSessionRouteOptions"
+/>
 
 ### ProxyRequest
 

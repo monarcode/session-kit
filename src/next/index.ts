@@ -421,10 +421,29 @@ export type NextSessionRoute = {
 };
 
 /**
+ * Options for {@link sessionRoute}. Pass Next's own `cookies`, as this entry
+ * point doesn't import `next`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionRouteOptions } from "@monarcode/session-kit/next";
+ * import { cookies } from "next/headers";
+ *
+ * export const options: NextSessionRouteOptions = { cookies };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionRouteOptions = {
+	/** `cookies` from `next/headers`. */
+	cookies: () => Promise<NextCookies>;
+};
+
+/**
  * Makes the Route Handlers for your session route, which answers
  * `createMirrorAuth`'s `endpoint`: the browser client reads the session,
  * signs out and gets the access token through it. Pass `cookies` from
- * `next/headers`.
+ * `next/headers` ({@link NextSessionRouteOptions}).
  *
  * It answers this site's own pages only, as `sessionHandler` from
  * `@monarcode/session-kit/server` explains, and serves the access token only
@@ -440,15 +459,16 @@ export type NextSessionRoute = {
  * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
  *
  * // app/api/session/route.ts
- * export const { GET, POST } = sessionRoute(serverAuth, cookies);
+ * export const { GET, POST } = sessionRoute(serverAuth, { cookies });
  * ```
  *
  * @since 0.1.0
  */
 export function sessionRoute<U, I>(
 	serverAuth: ServerAuth<U, I>,
-	cookies: () => Promise<NextCookies>,
+	options: NextSessionRouteOptions,
 ): NextSessionRoute {
+	const cookies = options?.cookies;
 	if (typeof cookies !== "function")
 		throw new AuthError(
 			"INVALID_OPTIONS",
