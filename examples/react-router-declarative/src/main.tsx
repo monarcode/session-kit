@@ -32,7 +32,7 @@ function Login() {
 	const [search] = useSearchParams();
 	if (signedIn)
 		return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;
-	return <LoginForm onSignedIn={() => {}} />;
+	return <LoginForm />;
 }
 
 createRoot(document.getElementById("root")!).render(

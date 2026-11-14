@@ -8,25 +8,30 @@ session with hooks. Everything else, such as loaders, event handlers, and
 request code, calls the client that `createAuth` returned. These are its
 methods:
 
-| Call                               | What it does                                                               |
-| ---------------------------------- | -------------------------------------------------------------------------- |
-| `auth.state.get()`, `.subscribe()` | Reads the [state](/docs/client/state), or follows its changes.             |
-| `auth.getSession()`                | Resolves who is signed in, restoring or refreshing first, or `null`.       |
-| `auth.signIn(tokens)`              | Saves a new session, replacing any current one.                            |
-| `auth.signOut()`                   | Ends the session, clears storage, and tells other tabs.                    |
-| `auth.updateUser(user)`            | Replaces the user and keeps the session.                                   |
-| `auth.refresh()`                   | Refreshes now, even while the access token is usable.                      |
-| `auth.retry()`                     | Tries again after a failed refresh.                                        |
-| `auth.isCurrent(session)`          | Tells whether a session is still the signed-in one.                        |
-| `auth.credentials.get()`           | Resolves the access token, for code that sends requests.                   |
-| `auth.lock()`, `auth.unlock()`     | Locks and unlocks a saved session, with [`locking`](/docs/client/locking). |
-| `auth.mount()`                     | Starts timers and tab sync. `AuthProvider` and the routers call it.        |
+| Call                                              | What it does                                                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `auth.state.get()`, `.subscribe()`                | Reads the [state](/docs/client/state), or follows its changes.                                |
+| `auth.getSession()`                               | Resolves who is signed in, restoring or refreshing first, or `null`.                          |
+| `auth.signIn({ ...tokens, user })`                | Saves a new session, replacing any current one.                                               |
+| `auth.signOut()`                                  | Ends the session, clears storage, and tells other tabs.                                       |
+| `auth.updateUser(user)`                           | Replaces the user and keeps the session.                                                      |
+| `auth.refresh()`                                  | Refreshes now, even while the access token is usable.                                         |
+| `auth.retry()`                                    | Tries again after a failed refresh.                                                           |
+| `auth.isCurrent(session)`                         | Tells whether a session is still the signed-in one.                                           |
+| `auth.credentials.get()`, `.renew()`, `.reject()` | Resolves the access token, and replaces or ends it after a 401, for code that sends requests. |
+| `auth.lock()`, `auth.unlock()`                    | Locks and unlocks a saved session, with [`locking`](/docs/client/locking).                    |
+| `auth.mount()`                                    | Starts timers and tab sync. `AuthProvider` and the routers call it.                           |
 
 Each method's JSDoc says what it resolves and which `AuthError` it rejects
 with, so your editor shows the details where you use them.
 
+With server rendering, the browser's client comes from `createMirrorAuth`. It
+has the same state, `getSession`, `signOut`, `isCurrent` and `credentials`,
+but no `lock`, `unlock` or `updateUser`. See
+[Server rendering](/docs/server-rendering).
+
 The examples in this section build on the app from
-[Getting started](/docs/getting-started): `auth` is its client, and
+[Getting started](/docs/getting-started). `auth` is its client, and
 `authFetch` its `fetch`.
 
 <Cards>

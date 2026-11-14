@@ -167,29 +167,32 @@ function useAccountKey(sessionId: string | null): number {
  * @example
  * ```tsx
  * // Rendered inside `AuthProvider` in app/_layout.tsx.
- * import { isSignedIn, type AuthClient } from "@monarcode/session-kit";
+ * import { isSignedIn } from "@monarcode/session-kit";
  * import { SessionGate } from "@monarcode/session-kit/expo";
- * import { createAuthHooks } from "@monarcode/session-kit/react";
+ * import { useAuth } from "@monarcode/session-kit/react";
  * import { SplashScreen, Stack } from "expo-router";
- *
- * declare const auth: AuthClient<{ name: string }, { name: string }>;
- * const { useAuth } = createAuthHooks<typeof auth>();
  *
  * void SplashScreen.preventAutoHideAsync();
  *
  * export function RootNavigator() {
- * 	const signedIn = useAuth(isSignedIn);
  * 	return (
  * 		<SessionGate>
- * 			<Stack>
- * 				<Stack.Protected guard={signedIn}>
- * 					<Stack.Screen name="(app)" />
- * 				</Stack.Protected>
- * 				<Stack.Protected guard={!signedIn}>
- * 					<Stack.Screen name="login" />
- * 				</Stack.Protected>
- * 			</Stack>
+ * 			<RootStack />
  * 		</SessionGate>
+ * 	);
+ * }
+ *
+ * function RootStack() {
+ * 	const signedIn = useAuth(isSignedIn);
+ * 	return (
+ * 		<Stack>
+ * 			<Stack.Protected guard={signedIn}>
+ * 				<Stack.Screen name="(app)" />
+ * 			</Stack.Protected>
+ * 			<Stack.Protected guard={!signedIn}>
+ * 				<Stack.Screen name="login" />
+ * 			</Stack.Protected>
+ * 		</Stack>
  * 	);
  * }
  * ```

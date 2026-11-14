@@ -6,8 +6,12 @@ import { useRouter } from "@tanstack/react-router";
 
 import { API } from "./auth/api";
 
-/** The sign-in form, prefilled with DummyJSON's documented test user. */
-export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
+/**
+ * The sign-in form, prefilled with DummyJSON's documented test user. It
+ * doesn't navigate: a sign-in runs the guards again, and the sign-in page's
+ * guard sends the user on.
+ */
+export function LoginForm() {
 	const auth = useAuthClient();
 	const [error, setError] = useState("");
 	const [pending, setPending] = useState(false);
@@ -23,7 +27,6 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 				username: String(form.get("username")),
 				password: String(form.get("password")),
 			});
-			await onSignedIn();
 		} catch (cause) {
 			// The server function's own message, such as a wrong password.
 			setError(cause instanceof Error ? cause.message : "Could not sign in");
@@ -105,7 +108,9 @@ export function Profile({ fromServer }: { fromServer: string }) {
 				Load profile in the browser
 			</button>
 			{fromBrowser && <p>auth/me in the browser: {fromBrowser}</p>}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

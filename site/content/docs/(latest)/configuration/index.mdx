@@ -11,16 +11,16 @@ longer fit your app.
 
 `createAuth` takes three required options and five optional ones:
 
-| Option    | Required | What it sets                                                                                               |
-| --------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `name`    | Yes      | The storage namespace: letters, digits, `_` or `-`. Keeps two apps on one origin apart.                    |
-| `user`    | Yes      | A [user schema](/docs/configuration/user-schemas), or [`fromAccessToken`](/docs/client/users-from-tokens). |
-| `storage` | Yes      | [Where the session is saved](/docs/configuration/storage).                                                 |
-| `refresh` | No       | [How to get new tokens](/docs/configuration/refresh). Without it, an expired token signs the user out.     |
-| `revoke`  | No       | [Revokes the ended tokens](/docs/client/signing-in-and-out) on your backend after a sign-out.              |
-| `maxAge`  | No       | How long a saved session can be restored, in seconds. Default: 30 days, counted again from each save.      |
-| `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                               |
-| `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.               |
+| Option    | Required | What it sets                                                                                                                        |
+| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | Yes      | Names the saved session and the refresh lock: letters, digits, `_` or `-`, up to 64 characters. Keeps two apps on one origin apart. |
+| `user`    | Yes      | A [user schema](/docs/configuration/user-schemas), or [`fromAccessToken`](/docs/client/users-from-tokens).                          |
+| `storage` | Yes      | [Where the session is saved](/docs/configuration/storage).                                                                          |
+| `refresh` | No       | [How to get new tokens](/docs/configuration/refresh). Without it, an expired token signs the user out.                              |
+| `revoke`  | No       | [Revokes the ended tokens](/docs/client/signing-in-and-out) on your backend after a sign-out.                                       |
+| `maxAge`  | No       | How long a saved session can be restored, in seconds. Default: 30 days, counted again from each save.                               |
+| `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                                                        |
+| `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.                                        |
 
 ## Pages in this section
 
@@ -56,7 +56,7 @@ tokens, saves the session, follows other tabs, and reports what happens.
   <Card
     title="Errors"
     href="/docs/configuration/errors"
-    description="Every AuthError code, and the failures that need a decision from you."
+    description="How errors reach your app, and the failures that need a decision from you."
   />
   <Card
     title="Debugging"

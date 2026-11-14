@@ -1,9 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { API } from "./api";
 import { login } from "./backend";
-import { session } from "./server";
+import { apiFetch, session } from "./server";
 
 // Each handler runs on the server; Start's compiler replaces it with a fetch
 // in the browser, and leaves `session` out of that bundle.
@@ -26,22 +25,8 @@ export const signInFn = createServerFn({ method: "POST" })
 
 /** Calls DummyJSON's `auth/me` from the server, with the cookie's token. */
 export const getProfileFn = createServerFn().handler(async () => {
-	const credentials = await session.credentials.get();
-	if (!credentials) return { email: "Signed out" };
-	let response = await me(credentials.accessToken);
-	if (response.status === 401) {
-		// Refreshes once, then tries again.
-		const renewed = await session.credentials.renew(credentials);
-		if (!renewed) return { email: "Signed out" };
-		response = await me(renewed.accessToken);
-	}
+	const response = await apiFetch("auth/me");
 	if (!response.ok) return { email: `HTTP ${response.status}` };
 	const profile = z.object({ email: z.string() }).parse(await response.json());
 	return { email: profile.email };
 });
-
-function me(accessToken: string) {
-	return fetch(`${API}/auth/me`, {
-		headers: { Authorization: `Bearer ${accessToken}` },
-	});
-}

@@ -50,6 +50,8 @@ Hermes and Metro), and in Node.js 20 and newer:
 - **Web Locks** keep tabs to one refresh at a time when present. Without
   them, two tabs can refresh at the same instant, as
   [Tabs](/docs/configuration/tabs) explains.
+- **`BroadcastChannel`** lets a `createMirrorAuth` client follow sign-ins and
+  sign-outs in other tabs, when present.
 - **Web Crypto** is required on the server by
   `@monarcode/session-kit/server`, as in Node.js 20 and newer.
 

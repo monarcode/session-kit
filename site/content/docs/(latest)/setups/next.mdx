@@ -5,10 +5,10 @@ description: Keep the session in an encrypted cookie with the Next.js App Router
 
 In this guide, you keep the session in an encrypted cookie with the Next.js
 App Router. A Server Function signs in, a session route answers the browser,
-Proxy refreshes the tokens, and Server Components read the session. The first response already shows the
-signed-in page, so the browser never shows a "Checking session…" state or a
-flash of signed-out content. Client Components get a small client that
-mirrors the session, and the
+Proxy refreshes the tokens, and Server Components read the session. The first
+response already shows the signed-in page, so the browser never shows a
+"Checking session…" state or a flash of signed-out content. Client
+Components get a small client that mirrors the session, and the
 [hooks](/docs/getting-started#4-read-the-session-in-react) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
@@ -106,8 +106,8 @@ import { serverAuth } from "./server";
 export const session = nextSession(serverAuth, { cookies, redirect });
 ```
 
-In a Server Component, `await session.get()` resolves `{ sessionId, user }`,
-never tokens, so it's safe to pass to Client Components, or `null`. It
+In a Server Component, `await session.get()` resolves `{ sessionId, user }`
+or `null`. It holds no tokens, so it's safe to pass to Client Components. It
 doesn't set cookies, as Server Components can't. Proxy refreshes first.
 
 ## 3. Refresh in Proxy
@@ -184,7 +184,7 @@ export async function signInAction(input: unknown) {
 ```
 
 `signInAction` returns its failure rather than throwing it, as Next advises
-for expected errors: in production, Next hides a thrown error's message from
+for expected errors. In production, Next hides a thrown error's message from
 the browser.
 
 ## 5. Create the browser client
@@ -219,10 +219,10 @@ export type AppAuth = ReturnType<typeof createAppAuth>;
 
 `useMirrorAuth` from `@monarcode/session-kit/react` creates the client in a
 Client Component, once per request on the server, never at module level. It
-keeps the client and the server in step both ways, rendering Server
-Components again with `router.refresh()` when the session changes in the
-browser. Register the client's type where you render `AuthProvider`, so the
-hooks carry your user:
+keeps the client and the server in step both ways. When the session changes
+in the browser, it calls `onChange`, here `router.refresh()`, which renders
+Server Components again. Register the client's type where you render
+`AuthProvider`, so the hooks carry your user:
 
 ```tsx title="app/providers.tsx"
 "use client";
@@ -365,30 +365,31 @@ export function SignInForm() {
 
 In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, have
-`signInAction` take the tokens and the user instead. It seals what it's given,
-as [Sign in](/docs/setups/tanstack-start#sign-in) on the TanStack Start page
-explains: check the tokens there first, or let your backend authorize requests
-with the access token.
+`signInAction` take the tokens and the user instead, and read
+[Your backend decides what's allowed](/docs/security#your-backend-decides-whats-allowed)
+first.
 
 ## Call your API
 
-In Server Components, get the access token from `session.readOnly()`, the
-request's session that doesn't set cookies. Proxy refreshed it before the
-render. A token that expired anyway rejects with `REFRESH_FAILED`, since
-nothing new can be saved:
+Call your API with `createAuthFetch` from `@monarcode/session-kit/http`. It
+sends the request's access token to your API's origin only. In Server
+Components, pass it `session.readOnly()`, the request's session that doesn't
+set cookies. Proxy refreshed the token before the render. A token that
+expired anyway rejects with `REFRESH_FAILED`, and so does a 401 from your API,
+since nothing new can be saved:
 
 ```tsx title="app/orders/page.tsx"
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { z } from "zod";
 
 import { session } from "../../lib/auth/session";
 
 export default async function Orders() {
   await session.require("/orders");
-  const credentials = await (await session.readOnly()).credentials.get();
-  // require has checked that someone is signed in.
-  const response = await fetch("https://api.example.com/orders", {
-    headers: { Authorization: `Bearer ${credentials!.accessToken}` },
+  const apiFetch = createAuthFetch(await session.readOnly(), {
+    baseUrl: "https://api.example.com/",
   });
+  const response = await apiFetch("orders");
   if (!response.ok) throw new Error(`Orders failed (${response.status})`);
   const orders = z
     .array(z.object({ id: z.number() }))
@@ -397,8 +398,10 @@ export default async function Orders() {
 }
 ```
 
-In Server Functions and Route Handlers, `session.writable()` can also
-`renew` after a 401.
+In Server Functions and Route Handlers, pass `await session.writable()`
+instead. After a 401, it renews the token, saves it in the cookie, and sends a
+`GET` again. With an HTTP client of your own, read the token with
+`credentials.get()`.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
@@ -411,8 +414,8 @@ The example app does this.
 
 ## Things to know
 
-- **Signing out ends the session only with `revoke`.** A copy of the cookie
-  works again ten seconds after sign-out: see
+- **Signing out ends the session only with `revoke`.** Without it, a copy of
+  the cookie made before sign-out still works: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
 - **`writable()` only where Next allows writes.** Use it in Server Functions
   and Route Handlers only. In a Server Component, it would refresh and then
@@ -421,14 +424,14 @@ The example app does this.
   cookie once, and a sign-in through `writable()` shows in `get()`.
 - **Separate instances.** Next builds Proxy, Route Handlers, and pages with
   their Server Functions separately, so each has its own `serverAuth`, even
-  on one server: they share no refresh. A matcher that covers every route
+  on one server. They share no refresh. A matcher that covers every route
   that reads the session lets Proxy refresh first, so Route Handlers and
   Server Functions rarely need to.
 - **A `basePath`.** Next doesn't add it to `fetch`, so the client's
   `endpoint` includes it: `"/app/api/session"`.
 - **Rendering.** Reading cookies makes a page dynamic. Next sends such pages
   with `Cache-Control: no-store`, and plain `use cache` can't read cookies.
-  Keep pages that read the session on the Node.js runtime, the default:
+  Keep pages that read the session on the Node.js runtime, the default.
   Next may not pass Proxy's refreshed cookie on to Edge runtime pages.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again and render their pages again. So does returning to a tab

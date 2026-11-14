@@ -151,10 +151,10 @@ export type AppAuth = ReturnType<typeof createAppAuth>;
 The root route runs the middleware and reads the session, and its component
 creates the client with `useMirrorAuth` from `@monarcode/session-kit/react`:
 once per request on the server, never at module level. It keeps the client
-and the server in step both ways, running loaders again with `revalidate`
-from `useRevalidator()` when the session changes in the browser. Register the
-client's type here, where you render `AuthProvider`, so the hooks carry your
-user:
+and the server in step both ways. When the session changes in the browser,
+it calls `onChange`, here `revalidate` from `useRevalidator()`, which runs
+the loaders again. Register the client's type here, where you render
+`AuthProvider`, so the hooks carry your user:
 
 ```tsx title="app/root.tsx"
 import type { ReactNode } from "react";
@@ -219,18 +219,19 @@ export default function App() {
 ```
 
 `getSession` resolves `{ sessionId, user }`, never tokens, so it's safe to
-return from a loader. `useMirrorAuth` replaces `useAuthRevalidation`: after
-an action signs in or out, the loader reads the new session and the client
-adopts it; after a sign-out in the browser, here or in another tab, loaders
-run again, so the server's redirects run.
+return from a loader. After an action signs in or out, the loader reads the
+new session and the client adopts it. After a sign-out in the browser, here
+or in another tab, `onChange` runs the loaders again, so the server's
+redirects run. The client-side guides add `useAuthRevalidation` for this.
+Here, `useMirrorAuth` does it.
 
 ## 3. Sign in and out
 
 The sign-in route's action signs in with your backend and seals the result
 into the cookie. React Router 7.12 and later refuse route actions posted from
-other sites. On 7.9 to 7.11, start the action with the `Sec-Fetch-Site` check
-that the sign-out action in `app/routes/auth.session.ts` uses. The form works
-before the page's scripts load:
+other sites. On 7.9 to 7.11, refuse them yourself at the start of the
+action, as [The session route](/docs/security#the-session-route) explains.
+The form works before the page's scripts load:
 
 ```tsx title="app/routes/login.tsx"
 import {
@@ -354,31 +355,35 @@ loader to fetch, so the layout has one in case the routes nested in it don't.
 
 In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, have
-the action take the tokens and the user instead. It seals what it's given, as
-[Sign in](/docs/setups/tanstack-start#sign-in) on the TanStack Start page
-explains: check the tokens there first, or let your backend authorize requests
-with the access token.
+the action take the tokens and the user instead, and read
+[Your backend decides what's allowed](/docs/security#your-backend-decides-whats-allowed)
+first.
 
 ## Call your API
 
-Loaders and actions get the access token from the request's session,
-refreshed first when it has expired, and can `renew` it after a 401:
+Call your API with `createAuthFetch` from `@monarcode/session-kit/http`.
+Given the request's session, it sends the access token, refreshed first when
+it has expired. After a 401, it renews the token, saves it in the cookie, and
+sends a `GET` again:
 
 ```tsx title="app/routes/orders.tsx"
 import { redirect, useLoaderData, type LoaderFunctionArgs } from "react-router";
 
 import { loginHref } from "@monarcode/session-kit";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { z } from "zod";
 
 import { auth } from "../auth/session.server";
 
 export async function loader({ context }: LoaderFunctionArgs) {
-  const credentials = await auth(context).credentials.get();
+  const session = auth(context);
   // Outside the guarded layout: send the user to sign in, then back here.
-  if (!credentials) throw redirect(loginHref("/login", "/orders"));
-  const response = await fetch("https://api.example.com/orders", {
-    headers: { Authorization: `Bearer ${credentials.accessToken}` },
+  if (!(await session.getSession()))
+    throw redirect(loginHref("/login", "/orders"));
+  const apiFetch = createAuthFetch(session, {
+    baseUrl: "https://api.example.com/",
   });
+  const response = await apiFetch("orders");
   if (!response.ok) throw new Error(`Orders failed (${response.status})`);
   return z.array(z.object({ id: z.number() })).parse(await response.json());
 }
@@ -388,6 +393,8 @@ export default function Orders() {
   return <p>{orders.length} orders</p>;
 }
 ```
+
+With an HTTP client of your own, read the token with `credentials.get()`.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
@@ -399,8 +406,8 @@ The example app does this.
 
 ## Things to know
 
-- **Signing out ends the session only with `revoke`.** A copy of the cookie
-  works again ten seconds after sign-out: see
+- **Signing out ends the session only with `revoke`.** Without it, a copy of
+  the cookie made before sign-out still works: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
 - **Refresh in middleware.** The request's session sets cookies until the
   response leaves `sessionMiddleware`, which first waits for a refresh under

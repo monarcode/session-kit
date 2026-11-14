@@ -57,7 +57,7 @@ Options for [`ServerAuth`](#serverauth)'s `refreshIfDue`.
 
 ### RequestAuth
 
-One request's session: what [`ServerAuth`](#serverauth) does for a request, without its [`CookieJar`](#cookiejar). `startAuth` from `@monarcode/session-kit/tanstack-start/server` and `routerAuth` from `@monarcode/session-kit/react-router/server` give you one. Elsewhere, `serverAuth.forRequest(jar)` does.
+One request's session: what [`ServerAuth`](#serverauth) does for a request, without its [`CookieJar`](#cookiejar). `startAuth` from `@monarcode/session-kit/tanstack-start/server` and `routerAuth` from `@monarcode/session-kit/react-router/server` give you one, and so do `readOnly()` and `writable()` from `nextSession` in `@monarcode/session-kit/next`. Elsewhere, `serverAuth.forRequest(jar)` does.
 
 ### ServerAuth
 

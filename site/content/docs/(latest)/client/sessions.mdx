@@ -25,10 +25,10 @@ export async function loadCart(): Promise<unknown> {
 **Credentials** are the access token, `{ sessionId, accessToken, expiresAt }`,
 kept apart so that code which only needs the user never holds one.
 [`createAuthFetch`](/docs/client/requests) reads them for you, and so does
-an HTTP client that takes it as its `fetch`. Code that sends requests another
-way uses `auth.credentials`: `get` before a request, `renew` after a 401, and
-`reject` after a second one.
-[Other HTTP clients](/docs/client/other-http-clients) explains both.
+an HTTP client that takes `authFetch` as its `fetch`. Code that sends
+requests another way uses `auth.credentials`, as
+[Other HTTP clients](/docs/client/other-http-clients#clients-without-a-fetch-option)
+shows.
 
 `auth.isCurrent({ sessionId })` tells whether a session you're holding is
 still the signed-in one, for work that might finish after an account switch.

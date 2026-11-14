@@ -279,6 +279,11 @@
 - The compatibility page lists `effect` as a peer of `./effetch` as well as
   `./effect`, and the entry points page orders the entry points as the
   reference does.
+- The router guides' sign-in pages no longer navigate after a sign-in. The
+  sign-in page's guard runs again and sends the user on, so a form only signs
+  in. The server-rendering guides call the API with `createAuthFetch` over the
+  request's session, and the Expo guide adds the profile screen its deep-link
+  steps open.
 - The reference lists the members of `AuthStorage`, `Tokens` and
   `CookieJar`, the types an app builds itself. The server-rendering guides'
   sign-in shows the backend's own message for a failed sign-in, as the

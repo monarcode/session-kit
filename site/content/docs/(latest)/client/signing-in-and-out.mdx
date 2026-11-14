@@ -3,17 +3,19 @@ title: Signing in and out
 description: Save a new session, end it in every tab, and revoke the ended tokens on your backend.
 ---
 
-`auth.signIn({ accessToken, refreshToken?, expiresIn?, user })` validates and
-saves a new session, replacing any current one. The latest call wins, and
-invalid input keeps the previous session. [Expiry](/docs/configuration/expiry)
-covers how the token's lifetime is found.
+`auth.signIn({ ...tokens, user })` validates and saves a new session,
+replacing any current one, even a locked one. With
+[`fromAccessToken`](/docs/client/users-from-tokens), leave out `user`. The
+latest call wins, and invalid input keeps the previous session.
+[Expiry](/docs/configuration/expiry) covers how the token's lifetime is
+found.
 
 `auth.signOut()` ends the session and clears storage. Other tabs sign out too
 when the storage reports changes, as `webStorage()` does, and `locking` is
 off.
 
-If your backend can revoke tokens, give the client a `revoke` callback: it
-receives the ended tokens once the user is already signed out.
+If your backend can revoke tokens, give the client a `revoke` callback. It
+receives the ended tokens after the user is signed out.
 
 ```ts title="src/revoke.ts"
 import type { RevokeFn } from "@monarcode/session-kit";
@@ -31,6 +33,6 @@ export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
 };
 ```
 
-A failed revocation is reported in `state.error` as `REVOKE_FAILED` without
-undoing the sign-out: the user asked to leave, and has. The client doesn't
-revoke a session the backend already rejected.
+A failed revocation shows in `state.error` as `REVOKE_FAILED`, and the
+sign-out stands. The user asked to leave, and has. The client doesn't revoke
+a session the backend already rejected.

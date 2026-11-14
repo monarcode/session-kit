@@ -19,7 +19,7 @@ rendering, follow
 
 ## Before you begin
 
-Follow [Getting started](/docs/getting-started) through step 4. This guide
+Follow [Getting started](/docs/getting-started) through step 3. This guide
 uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
 
 ## Installation
@@ -37,8 +37,8 @@ React Router 7 and 8 both work.
 In every mode, `AuthProvider` goes around the router. It mounts the client in
 a layout effect, so with `localStorage` and a synchronous schema, the session
 is restored before the first paint. Nothing starts on a server. Register the
-client where you render it, as in Getting started, and the hooks from
-`@monarcode/session-kit/react` carry your user.
+client where you render it, as step 4 of Getting started shows, and the hooks
+from `@monarcode/session-kit/react` carry your user.
 
 Every mode on this page protects the same page:
 
@@ -135,8 +135,7 @@ createRoot(document.getElementById("root")!).render(
 signed-out users to `loginPath` (`/login` unless you pass another) with
 `redirectTo` set to where they were going, and renders `unavailable` after a
 failed refresh. Without `unavailable`, the error is thrown to the nearest
-error boundary. With another sign-in page, pass the same `loginPath` to
-`SessionOutlet` and `requireSession`.
+error boundary.
 
 `safeReturnTo` accepts only same-origin paths and returns `/` for anything
 else, including the sign-in page itself, so a stale `redirectTo` can't loop.
@@ -150,15 +149,8 @@ In data mode, loaders run before a route renders, so the guard goes there. A
 private route's data is never fetched for a signed-out user:
 
 ```tsx title="src/router.tsx"
-import {
-  createBrowserRouter,
-  Outlet,
-  useNavigate,
-  useRouteError,
-  useSearchParams,
-} from "react-router";
+import { createBrowserRouter, Outlet, useRouteError } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
 import { useAuthClient } from "@monarcode/session-kit/react";
 import {
   redirectIfSignedInLoader,
@@ -175,18 +167,6 @@ import { SignIn } from "./sign-in.js";
 function Root() {
   useAuthRevalidation();
   return <Outlet />;
-}
-
-function Login() {
-  const navigate = useNavigate();
-  const [search] = useSearchParams();
-  return (
-    <SignIn
-      onSignedIn={() =>
-        navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
-      }
-    />
-  );
 }
 
 /** Shown after a failed refresh; a repeated failure shows here again. */
@@ -209,7 +189,7 @@ export const router = createBrowserRouter([
       {
         path: "/login",
         loader: redirectIfSignedInLoader(auth),
-        element: <Login />,
+        element: <SignIn />,
       },
       {
         loader: requireSessionLoader(auth),
@@ -255,8 +235,8 @@ Three pieces work together:
 - **`requireSessionLoader(auth)`** is the route's loader. It redirects
   signed-out users to `/login` with `redirectTo`, and returns `{ session }`
   as the route's loader data. Pass `{ loginPath }` for another sign-in page.
-  A failed refresh is rethrown for the route's error element instead: the
-  user is still signed in. In a loader that does more, call
+  A failed refresh is rethrown for the route's error element instead,
+  because the user is still signed in. In a loader that does more, call
   `requireSession(auth, { request })` and carry on.
 - **`useAuthRevalidation`** runs the loaders again after a sign-in, a
   sign-out, an account switch, or a profile update, so the guards run again.
@@ -270,9 +250,11 @@ A complete app is in [`examples/react-router-data`](https://github.com/monarcode
 
 ## Framework mode with `ssr: false`
 
-Framework mode without a server is data mode with route modules: the guards
+Framework mode without a server is data mode with route modules. The guards
 are the same, in `clientLoader`. Keep the files from Getting started, and
 `home.tsx` from [Add a page to protect](#add-a-page-to-protect), in `app/`.
+Framework mode also needs `@react-router/dev`, which a framework-mode app
+already has.
 
 Turn server rendering off:
 
@@ -370,12 +352,10 @@ export function ErrorBoundary() {
 }
 ```
 
-Add the sign-in route, which sends signed-in users on to `redirectTo`:
+Add the sign-in route, which sends signed-in users on to `redirectTo`. Its
+loader runs again after a sign-in, so the form doesn't navigate:
 
 ```tsx title="app/routes/login.tsx"
-import { useNavigate, useSearchParams } from "react-router";
-
-import { safeReturnTo } from "@monarcode/session-kit";
 import { redirectIfSignedInLoader } from "@monarcode/session-kit/react-router";
 
 import { auth } from "../auth.js";
@@ -383,17 +363,7 @@ import { SignIn } from "../sign-in.js";
 
 export const clientLoader = redirectIfSignedInLoader(auth);
 
-export default function Login() {
-  const navigate = useNavigate();
-  const [search] = useSearchParams();
-  return (
-    <SignIn
-      onSignedIn={() =>
-        navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
-      }
-    />
-  );
-}
+export default SignIn;
 ```
 
 In `app/routes.ts`, nest the routes the layout protects:
@@ -464,10 +434,15 @@ Three things follow from where `SessionOutlet` sits:
 
 ## Things to know
 
-- **A router `basename`.** Pass the same `basename` to the guard, so
-  `redirectTo` leaves it out. Redirects add it again.
-- **A failed refresh is not a redirect.** In declarative mode it renders
-  `unavailable`. In data and framework mode, the guard rethrows it for
+- **Another sign-in page.** If sign-in isn't at `/login`, pass the same
+  `loginPath` to `SessionOutlet`, `requireSessionLoader` (or
+  `requireSession`), `redirectIfSignedInLoader` and `safeReturnTo`.
+- **A router `basename`.** Pass it to `requireSessionLoader` or
+  `requireSession` too, so `redirectTo` leaves it out. Redirects add it
+  again. `SessionOutlet` needs nothing.
+- **A failed refresh is not a redirect.** In declarative mode,
+  `SessionOutlet` renders `unavailable`, or throws to the nearest error
+  boundary without it. In data and framework mode, the guard rethrows it for
   the route's error element, which can offer `auth.retry()`.
 - **Locked sessions.** [Locking](/docs/client/locking) is for native apps, so
   the guards treat a locked session as signed out.

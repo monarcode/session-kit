@@ -53,9 +53,10 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   Tokens last one minute, so the early refresh runs after about 30 seconds.
   Requests omit `credentials: "include"`, which DummyJSON's own snippets use,
   because session-kit keeps tokens out of cookies.
-- **Guards**: `requireSession` and `SessionOutlet` for TanStack Router and
-  Start, `SessionOutlet` alone in React Router's declarative mode, and loader
-  guards with `useAuthRevalidation` in data and framework mode.
+- **Guards**: `requireSession`, `redirectIfSignedIn` and `SessionOutlet` for
+  TanStack Router and Start. `SessionOutlet` alone in React Router's
+  declarative mode. `requireSessionLoader`, `redirectIfSignedInLoader`,
+  `SessionOutlet` and `useAuthRevalidation` in data and framework mode.
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
@@ -111,7 +112,8 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-the client-side web apps have the same `ui.tsx` rather than sharing one. The
+the client-side web apps have the same `ui.tsx`, apart from where the hooks
+come from, rather than sharing one. The
 server-rendered apps have their own, since they sign in on the server, and so
 does the Effect app, whose handlers run Effects. The apps differ in where the
 user comes from on purpose, so both user sources appear: the login response,

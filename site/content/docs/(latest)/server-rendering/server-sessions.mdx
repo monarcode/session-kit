@@ -4,8 +4,8 @@ description: How the server keeps the session in every framework, from the cooki
 ---
 
 This page covers what every server-rendered setup shares: the cookie and its
-secret, a request's session, refreshes, sign-out, and limits. Read it once your app
-works, to deploy it. The setup guides show the code:
+secret, a request's session, refreshes, sign-out, and limits. Read it once
+your app works, to deploy it. The setup guides show the code:
 [TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next),
 and [React Router with server rendering](/docs/setups/react-router-ssr).
 
@@ -18,7 +18,7 @@ Crypto. It's `httpOnly`, so page scripts can't read it, and `Secure` and
 `createAuth` does, except `storage` and `locking`, plus `secret`, `cookie`
 and `clientCredentials`.
 
-Keep the module that creates it on the server: each setup page shows how
+Keep the module that creates it on the server. Each setup guide shows how
 its framework keeps such a module out of the browser bundle.
 
 ## The secret
@@ -72,11 +72,10 @@ a renewed one after a 401, and Effect's `Auth.layer` takes it
 
 Some requests can't set cookies: a Next.js Server Component rendering, or a
 React Router loader once its response has left the middleware. There,
-nothing is saved, so `signIn`, `signOut` and `refreshIfDue` reject with
-`INVALID_OPTIONS`, and an expired access token rejects with
-`REFRESH_FAILED`. TanStack Start can't tell once a page has started
-streaming, so a cookie set then is lost. Refresh before rendering, with the
-middleware each setup guide adds: `refreshSession` in TanStack Start,
+nothing is saved, so the methods that write reject, and an expired access
+token rejects with `REFRESH_FAILED`. TanStack Start can't tell once a page
+has started streaming, so a cookie set then is lost. Refresh before rendering,
+with the middleware each setup guide adds: `refreshSession` in TanStack Start,
 `sessionMiddleware` in React Router, and `nextSession`'s `refresh` in
 Next.js's Proxy.
 
@@ -86,7 +85,8 @@ Every `serverAuth` method also takes the request's `CookieJar` first:
 `serverAuth.getSession(jar)` does what a request's `getSession()` does, and
 `serverAuth.forRequest(jar)` gives that request's session. For a server
 without an adapter, build a [`CookieJar`](/docs/reference/server#cookiejar)
-over its cookies.
+over its cookies. Answer the browser client's session route with
+`sessionHandler(serverAuth)`, called with the request and its jar.
 
 Use one jar per request. Calls with the same jar share what it read and
 wrote and one refresh, so a jar kept at module level would show one
@@ -142,8 +142,8 @@ The session route answers your own site's pages only: see
 - **Plain http.** The cookie is `Secure` by default. Browsers accept that on
   `http://localhost` except Safari: pass `cookie: { secure: false }` for
   local development there, never in production.
-- **Locking.** `locking` isn't available: the server keeps the tokens, so
-  there is nothing on the device to lock.
+- **Locking.** `locking` isn't available. The server keeps the tokens, so
+  there's nothing on the device to lock.
 
 ## Next steps
 

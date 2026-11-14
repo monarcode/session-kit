@@ -12,8 +12,8 @@ and need no `AuthProvider`.
 
 A complete app is in
 [`examples/tanstack-router`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-router).
-[TanStack Start in SPA mode](#tanstack-start-in-spa-mode) differs in two
-places. For TanStack Start with server rendering, follow
+[TanStack Start in SPA mode](#tanstack-start-in-spa-mode) lists what changes
+for Start. For TanStack Start with server rendering, follow
 [TanStack Start](/docs/setups/tanstack-start) instead.
 
 ## Before you begin
@@ -78,13 +78,14 @@ function Root() {
 
 ## 2. Add the sign-in route
 
-The sign-in route renders the form from Getting started, and sends the user
-on to the page they asked for:
+The sign-in route renders the form from Getting started. Its guard sends a
+signed-in user on to the page they asked for, and it runs again after a
+sign-in, so the form doesn't navigate:
 
 ```tsx title="src/routes/login.tsx"
 import { safeReturnTo } from "@monarcode/session-kit";
 import { redirectIfSignedIn } from "@monarcode/session-kit/tanstack-router";
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { SignIn } from "../sign-in.js";
 
@@ -94,25 +95,16 @@ export const Route = createFileRoute("/login")({
   }),
   beforeLoad: ({ context, search }) =>
     redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
-  component: Login,
+  component: SignIn,
 });
-
-function Login() {
-  const router = useRouter();
-  const { redirectTo } = Route.useSearch();
-  return (
-    <SignIn
-      onSignedIn={() => router.navigate({ href: redirectTo, replace: true })}
-    />
-  );
-}
 ```
 
 `safeReturnTo` accepts only same-origin paths and returns `/` for anything
 else, including the sign-in page itself, so a stale `redirectTo` can't loop.
-Pass `{ loginPath }` if sign-in lives somewhere other than `/login`.
+If sign-in isn't at `/login`, pass the same `{ loginPath }` to
+`safeReturnTo`, `redirectIfSignedIn` and `requireSession`.
 `redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
-same way.
+same way. `connectAuth` runs it again after a sign-in.
 
 ## 3. Guard private routes
 
@@ -215,7 +207,7 @@ declare module "@tanstack/react-router" {
 ```
 
 `connectAuth` does for the Router what `AuthProvider` does for a plain React
-app, and one thing more: when the session changes, it runs the guards again,
+app, and one thing more. When the session changes, it runs the guards again,
 so a sign-out in another tab redirects this one.
 
 Registering the Router also types `useAuth` and `useAuthClient` with your
@@ -286,9 +278,8 @@ function Sidebar() {
 }
 ```
 
-`SessionOutlet` finds the session its guard accepted from the nearest route,
-which is still the guarded one anywhere in that route's component. Three
-things follow from where it sits:
+In the guarded route's component, `SessionOutlet` reads the session that
+route's guard accepted. Three things follow from where it sits:
 
 - **It protects only what it renders.** After a sign-out or an account switch,
   the pages are swapped for `pending` and remounted, but the layout around
@@ -304,8 +295,16 @@ things follow from where it sits:
 
 ## TanStack Start in SPA mode
 
-TanStack Start's SPA mode is TanStack Router with a build-time shell, so every
-step on this page applies, with two changes.
+TanStack Start's SPA mode is TanStack Router with a build-time shell. Steps 2
+and 3 apply as they are. Installation, step 1, step 4 and step 5 change:
+
+- Install `@tanstack/react-start` instead of `@tanstack/router-plugin`.
+- In `vite.config.ts`, use Start's plugin, with SPA mode on, instead of the
+  Router plugin:
+  `plugins: [tanstackStart({ spa: { enabled: true } }), react()]`.
+- Give the root route a `shellComponent` that renders `<html>`,
+  `<HeadContent />` and `<Scripts />`, as the example app does. Start renders
+  the app from it, so there is no `src/main.tsx`.
 
 In `src/router.tsx`, create the Router and connect auth inside
 `getRouter()`, which Start calls:
@@ -359,7 +358,9 @@ written with Effect and effetch, in
   `connectAuth` restores the saved session before the first render, so a
   signed-in user never sees the sign-in page.
 - **Stopping.** Call `disconnectAuth` on app teardown or hot-module disposal.
-  It stops background work without signing out.
+  It stops background work without signing out. In Start's SPA mode,
+  `getRouter()` above doesn't keep it, as the Router lasts as long as the
+  page.
 - **A failed refresh is not a redirect.** `requireSession` rethrows it for the
   route's error component, which can offer `auth.retry()`. The user is still
   signed in.

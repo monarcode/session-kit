@@ -13,6 +13,12 @@ Your backend must authenticate every request and authorize private
 operations. Route guards, screen guards and the user's fields in the client
 decide what to show, not what's allowed.
 
+With server rendering, `signIn` seals what it's given. If the browser signs
+in with your backend and sends the tokens and the user, the cookie's user is
+what the browser sent, until a refresh or `updateUser` replaces it. Use it to
+show who is signed in. Let your backend authorize requests with the access
+token, or check the tokens before `signIn`.
+
 ## Where tokens live
 
 Each setup saves the tokens in a different place:
@@ -34,24 +40,24 @@ Each setup saves the tokens in a different place:
 
 ## The session route
 
-With server rendering, the browser's client reads the session, signs out and
-gets the access token through your session route. `sessionHandler` from
-`@monarcode/session-kit/server` answers it, through each framework's
-`sessionRoute`.
+With server rendering, the browser's client signs out and gets the access
+token through your session route, and reads the session there in most
+setups. `sessionHandler` from `@monarcode/session-kit/server` answers it,
+through each framework's `sessionRoute`.
 
 It answers your own site's pages only, so another site can't sign the user
-out or ask for the access token. It checks the `Sec-Fetch-Site` header,
-which browsers send to https and localhost pages since 2023 (Safari 16.4).
-On plain http, such as a phone testing your dev server, a `POST` needs an
-`Origin` header that matches the request's URL. Anything else is refused
-with 403. Every answer has `Cache-Control: no-store`.
+out or ask for the access token.
+[`sessionHandler`](/docs/reference/server#sessionhandler) says how it tells.
 
 Signing in stays your own server code. A route of your own that changes the
 session must refuse other sites too, where the framework doesn't check.
+Refuse a request that has a `Sec-Fetch-Site` header other than `same-origin`.
+On plain http, where browsers don't send that header, refuse a `POST` whose
+`Origin` isn't your site's.
 
 ## Where tokens go
 
-[`authFetch`](/docs/client/requests) and the effetch plugin
+[`createAuthFetch`](/docs/client/requests) and the effetch plugin
 [`sessionBearer`](/docs/effect#6-call-your-api-with-effetch) send the access
 token only to your API's origin:
 

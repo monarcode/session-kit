@@ -1,8 +1,10 @@
 // Holds the secret and the tokens: Start refuses to bundle it for the browser.
 import "@tanstack/react-start/server-only";
+import { createAuthFetch } from "@monarcode/session-kit/http";
 import { createServerAuth } from "@monarcode/session-kit/server";
 import { startAuth } from "@monarcode/session-kit/tanstack-start/server";
 
+import { API } from "./api";
 import { refresh, userSchema } from "./backend";
 
 /**
@@ -37,3 +39,9 @@ export const serverAuth = createServerAuth({
  * object serves every request.
  */
 export const session = startAuth(serverAuth);
+
+/**
+ * Calls DummyJSON with the cookie's access token. After a 401, it renews the
+ * token, saves it in the cookie, and sends a `GET` again.
+ */
+export const apiFetch = createAuthFetch(session, { baseUrl: `${API}/` });

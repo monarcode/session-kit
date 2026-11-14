@@ -152,10 +152,9 @@ then, such as in a deferred loader's promise, would spend the refresh token
 and drop the new one.
 
 `refreshSession` from `@monarcode/session-kit/tanstack-start/server` does
-the refresh, and marks each response private unless it sets its own
-`Cache-Control`. Pass it to Start's own `createMiddleware().server()`. Start
-bundles `src/start.ts` for the browser too, and leaves out only what's
-inside `.server()`, `serverAuth` included:
+the refresh. Pass it to Start's own `createMiddleware().server()`. Start
+bundles `src/start.ts` for the browser too, but strips what's inside
+`.server()`, so `serverAuth` stays on the server:
 
 ```ts title="src/start.ts"
 import { refreshSession } from "@monarcode/session-kit/tanstack-start/server";
@@ -186,11 +185,11 @@ usual, and an error there reaches the route's error component.
 
 An app that defines `createStart` has no CSRF protection for its server
 functions until it adds `createCsrfMiddleware`. Its `filter` keeps the check
-to server-function calls: unfiltered, it also refuses page loads from links
-on other sites and from the address bar. Server routes are left out too.
-`sessionRoute` refuses other sites itself. A server route of your own that
-changes the session must do the same: compare its `Sec-Fetch-Site` header to
-`same-origin`.
+to server-function calls. Unfiltered, it also refuses page loads from links
+on other sites and from the address bar. It leaves out server routes.
+`sessionRoute` refuses other sites itself, and a server route of your own
+that changes the session must too: see
+[The session route](/docs/security#the-session-route).
 
 ## 4. Create the browser client
 
@@ -244,10 +243,10 @@ declare module "@tanstack/react-router" {
 }
 ```
 
-Let TypeScript infer the client's types from its options: with
+Let TypeScript infer the client's types from its options. With
 `createMirrorAuth<User>(…)`, `signIn` would be left out. A `dehydrate` and a
 `hydrate` of your own, such as for a query cache, go to `createRouter` as
-usual: `connectSession` keeps them.
+usual. `connectSession` keeps them.
 
 ## 5. Load the session, then guard routes
 
@@ -319,35 +318,54 @@ export async function signIn(
 In a component, `useAuthClient` from `@monarcode/session-kit/tanstack-router`
 gives you `auth`, from Router context.
 
+Give the sign-in route the `redirectIfSignedIn` guard, as in TanStack Router's
+[Add the sign-in route](/docs/setups/tanstack-router#2-add-the-sign-in-route).
+`connectSession` runs it again after a sign-in, so the form doesn't navigate.
+
 In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, for
 example through a provider's SDK, have `signInFn` take the tokens and the user
-instead and pass them to `session.signIn`. It seals what it's given: until a
-refresh or `updateUser` replaces it, the user in the cookie is what the browser
-sent. Use it to show who is signed in, and let your backend authorize requests
-with the access token, or check the tokens in `signInFn` first.
+instead and pass them to `session.signIn`, and read
+[Your backend decides what's allowed](/docs/security#your-backend-decides-whats-allowed)
+first.
 
 ## Call your API
 
-On the server, get the access token in a server function.
-`credentials.get` refreshes it first when it has expired:
+Call your API with `createAuthFetch` from `@monarcode/session-kit/http`.
+Given `session`, it sends the access token of the request Start is handling,
+refreshed first when it has expired. After a 401, it renews the token, saves
+it in the cookie, and sends a `GET` again. Make it once, in a server-only
+module:
+
+```ts title="src/auth/api-fetch.ts"
+import "@tanstack/react-start/server-only";
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { session } from "./server";
+
+export const apiFetch = createAuthFetch(session, {
+  baseUrl: "https://api.example.com/",
+});
+```
+
+Then call it in a server function. Signed out, it rejects with
+`UNAUTHENTICATED`:
 
 ```ts title="src/orders.ts"
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
-import { session } from "./auth/server";
+import { apiFetch } from "./auth/api-fetch";
 
 export const getOrdersFn = createServerFn().handler(async () => {
-  const credentials = await session.credentials.get();
-  if (!credentials) throw new Error("Sign in first");
-  const response = await fetch("https://api.example.com/orders", {
-    headers: { Authorization: `Bearer ${credentials.accessToken}` },
-  });
+  const response = await apiFetch("orders");
   if (!response.ok) throw new Error(`Orders failed (${response.status})`);
   return z.array(z.object({ id: z.number() })).parse(await response.json());
 });
 ```
+
+With an HTTP client of your own, read the token with
+`session.credentials.get()`.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
@@ -357,8 +375,8 @@ never the refresh token. The example app does this.
 
 ## Things to know
 
-- **Signing out ends the session only with `revoke`.** A copy of the cookie
-  works again ten seconds after sign-out: see
+- **Signing out ends the session only with `revoke`.** Without it, a copy of
+  the cookie made before sign-out still works: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
 - **One session per request.** Each call to `session` reads the request
   Start is handling, and calls during one request share what it read and

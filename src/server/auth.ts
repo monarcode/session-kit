@@ -135,9 +135,10 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 */
 	cookie?: SessionCookieOptions | undefined;
 	/**
-	 * Lets `clientCredentials` give the access token to your own page scripts,
-	 * through a function you expose. The refresh token never leaves the
-	 * server. Without it, `clientCredentials` rejects with `INVALID_OPTIONS`.
+	 * Lets your session route, or a request's `clientCredentials`, give the
+	 * access token to your own page scripts. The refresh token never leaves
+	 * the server. Without it, `clientCredentials` rejects with
+	 * `INVALID_OPTIONS`.
 	 * @default false
 	 */
 	clientCredentials?: boolean | undefined;
@@ -297,8 +298,8 @@ type RequestAuthBase<U, I> = {
 	}>;
 	/**
 	 * The access token for your own page scripts ({@link ClientCredentials}),
-	 * with the `clientCredentials` option. Expose these only through a
-	 * same-origin server function, action or route handler protected against
+	 * with the `clientCredentials` option. Your session route serves these.
+	 * Expose them yourself only to your own site's pages, protected against
 	 * CSRF. Both reject with `INVALID_OPTIONS` without the option.
 	 */
 	clientCredentials: Readonly<{
@@ -339,8 +340,10 @@ type Members<U, I> = Omit<RequestAuthBase<U, I>, typeof requestAuth> & {
  * One request's session: what {@link ServerAuth} does for a request, without
  * its {@link CookieJar}. `startAuth` from
  * `@monarcode/session-kit/tanstack-start/server` and `routerAuth` from
- * `@monarcode/session-kit/react-router/server` give you one. Elsewhere,
- * `serverAuth.forRequest(jar)` does.
+ * `@monarcode/session-kit/react-router/server` give you one, and so do
+ * `readOnly()` and `writable()` from `nextSession` in
+ * `@monarcode/session-kit/next`. Elsewhere, `serverAuth.forRequest(jar)`
+ * does.
  *
  * It's shaped like a client, so code written for one works on the server
  * with it, such as `createAuthFetch` from `@monarcode/session-kit/http`.
@@ -350,9 +353,10 @@ type Members<U, I> = Omit<RequestAuthBase<U, I>, typeof requestAuth> & {
  *
  * Some requests can't set cookies: a Next.js page, or a React Router loader
  * once its response has left the middleware. There, nothing can be saved, so
- * `signIn`, `signOut` and `refreshIfDue` reject with `INVALID_OPTIONS`, and
- * an expired access token rejects with `REFRESH_FAILED`. Refresh first, in
- * middleware or a proxy, with `refreshIfDue`.
+ * `signIn`, `signOut`, `updateUser` and `refreshIfDue` reject with
+ * `INVALID_OPTIONS`, and an expired access token rejects with
+ * `REFRESH_FAILED`. Refresh first, in middleware or a proxy, with
+ * `refreshIfDue`.
  *
  * @example
  * ```ts

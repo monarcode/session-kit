@@ -3,12 +3,9 @@ import {
 	createBrowserRouter,
 	Outlet,
 	RouterProvider,
-	useNavigate,
 	useRouteError,
-	useSearchParams,
 } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
 import { AuthProvider } from "@monarcode/session-kit/react";
 import {
 	redirectIfSignedInLoader,
@@ -39,18 +36,6 @@ function Root() {
 	return <Outlet />;
 }
 
-function Login() {
-	const navigate = useNavigate();
-	const [search] = useSearchParams();
-	return (
-		<LoginForm
-			onSignedIn={() =>
-				navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
-			}
-		/>
-	);
-}
-
 function RouteError() {
 	return <Unavailable error={useRouteError()} />;
 }
@@ -63,7 +48,7 @@ const router = createBrowserRouter([
 			{
 				path: "/login",
 				loader: redirectIfSignedInLoader(auth),
-				element: <Login />,
+				element: <LoginForm />,
 			},
 			{
 				loader: requireSessionLoader(auth),

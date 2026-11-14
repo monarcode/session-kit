@@ -25,7 +25,7 @@ covers what differs on Expo.
 
 - Expo SDK 53 or newer: Expo Router 5 or newer, and React Native 0.79 or
   newer.
-- iOS and Android only. Expo web is not supported: on the web, use a
+- iOS and Android only. Expo web is not supported. On the web, use a
   [web router setup](/docs/installation#pick-your-setup) with `webStorage()`.
 - Expo Go, which includes `expo-secure-store` and `expo-file-system`, or a
   development build with both installed.
@@ -118,7 +118,7 @@ export async function signInWithPassword(username: string, password: string) {
 
 `SessionGate` goes inside `AuthProvider`, around the root navigator. Guard the
 screens with `Stack.Protected`. Signed-in users see the `(app)` group, and
-everyone else sees `login`. Register the client's type here too, so the hooks
+everyone else sees `login`. Register the client's type here, so the hooks
 from `@monarcode/session-kit/react` carry your user:
 
 ```tsx title="app/_layout.tsx"
@@ -200,7 +200,7 @@ import { auth } from "../src/auth";
 export const redirectSystemPath = deepLinkHandler(auth);
 ```
 
-It returns the path unchanged: the link still goes to Expo Router, which
+It returns the path unchanged. The link still goes to Expo Router, which
 shows it right away when the user is signed in. If your `redirectSystemPath`
 does more, such as rewriting old links, call `rememberDeepLink(auth, path)`
 in it instead.
@@ -271,41 +271,77 @@ export default function AppLayout() {
 }
 ```
 
-Its first screen shows the user's name, fetches their email, and signs out:
+Its first screen shows the user's name, links to the profile, and signs out:
 
 ```tsx title="app/(app)/index.tsx"
-import { useEffect, useState } from "react";
 import { Button, Text, View } from "react-native";
 
 import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
-
-import { authFetch } from "../../src/auth";
+import { Link } from "expo-router";
 
 export default function Home() {
   const firstName = useAuth((state) => state.user?.firstName);
   const auth = useAuthClient();
-  const [email, setEmail] = useState("");
-
-  useEffect(function loadEmail() {
-    const controller = new AbortController();
-    authFetch("auth/me", { signal: controller.signal })
-      .then((response) => response.json())
-      .then((body: { email: string }) => setEmail(body.email))
-      .catch(() => {});
-    return function cancel() {
-      controller.abort();
-    };
-  }, []);
-
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
       <Text accessibilityRole="header">Welcome, {firstName}</Text>
-      <Text>{email}</Text>
-      {/* Stack.Protected then shows the sign-in screen. */}
+      <Link href="/profile">Profile</Link>
+      {/* No navigation: Stack.Protected then shows the sign-in screen. */}
       <Button
         title="Sign out"
         onPress={() => void auth.signOut().catch(() => {})}
       />
+    </View>
+  );
+}
+```
+
+The profile screen fetches the user from the API. It's also where a deep
+link such as `myapp://profile` goes:
+
+```tsx title="app/(app)/profile.tsx"
+import { useEffect, useState } from "react";
+import { Text, View } from "react-native";
+
+import { z } from "zod";
+
+import { authFetch, userSchema } from "../../src/auth";
+
+const profileSchema = userSchema.extend({
+  lastName: z.string(),
+  gender: z.string(),
+});
+
+export default function Profile() {
+  const [profile, setProfile] = useState<z.infer<typeof profileSchema>>();
+  const [error, setError] = useState("");
+
+  useEffect(function loadProfile() {
+    const controller = new AbortController();
+    authFetch("auth/me", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error(`Profile failed (${response.status})`);
+        setProfile(profileSchema.parse(await response.json()));
+      })
+      .catch((cause: unknown) => {
+        if (controller.signal.aborted) return;
+        setError(cause instanceof Error ? cause.message : "Could not load");
+      });
+    return function cancelLoad() {
+      controller.abort();
+    };
+  }, []);
+
+  if (error) return <Text accessibilityRole="alert">{error}</Text>;
+  if (!profile) return <Text>Loading…</Text>;
+  return (
+    <View style={{ padding: 24, gap: 8 }}>
+      <Text accessibilityRole="header">
+        {profile.firstName} {profile.lastName}
+      </Text>
+      <Text>{profile.email}</Text>
+      <Text>{profile.gender}</Text>
     </View>
   );
 }
@@ -347,103 +383,66 @@ have the boundary call both.
 
 To check the app:
 
-1. Sign in. The home screen shows your name and email.
+1. Sign in. The home screen shows your name. Open the profile to see your
+   email.
 2. Close the app and open it again. The splash screen stays up until the
    session is restored, then the home screen shows.
 3. Sign out. The sign-in screen shows.
+4. Signed out, open `myapp://profile`. On the iOS Simulator, run
+   `xcrun simctl openurl booted myapp://profile`. In Expo Go, open
+   `exp://<host>:8081/--/profile` instead. Sign in. The profile screen opens.
 
 ## Secure storage
 
-`secureStorage()` saves the session with `expo-secure-store`: in the iOS
-keychain, and encrypted with an Android Keystore key.
+`secureStorage()` saves the session with `expo-secure-store`, in the iOS
+keychain and in Keystore-encrypted storage on Android. The
+[reference](/docs/reference/expo#securestorage) covers how it splits large
+sessions, starts a reinstalled app signed out, and handles data Android can't
+decrypt. Its options are in
+[`SecureStorageOptions`](/docs/reference/expo#securestorageoptions).
 
-| Option               | Default         | Meaning                                                                         |
-| -------------------- | --------------- | ------------------------------------------------------------------------------- |
-| `clearOnReinstall`   | `true`          | Remove a session an earlier install left in the iOS keychain before reading it. |
-| `keychainAccessible` | `WHEN_UNLOCKED` | When iOS lets the app read the session, passed to SecureStore unchanged.        |
+Two things depend on your app:
 
-- **Large sessions.** Two JWTs and a user often exceed SecureStore's
-  2048-byte value limit, so longer values are split across keys. The new value
-  replaces the old one only once every piece is written, so an app killed
-  mid-write keeps the previous session whole.
-- **Synchronous reads.** With a synchronous user schema, the session is
-  restored before the first frame. Writes and removals are asynchronous, and
-  applied in order.
-- **Reinstalls.** iOS keeps keychain items after the app is deleted. A marker
-  file in the app's documents directory, which deleting the app removes, tells
-  a fresh install apart, so by default a reinstalled app starts signed out.
-  `clearOnReinstall: false` restores the old session instead. Android removes
-  the data with the app either way.
-- **Locked keychain.** SecureStore's default `keychainAccessible` is
-  `WHEN_UNLOCKED`. While the keychain can't be read, the session is
-  `unavailable`, never signed out. An app that refreshes in a background task
-  before the device's first unlock needs
-  `keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK`.
-- **Android backups.** Data Android can't decrypt, as after Auto Backup
-  restores it onto another device, reads as signed out and is removed. The
-  `expo-secure-store` config plugin keeps the session out of backups in the
-  first place.
-- **One context.** An app has one JavaScript context, so there are no tabs to
-  follow and no refresh lock: one refresh runs at a time in the client itself.
+- **Background refreshes.** While the iOS keychain can't be read, the session
+  is `unavailable`, never signed out. An app that refreshes in a background
+  task before the device's first unlock needs
+  `secureStorage({ keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK })`.
+- **Android backups.** The `expo-secure-store` config plugin from
+  [Installation](#installation) keeps the session out of Auto Backup.
 
 ## SessionGate
 
-`SessionGate` adds what `Stack.Protected` lacks:
-
-- **While the session is restored**, and until `ready` is `true`, it renders
-  nothing, so the splash screen stays up, then hides the splash screen. Call
-  `SplashScreen.preventAutoHideAsync()` at the top of the root layout, or the
-  splash screen hides before the session is restored. The navigator mounts
-  only then, so a cold-start deep link isn't sent to the sign-in screen
-  first. `ready` defaults to `true`, and holds the splash screen only the
-  first time. Setting it to `false` later changes nothing on screen, but a
-  deep link kept for after sign-in still waits for it.
-- **While access is unavailable** it renders `unavailable({ error, retry })`
-  instead of the navigator.
-- **When the app returns to the foreground** it re-checks the session, because
-  timers don't run while iOS suspends the app. An access token that expired in
-  the background is refreshed then.
-- **While locked** it renders the navigator, so your guards can show an
-  unlock screen. Neither unlocking nor a password sign-in from the lock
-  screen remounts the navigator.
-- **When one account replaces another** without a sign-out between them, it
-  remounts the navigator, so no screen keeps the previous account's component
-  state. The screens that were open stay open, as the URL does on the web. A
-  sign-out already removes the guarded screens.
-
-It takes the nearest `AuthProvider`'s client, or a `client` prop, and mounts
-it, so it also works without `AuthProvider`.
+`SessionGate` adds what `Stack.Protected` lacks. It holds the splash screen
+while the session is restored, shows `unavailable` when access can't be used,
+checks the session again when the app returns to the foreground, and opens
+deep links kept for after sign-in. The
+[reference](/docs/reference/expo#sessiongate) says what it does in each
+state, and [`SessionGateProps`](/docs/reference/expo#sessiongateprops)
+covers `ready` and `unavailable`.
 
 ## Deep links
 
-`rememberDeepLink(auth, path)` keeps the link for later, and `SessionGate`
-decides what to do with it:
+`deepLinkHandler` keeps one link at a time, and `SessionGate` opens it after
+the next sign-in or unlock. The
+[reference](/docs/reference/expo#rememberdeeplink) says when a link is
+opened, dropped or ignored. A link to a screen anyone may see is dropped once
+that screen shows. If the app launched with it, it's dropped at the sign-in
+instead, unopened.
 
-- Signed in already: the link is dropped, and Expo Router opens it as usual.
-- Signed out: once the user signs in, and `ready` is `true`, `SessionGate`
-  opens it with `router.replace`.
-- Locked: the same, once the user unlocks or signs in with a password.
-- A link to a screen anyone may see, such as the sign-in screen, is dropped
-  once it is shown. If the app launched with it, it is dropped at the sign-in
-  instead, unopened, since the screen was already showing.
-
-Links are checked with `safeReturnTo`, so the root, the sign-in path, and
-anything that could leave the app are ignored. Pass
-`deepLinkHandler(auth, { loginPath: "/sign-in" })` if your sign-in screen
-isn't `/login`. A newer link replaces an older one.
+Pass `deepLinkHandler(auth, { loginPath: "/sign-in" })` if your sign-in
+screen isn't `/login`.
 
 `Stack.Protected`'s `redirectTo` only chooses the screen a turned-away link
 goes to, such as `/login`. It doesn't keep the link, so `deepLinkHandler` is
 still what opens it after the sign-in.
 
-There is no `?redirectTo=` parameter on Expo: the link waits in memory, not in
-the URL, and an app restart forgets it.
+There is no `?redirectTo=` parameter on Expo. The link waits in memory, not
+in the URL, and an app restart forgets it.
 
 ## Debugging
 
 Turn on the client's `debug` option to see what Session kit does in Metro's
-logs: restores, refreshes and why they ran, timers, storage operations, state
-changes, and why a session ended:
+logs:
 
 ```ts
 export const auth = createAuth({
@@ -452,17 +451,12 @@ export const auth = createAuth({
 });
 ```
 
-`SessionGate` and deep links report through the same option: why the splash
-screen is held (restoring, or waiting for `ready`), when it hides, and what
-happened to a remembered link. `secureStorage()` adds what only it can see,
-such as removing a session an earlier install left, or discarding data
-Android can't decrypt.
-
-Events leave out tokens, saved values, user fields, deep links' query strings,
-and errors' causes. `debug: { sensitive: true }` puts them in, so keep it to
-development builds. A function, `debug: (event) => ...` or `debug: { log }`,
-receives each event instead of the console, for example to add Sentry
-breadcrumbs.
+`SessionGate` and deep links report through the same option. They log why
+the splash screen is held (restoring, or waiting for `ready`), when it hides,
+and what happened to a remembered link. `secureStorage()` adds what only it
+can see, such as removing a session an earlier install left.
+[Debugging](/docs/configuration/debugging) covers what events leave out, and
+how to send them somewhere other than the console.
 
 ## Locking
 
@@ -709,10 +703,10 @@ re-checks nothing on a return to the foreground, and requests through
 ## Not supported
 
 - **Expo web.** `secureStorage()` and `SessionGate` are for iOS and Android.
-- **`requireAuthentication`.** `secureStorage()` doesn't pass SecureStore's
-  biometric prompt: a session that refreshes on its own can't ask for a face
+- **`requireAuthentication`.** `secureStorage()` doesn't use SecureStore's
+  biometric prompt. A session that refreshes on its own can't ask for a face
   or fingerprint on every read and write. Keep a key behind the prompt
-  instead, and seal the session with it: see [Locking](#locking).
+  instead, and seal the session with it, as [Locking](#locking) shows.
 - **Network status.** Session kit doesn't watch connectivity. When your app
   learns the device is back online, for example from
   `@react-native-community/netinfo`, call `auth.retry()`, or the `retry` that

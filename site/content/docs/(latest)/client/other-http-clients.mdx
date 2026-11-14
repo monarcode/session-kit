@@ -59,8 +59,8 @@ What changes for the client's calls:
   `INVALID_OPTIONS`, and the token isn't sent.
 - **Signed out, every call rejects** with `UNAUTHENTICATED`. If the client
   also calls public endpoints, such as your sign-in, create `authFetch` with
-  [`optional: true`](/docs/client/requests): those requests then go without a
-  token.
+  [`optional: true`](/docs/client/requests). Those requests then go without
+  a token.
 - **A 401 reaches the client after the refresh.** For a GET or HEAD, the
   client sees the answer to the request that was sent again. For a write, it
   sees the 401, as ky's `HTTPError` or axios's `AxiosError`. Retry it where
@@ -144,7 +144,7 @@ Three things `createAuthFetch` does for you are yours to keep here:
 - **Keep the token on one origin.** Give the client one base URL, and don't
   pass it absolute URLs to other hosts.
 - **Don't read the token early.** Ask for credentials in the request hook,
-  never once at startup: a token saved in a variable goes stale at the next
+  never once at startup. A token saved in a variable goes stale at the next
   refresh.
 - **Check the account after slow work.** `auth.isCurrent(credentials)` tells
   whether the session that sent a request is still the signed-in one, before

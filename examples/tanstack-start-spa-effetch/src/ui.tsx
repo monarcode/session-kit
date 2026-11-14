@@ -9,8 +9,12 @@ import { expiresInMins } from "./auth";
 import { profileQuery, signInMutation } from "./endpoints";
 import { apiErrorMessage } from "./error-message";
 
-/** The sign-in form, prefilled with DummyJSON's documented test user. */
-export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
+/**
+ * The sign-in form, prefilled with DummyJSON's documented test user. It
+ * doesn't navigate: a sign-in runs the guards again, and the sign-in page's
+ * guard sends the user on.
+ */
+export function LoginForm() {
 	const auth = useAuthClient();
 	const signIn = useMutation(signInMutation);
 	const [error, setError] = useState("");
@@ -33,7 +37,6 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 		try {
 			// The tokens carry the user, so they are all the client needs.
 			await auth.signIn(exit.value);
-			await onSignedIn();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : "Could not sign in");
 		}
@@ -93,7 +96,9 @@ export function Profile() {
 			<p>Signed in as {user?.username}</p>
 			<button onClick={() => setShowEmail(true)}>Load profile</button>
 			{showEmail && <ProfileEmail />}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

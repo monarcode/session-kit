@@ -4,8 +4,12 @@ import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
 
 import { authFetch, signInWithPassword } from "./auth";
 
-/** The sign-in form, prefilled with DummyJSON's documented test user. */
-export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
+/**
+ * The sign-in form, prefilled with DummyJSON's documented test user. It
+ * doesn't navigate: a sign-in runs the guards again, and the sign-in page's
+ * guard sends the user on.
+ */
+export function LoginForm() {
 	const [error, setError] = useState("");
 	const [pending, setPending] = useState(false);
 
@@ -19,7 +23,6 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 				String(form.get("username")),
 				String(form.get("password")),
 			);
-			await onSignedIn();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : "Could not sign in");
 		} finally {
@@ -91,7 +94,9 @@ export function Profile() {
 				Load profile
 			</button>
 			{fromApi && <p>auth/me: {fromApi}</p>}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

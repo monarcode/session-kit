@@ -107,7 +107,9 @@ export function Profile({ fromServer }: { fromServer: string }) {
 				Load profile in the browser
 			</button>
 			{fromBrowser && <p>auth/me in the browser: {fromBrowser}</p>}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

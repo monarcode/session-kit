@@ -21,19 +21,20 @@ before rendering, so pages never show a "Checking session…" state.
 - **In the browser**, `createMirrorAuth` makes a client that starts from the
   session the server rendered. `AuthProvider`, the hooks, and the TanStack
   Router guards work with it, and sign-ins and sign-outs reach every tab.
-- **Your server code** signs in and out with your backend and calls your API
-  with the access token, through one request's session. It's shaped like a
+- **Your server code** signs in with your backend and calls your API with
+  the access token, through one request's session. It's shaped like a
   client, so code written for one, such as `createAuthFetch` or Effect's
   `Auth`, takes it. To call your API from the browser too, opt in with
-  `clientCredentials`: page scripts then get the access token in memory,
+  `clientCredentials`. Page scripts then get the access token in memory,
   never the refresh token.
 
-The engine is the same `createServerAuth` call in every framework:
+The engine is the same `createServerAuth` call in every framework.
 [Create the server engine](/docs/setups/tanstack-start#1-create-the-server-engine)
 on the TanStack Start page shows one. The browser's client mirrors what the
-server rendered. It reads the session and signs out through a session route,
-which each adapter's `sessionRoute` makes, and signs in through your own
-server code, as in
+server rendered. It signs out and gets the access token through a session
+route, which each adapter's `sessionRoute` makes. It reads the session there
+too, except in TanStack Start, where a server function reads it, as the
+server render needs. It signs in through your own server code, as in
 [Create the browser client](/docs/setups/tanstack-start#4-create-the-browser-client).
 
 ## Frameworks
@@ -41,16 +42,15 @@ server code, as in
 What differs between frameworks is how server code gets a request's
 session, and how the session reaches the browser:
 
-| Framework                             | On the server                                                        | In the browser                                      | Setup                                                               |
-| ------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
-| TanStack Start                        | `startAuth(serverAuth)`, with `refreshSession` in request middleware | `connectSession`, `loadSession`                     | [TanStack Start](/docs/setups/tanstack-start)                       |
-| Next.js 16, App Router                | `nextSession(serverAuth, { cookies, redirect })`                     | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
-| React Router framework mode, with SSR | `routerAuth(serverAuth)`, with `sessionMiddleware` in the root route | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
+| Framework                             | On the server                                                                 | In the browser                                      | Setup                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
+| TanStack Start                        | `startAuth(serverAuth)`, with `refreshSession` in request middleware          | `connectSession`, `loadSession`                     | [TanStack Start](/docs/setups/tanstack-start)                       |
+| Next.js 16, App Router                | `nextSession(serverAuth, { cookies, redirect })`, with its `refresh` in Proxy | `useMirrorAuth` from `@monarcode/session-kit/react` | [Next.js](/docs/setups/next)                                        |
+| React Router framework mode, with SSR | `routerAuth(serverAuth)`, with `sessionMiddleware` in the root route          | `useMirrorAuth` from `@monarcode/session-kit/react` | [React Router with server rendering](/docs/setups/react-router-ssr) |
 
 Locking isn't available with server rendering. For another server, such as
-the Next.js Pages Router, build a `CookieJar` over its cookies and pass it
-to `serverAuth.forRequest(jar)`. Its session route is `sessionHandler`, from
-`@monarcode/session-kit/server`, called with the request and that jar.
+the Next.js Pages Router, see
+[Servers without an adapter](/docs/server-rendering/server-sessions#servers-without-an-adapter).
 
 ## Next steps
 

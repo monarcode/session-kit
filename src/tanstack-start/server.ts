@@ -42,7 +42,7 @@ const jars = new WeakMap<Request, CookieJar>();
  * Start adds its cookies to the response, a redirect's included, but not
  * once it has started streaming a page. A cookie set after that is lost, so
  * refresh before rendering, in request middleware with
- * `serverAuth.refreshIfDue`.
+ * {@link refreshSession}.
  *
  * Throws `INVALID_OPTIONS` outside a request, such as in the browser. Import
  * it only from server code, such as a server function's handler, so Start's
@@ -98,7 +98,8 @@ export function startJar(): CookieJar {
  * Use it in server functions, request middleware, server routes, and
  * `beforeLoad` and loaders while they run on the server. As
  * {@link startJar} explains, Start can't set a cookie once a page streams,
- * so refresh before rendering, in request middleware with `refreshIfDue`.
+ * so refresh before rendering, in request middleware with
+ * {@link refreshSession}.
  *
  * Outside a request, such as in the browser, its methods reject with
  * `INVALID_OPTIONS`, and `isCurrent` and `state` throw it. Import it only

@@ -101,7 +101,9 @@ export const auth = createAuth({
 });
 ```
 
-And render by the session's status:
+Register the client's type once, and the hooks from
+`@monarcode/session-kit/react` carry your user. Then render by the session's
+status:
 
 <!-- from: site/content/docs/(latest)/getting-started.mdx -->
 
