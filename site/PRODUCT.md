@@ -86,8 +86,10 @@ those same checked examples, so the code shown is code that compiles.
 
 ## Brand Commitments
 
-- **Pitch:** "Your backend signs users in. Session kit handles everything
-  after."
+- **Pitch:** "Every sign-in ends in a session. Make yours type-safe and
+  predictable." Under it, the hero says what Session kit is ("Define,
+  validate, and manage application sessions with a schema-driven toolkit
+  built for React and meta frameworks") and which setups it supports.
 - **Wordmark:** "Session Kit" with the brace-and-dot mark,
   `assets/Session-kit-logo.svg`. The site's top bar and the docs sidebar
   show it, with the name in the text colour.

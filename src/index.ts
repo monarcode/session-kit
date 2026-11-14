@@ -1,7 +1,8 @@
 export { createAuth } from "./core/client.js";
 export { AuthError } from "./core/errors.js";
 export { createMirrorAuth } from "./core/mirror.js";
-export { safeReturnTo } from "./core/return-to.js";
+export { loginHref, safeReturnTo } from "./core/return-to.js";
+export { isSignedIn } from "./core/signed-in.js";
 export { fromAccessToken } from "./core/sources.js";
 export { memoryStorage, webStorage } from "./core/storage.js";
 
@@ -12,12 +13,14 @@ export type {
 	AuthDebugType,
 } from "./core/debug.js";
 export type { AuthErrorCode, AuthErrorOptions } from "./core/errors.js";
+export type { SessionOf, UserOf } from "./core/infer.js";
 export type {
 	ClientCredentials,
 	MirrorAuth,
 	MirrorAuthOptions,
 	MirrorCredentials,
 } from "./core/mirror.js";
+export type { Register, RegisteredAuth } from "./core/register.js";
 export type { SafeReturnToOptions } from "./core/return-to.js";
 export type {
 	AccessTokenUser,

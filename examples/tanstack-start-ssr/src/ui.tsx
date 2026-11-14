@@ -1,13 +1,17 @@
 import { useMemo, useState, type FormEvent } from "react";
 
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
 import { useRouter } from "@tanstack/react-router";
 
 import { API } from "./auth/api";
-import { useAuth, useAuthClient } from "./hooks";
 
-/** The sign-in form, prefilled with DummyJSON's documented test user. */
-export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
+/**
+ * The sign-in form, prefilled with DummyJSON's documented test user. It
+ * doesn't navigate: a sign-in runs the guards again, and the sign-in page's
+ * guard sends the user on.
+ */
+export function LoginForm() {
 	const auth = useAuthClient();
 	const [error, setError] = useState("");
 	const [pending, setPending] = useState(false);
@@ -23,13 +27,9 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 				username: String(form.get("username")),
 				password: String(form.get("password")),
 			});
-			await onSignedIn();
 		} catch (cause) {
 			// The server function's own message, such as a wrong password.
-			const reason = cause instanceof Error ? cause.cause : undefined;
-			setError(
-				reason instanceof Error ? reason.message : "Could not sign in",
-			);
+			setError(cause instanceof Error ? cause.message : "Could not sign in");
 		} finally {
 			setPending(false);
 		}
@@ -78,7 +78,10 @@ export function Profile({ fromServer }: { fromServer: string }) {
 	const user = useAuth((state) => state.user);
 	const auth = useAuthClient();
 	// The browser's requests get the access token from the server, in memory.
-	const authFetch = useMemo(() => createAuthFetch(auth, `${API}/`), [auth]);
+	const authFetch = useMemo(
+		() => createAuthFetch(auth, { baseUrl: `${API}/` }),
+		[auth],
+	);
 	const [fromBrowser, setFromBrowser] = useState("");
 
 	async function loadProfile() {
@@ -105,7 +108,9 @@ export function Profile({ fromServer }: { fromServer: string }) {
 				Load profile in the browser
 			</button>
 			{fromBrowser && <p>auth/me in the browser: {fromBrowser}</p>}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

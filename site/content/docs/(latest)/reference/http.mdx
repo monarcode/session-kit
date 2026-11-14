@@ -19,11 +19,11 @@ Creates a `fetch` for your API ([`AuthFetch`](#authfetch)) that sends the curren
 
 ### AuthFetch
 
-The `fetch` that [`createAuthFetch`](#createauthfetch) returns. Call it with a path under your API's base URL, and `init` as you would pass to `fetch`. Use the name to type a prop, a context or a test fake that stands in for it.
+The `fetch` that [`createAuthFetch`](#createauthfetch) returns. Call it with a path under your API's base URL, and `init` as you would pass to `fetch`. It takes a `URL` or a `Request` too, as `fetch` does.
 
 ### AuthFetchClient
 
-The part of an auth client that [`createAuthFetch`](#createauthfetch) uses. A `createAuth` or `createMirrorAuth` client fits, and so does a request's session from `serverAuth.forRequest(jar)`.
+The part of an auth client that [`createAuthFetch`](#createauthfetch) uses. A `createAuth` or `createMirrorAuth` client fits, and so does a request's session on the server (`RequestAuth`).
 
 ### AuthFetchOptions
 

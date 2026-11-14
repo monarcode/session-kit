@@ -15,6 +15,10 @@ Guide: [Server sessions](/docs/server-rendering/server-sessions).
 
 Creates the server side of Session kit ([`ServerAuth`](#serverauth)). It keeps both tokens and the user in an encrypted, `httpOnly` cookie, so page scripts never see the refresh token.
 
+### sessionHandler
+
+Makes the handler for your session route ([`SessionHandler`](#sessionhandler)), which answers `createMirrorAuth`'s `endpoint`. A `GET` reads the session. A `POST` signs out, or gets or renews the access token for page scripts.
+
 ## Types
 
 ### ClientCredentials
@@ -53,11 +57,11 @@ Options for [`ServerAuth`](#serverauth)'s `refreshIfDue`.
 
 ### RequestAuth
 
-One request's session, shaped like a client. Get it from `serverAuth.forRequest(jar)`, and pass it to code that expects a client, such as `createAuthFetch` from `@monarcode/session-kit/http`. Make one per request, never at module level.
+One request's session: what [`ServerAuth`](#serverauth) does for a request, without its [`CookieJar`](#cookiejar). `startAuth` from `@monarcode/session-kit/tanstack-start/server` and `routerAuth` from `@monarcode/session-kit/react-router/server` give you one, and so do `readOnly()` and `writable()` from `nextSession` in `@monarcode/session-kit/next`. Elsewhere, `serverAuth.forRequest(jar)` does.
 
 ### ServerAuth
 
-The server side of Session kit, from [`createServerAuth`](#createserverauth). It keeps the session in an encrypted cookie. Each method takes the request's [`CookieJar`](#cookiejar), and `forRequest(jar)` gives one request's session shaped like a client ([`RequestAuth`](#requestauth)).
+The server side of Session kit, from [`createServerAuth`](#createserverauth). It keeps the session in an encrypted cookie.
 
 ### ServerAuthOptions
 
@@ -77,4 +81,18 @@ The session cookie's attributes: the `cookie` option of [`ServerAuthOptions`](#s
   cwd
   path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
   name="SessionCookieOptions"
+/>
+
+### SessionHandler
+
+Answers the browser client's requests to your session route, for one request and its cookie jar. [`sessionHandler`](#sessionhandler) makes one.
+
+### SessionMiddlewareOptions
+
+Options for the middleware that refreshes before each request: `refreshSession` from `@monarcode/session-kit/tanstack-start/server` and `sessionMiddleware` from `@monarcode/session-kit/react-router/server`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
+  name="SessionMiddlewareOptions"
 />

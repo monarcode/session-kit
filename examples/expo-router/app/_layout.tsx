@@ -1,8 +1,18 @@
+import { isSignedIn } from "@monarcode/session-kit";
 import { SessionGate } from "@monarcode/session-kit/expo";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SplashScreen, Stack } from "expo-router";
 
-import { auth, AuthProvider, useAuth } from "../src/auth";
+import { auth } from "../src/auth";
 import { Unavailable } from "../src/unavailable";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 // Keeps the splash screen up until SessionGate hides it.
 void SplashScreen.preventAutoHideAsync();
@@ -18,12 +28,9 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-	// Check `status`, not `user`: a locked session keeps its user. SessionGate
+	// A locked session isn't signed in, though it keeps its user. SessionGate
 	// handles `initializing` and `unavailable` before this renders.
-	const signedIn = useAuth(
-		(state) =>
-			state.status === "authenticated" || state.status === "refreshing",
-	);
+	const signedIn = useAuth(isSignedIn);
 	return (
 		<Stack screenOptions={{ headerShown: false }}>
 			<Stack.Protected guard={signedIn}>

@@ -15,9 +15,17 @@ Guide: [Next.js](/docs/setups/next).
 
 The `CookieJar` for `cookies()` from `next/headers`, to pass to `serverAuth` from `@monarcode/session-kit/server`.
 
+### nextSession
+
+Gives a Next.js app its session ([`NextSession`](#nextsession)), over [`nextJar`](#nextjar) and [`proxyJar`](#proxyjar). Make it once, beside `serverAuth`, in a module only server code imports.
+
 ### proxyJar
 
 The `CookieJar` for a request in Next's Proxy (`proxy.ts`). It reads `request`'s cookies and sets new ones on `response`. Use it with `serverAuth.refreshIfDue`, so the pages that render the request see a fresh token through [`nextJar`](#nextjar).
+
+### sessionRoute
+
+Makes the Route Handlers for your session route, which answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. Pass `cookies` from `next/headers` ([`NextSessionRouteOptions`](#nextsessionrouteoptions)).
 
 ## Types
 
@@ -33,6 +41,34 @@ Options for [`nextJar`](#nextjar).
   cwd
   path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
   name="NextJarOptions"
+/>
+
+### NextSession
+
+The session in a Next.js app, made by [`nextSession`](#nextsession): reads and guards for Server Components, the request's session for Server Functions and Route Handlers, and the refresh for Proxy.
+
+### NextSessionOptions
+
+Options for [`nextSession`](#nextsession). Pass Next's own `cookies` and `redirect`, as this entry point doesn't import `next`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
+  name="NextSessionOptions"
+/>
+
+### NextSessionRoute
+
+The Route Handlers [`sessionRoute`](#sessionroute) makes, for `GET` and `POST`.
+
+### NextSessionRouteOptions
+
+Options for [`sessionRoute`](#sessionroute). Pass Next's own `cookies`, as this entry point doesn't import `next`.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
+  name="NextSessionRouteOptions"
 />
 
 ### ProxyRequest

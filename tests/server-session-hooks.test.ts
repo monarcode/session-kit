@@ -10,7 +10,7 @@ import {
 } from "@monarcode/session-kit";
 
 import { act, render, settle, useDom } from "./dom.ts";
-import { deferred, user } from "./helpers.ts";
+import { code, deferred, user } from "./helpers.ts";
 
 type User = typeof user;
 
@@ -73,12 +73,12 @@ const mountNext: Mount = async (name, initial, revalidate) => {
 	function Providers() {
 		const [session, setSession] = useState(initial);
 		rendered = setSession;
-		client = react.useMirrorAuth(
-			createClient(name, () => counts.created++, revalidate),
+		client = react.useMirrorAuth({
+			create: createClient(name, () => counts.created++, revalidate),
 			session,
 			// A new function each render, as apps write it.
-			() => counts.refreshes++,
-		);
+			onChange: () => counts.refreshes++,
+		});
 		return null;
 	}
 	await render(h(Providers));
@@ -104,11 +104,11 @@ const mountReactRouter: Mount = async (name, initial, revalidate) => {
 			session: Session<User> | null;
 		};
 		const { revalidate: load } = router.useRevalidator();
-		client = react.useMirrorAuth(
-			createClient(name, () => counts.created++, revalidate),
+		client = react.useMirrorAuth({
+			create: createClient(name, () => counts.created++, revalidate),
 			session,
-			load,
-		);
+			onChange: load,
+		});
 		return null;
 	}
 	const memory = router.createMemoryRouter([
@@ -230,3 +230,22 @@ for (const [framework, mount] of [
 		}
 	});
 }
+
+test("useMirrorAuth throws INVALID_OPTIONS without its options object", () => {
+	const create = (session: Session<User> | null) =>
+		createMirrorAuth({
+			name: "hook-options",
+			session,
+			revalidate: async () => null,
+			signOut: async () => {},
+		});
+	// The form before 0.1.0-rc.0: three arguments.
+	assert.throws(
+		() => react.useMirrorAuth(create as never),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() => react.useMirrorAuth({ create, session: null } as never),
+		code("INVALID_OPTIONS"),
+	);
+});

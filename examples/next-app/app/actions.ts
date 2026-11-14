@@ -1,22 +1,12 @@
 "use server";
 
-// Server Functions the browser calls. Each is a public endpoint: Next checks
-// that calls come from this site, and each one checks its own input.
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
+// The sign-in the browser calls: a public endpoint. Next checks that calls
+// come from this site, and it checks its own input. The session route in
+// `api/session/route.ts` does the rest.
 import { z } from "zod";
 
 import { login } from "../lib/auth/backend";
-import { serverAuth } from "../lib/auth/server";
-
-async function jar() {
-	return nextJar(await cookies(), { writable: true });
-}
-
-/** Who is signed in, from the cookie. Holds no tokens. */
-export async function getSessionAction() {
-	return serverAuth.getSession(await jar());
-}
+import { session } from "../lib/auth/session";
 
 const credentials = z.object({ username: z.string(), password: z.string() });
 
@@ -28,20 +18,11 @@ const credentials = z.object({ username: z.string(), password: z.string() });
 export async function signInAction(input: unknown) {
 	const { username, password } = credentials.parse(input);
 	try {
-		return {
-			session: await serverAuth.signIn(
-				await jar(),
-				await login(username, password),
-			),
-		};
+		const tokens = await login(username, password);
+		return { session: await session.signIn(tokens) };
 	} catch (error) {
 		return {
 			error: error instanceof Error ? error.message : "Could not sign in",
 		};
 	}
-}
-
-/** Clears the cookie. */
-export async function signOutAction() {
-	await serverAuth.signOut(await jar());
 }

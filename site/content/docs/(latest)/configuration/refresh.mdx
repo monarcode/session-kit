@@ -13,11 +13,11 @@ client calls it. For a callback to start from, see `refresh` in
 The callback ends in one of three ways, and the client handles each
 differently:
 
-| The callback   | What the client does                                                                     |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| Returns tokens | Saves them. A refresh token or user it leaves out keeps the current one.                 |
-| Returns `null` | Treats the refresh token as rejected: signs the user out and clears storage.             |
-| Throws         | Treats it as an outage: keeps the session, reports `REFRESH_FAILED`, and waits to retry. |
+| The callback   | What the client does                                                                                                       |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Returns tokens | Saves them. A refresh token or user it leaves out keeps the current one.                                                   |
+| Returns `null` | Treats the refresh token as rejected: signs the user out and clears storage.                                               |
+| Throws         | Treats it as an outage: keeps the session and reports `REFRESH_FAILED`. See [When a refresh fails](#when-a-refresh-fails). |
 
 When the client can tell
 [when the new access token expires](/docs/configuration/expiry), the token

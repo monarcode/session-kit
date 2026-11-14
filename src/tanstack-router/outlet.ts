@@ -7,7 +7,8 @@ import {
 
 import { Outlet, useMatch, useRouter } from "@tanstack/react-router";
 
-import type { AuthStatus } from "../core/types.js";
+import { isSignedIn } from "../core/signed-in.js";
+import type { AuthState } from "../core/types.js";
 import {
 	assertAuthSource,
 	useAuthState,
@@ -59,6 +60,9 @@ export type SessionOutletProps = {
  * UI the route renders around the outlet, such as a sidebar, isn't guarded
  * this way. Read the user there from state, where it may be `null`.
  *
+ * Throws `INVALID_OPTIONS` when neither an `AuthProvider` nor Router context
+ * has a client.
+ *
  * @example
  * ```tsx
  * import {
@@ -80,7 +84,7 @@ export type SessionOutletProps = {
  * 	getParentRoute: () => rootRoute,
  * 	id: "authenticated",
  * 	beforeLoad: ({ context, location }) =>
- * 		requireSession(context.auth, { location, loginPath: "/login" }),
+ * 		requireSession(context.auth, { location }),
  * 	component: () => <SessionOutlet pending={<p>Checking session…</p>} />,
  * });
  * ```
@@ -97,15 +101,9 @@ export function SessionOutlet({
 		auth,
 		"Provide an auth client in Router context or AuthProvider before rendering SessionOutlet",
 	);
-	const signedIn = useAuthState(auth, (state) => {
-		const { status, sessionId } = state as {
-			status: AuthStatus;
-			sessionId: string | null;
-		};
-		// `status`, not `user`, as a locked session still has a user.
-		return status === "authenticated" || status === "refreshing"
-			? sessionId
-			: null;
+	const signedIn = useAuthState(auth, (value) => {
+		const state = value as AuthState<unknown>;
+		return isSignedIn(state) ? state.sessionId : null;
 	});
 	// The nearest match is this route's, whose context holds what its guard
 	// returned.

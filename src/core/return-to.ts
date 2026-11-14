@@ -1,5 +1,8 @@
 import { AuthError } from "./errors.js";
 
+/** The sign-in page's path when a guard or `safeReturnTo` isn't told. */
+export const LOGIN_PATH = "/login";
+
 /**
  * Options for {@link safeReturnTo}.
  *
@@ -15,8 +18,8 @@ import { AuthError } from "./errors.js";
 export type SafeReturnToOptions = {
 	/**
 	 * Your sign-in page's path, or several. A path to it is replaced with
-	 * `"/"`, so signing in never sends the user back to sign in. Matched
-	 * ignoring case, percent-encoding and trailing slashes.
+	 * `"/"`, so signing in never sends the user back to sign in. Matched by
+	 * path, ignoring case, percent-encoding, trailing slashes and any query.
 	 * @default "/login"
 	 */
 	loginPath?: string | readonly string[] | undefined;
@@ -50,9 +53,9 @@ export function sameRoute(a: string, b: string): boolean {
  * leads somewhere in your app, query and fragment included.
  *
  * Anything else returns `"/"`:
- * - another site, including protocol-relative `//host` paths;
- * - a path with backslashes, spaces or control characters;
- * - the sign-in page itself, so a stale `redirectTo` can't loop.
+ * - Another site, including protocol-relative `//host` paths.
+ * - A path with backslashes, spaces or control characters.
+ * - The sign-in page itself, so a stale `redirectTo` can't loop.
  *
  * Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
  *
@@ -72,7 +75,7 @@ export function safeReturnTo(
 	value: unknown,
 	options: SafeReturnToOptions = {},
 ): string {
-	const loginPaths = [options.loginPath ?? "/login"].flat();
+	const loginPaths = [options.loginPath ?? LOGIN_PATH].flat();
 	for (const path of loginPaths) {
 		if (!path.startsWith("/"))
 			throw new AuthError(
@@ -100,7 +103,7 @@ export function safeReturnTo(
 			// Dot segments can resolve to `//host`, which browsers and routers
 			// read as another origin: `/.//evil.com` becomes `//evil.com`.
 			url.pathname.startsWith("//") ||
-			loginPaths.some((path) => routeKey(path) === key)
+			loginPaths.some((path) => routeKey(pathnameOf(path)) === key)
 		)
 			return "/";
 		return url.pathname + url.search + url.hash;
@@ -110,8 +113,28 @@ export function safeReturnTo(
 }
 
 /**
- * The sign-in URL for `loginPath`, with `?redirectTo=` set to `returnTo` so
- * the user comes back after signing in.
+ * Builds the sign-in page's URL, with `?redirectTo=` set to `returnTo`, so
+ * the user comes back after signing in. The guards use it. Use it in a guard
+ * of your own, such as in a route handler.
+ *
+ * `returnTo` is encoded as is. Pass a path you read from the request through
+ * {@link safeReturnTo} first. Throws `INVALID_OPTIONS` when `loginPath`
+ * doesn't start with `/`.
+ *
+ * @example
+ * ```ts
+ * import { loginHref, safeReturnTo } from "@monarcode/session-kit";
+ *
+ * loginHref("/login", "/orders?page=2"); // "/login?redirectTo=%2Forders%3Fpage%3D2"
+ *
+ * export function signInFirst(request: Request) {
+ * 	const url = new URL(request.url);
+ * 	const location = loginHref("/login", safeReturnTo(url.pathname + url.search));
+ * 	return new Response(null, { status: 302, headers: { location } });
+ * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export function loginHref(loginPath: string, returnTo: string): string {
 	if (!loginPath.startsWith("/"))

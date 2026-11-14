@@ -1,0 +1,4 @@
+{
+	"extends": "./tsconfig.bundler.json",
+	"include": ["react-router-middleware.ts"]
+}

@@ -184,8 +184,8 @@ title: Error codes
 description: Every AuthErrorCode, what it means and when you'll see it.
 ---
 
-Every error Session kit throws or reports is an \`AuthError\`. Match on its
-\`code\`; the \`message\` is for people, and may change.
+Every error from Session kit's own logic is an \`AuthError\`. Match on its
+\`code\`. The \`message\` is for people, and may change.
 
 \`\`\`ts title="src/error-codes.ts"
 import { AuthError } from "@monarcode/session-kit";

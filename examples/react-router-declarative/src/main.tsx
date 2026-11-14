@@ -7,27 +7,32 @@ import {
 	useSearchParams,
 } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
+import { isSignedIn, safeReturnTo } from "@monarcode/session-kit";
+import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
 
 import { auth } from "./auth";
-import { AuthProvider, useAuth } from "./hooks";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 /**
  * Doesn't navigate after `signIn`: the state change re-renders this page,
  * which then redirects.
  */
 function Login() {
-	const signedIn = useAuth(
-		(state) =>
-			state.status === "authenticated" || state.status === "refreshing",
-	);
+	const signedIn = useAuth(isSignedIn);
 	const [search] = useSearchParams();
 	if (signedIn)
 		return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;
-	return <LoginForm onSignedIn={() => {}} />;
+	return <LoginForm />;
 }
 
 createRoot(document.getElementById("root")!).render(
@@ -39,7 +44,6 @@ createRoot(document.getElementById("root")!).render(
 					<Route
 						element={
 							<SessionOutlet
-								loginPath="/login"
 								pending={<Pending />}
 								unavailable={({ error }) => (
 									<Unavailable error={error} />

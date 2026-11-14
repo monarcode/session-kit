@@ -1,4 +1,10 @@
 import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
+import {
+	flattenTree,
+	getPageTreeRoots,
+	type Folder,
+	type Item,
+} from "fumadocs-core/page-tree";
 import { llms, loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
 import { applyMdxPreset } from "fumadocs-mdx/config";
@@ -10,8 +16,10 @@ import { onTwoslashError, rehypePageApps, twoslashOptions } from "./page-apps";
 import {
 	codeThemes,
 	docsRoute,
+	getPageMarkdownUrl,
 	LATEST,
 	latestLabel,
+	SITE_URL,
 	versionOfPath,
 } from "./shared";
 
@@ -109,17 +117,55 @@ export const source = loader({
 	],
 });
 
+// Full URLs throughout: these files are read away from the site.
 export const docsLlms = llms(source, {
+	renderUrl: (node: Item) => {
+		const page = source.getNodePage(node);
+		return SITE_URL + (page ? getPageMarkdownUrl(page).url : node.url);
+	},
 	renderPage: async (page) =>
-		`# ${page.data.title} (${page.url})\n\n${await page.data.getText("processed")}`,
+		`# ${page.data.title} (${SITE_URL}${page.url})\n\n${plainMarkdown(await page.data.getText("processed"))}`,
 });
 
 /**
- * The current release line's pages. `llms.txt` lists only these, so readers
- * and LLMs don't get an older line's API beside the current one.
+ * Rewrites what the processed Markdown keeps of the MDX: headings lose their
+ * anchor IDs, a page's cards become a list, and links to the site's pages
+ * get its URL.
  */
+function plainMarkdown(text: string) {
+	return text
+		.replace(/^(#+ .*) \[#[\w-]+\]$/gm, "$1")
+		.replace(/^<\/?Cards>\n?/gm, "")
+		.replace(/<Card\s([\s\S]*?)\/>/g, (_, attributes: string) => {
+			const value = (name: string) =>
+				new RegExp(`${name}="([^"]*)"`).exec(attributes)?.[1] ?? "";
+			const description = value("description");
+			return `- [${value("title")}](${SITE_URL}${value("href")})${description ? `: ${description}` : ""}`;
+		})
+		.replace(/\]\(\/(?!\/)/g, `](${SITE_URL}/`);
+}
+
+/**
+ * The current release line's root folder in the sidebar. `llms.txt` lists
+ * only its pages, so readers and LLMs don't get an older line's API beside
+ * the current one.
+ */
+export function currentFolder(): Folder {
+	const folder = getPageTreeRoots(source.getPageTree()).find(
+		(root): root is Folder => {
+			if (root.type !== "folder") return false;
+			const first = flattenTree([root])[0];
+			const page = first && source.getNodePage(first);
+			return versionOfPath(page?.path ?? "") === LATEST;
+		},
+	);
+	if (!folder) throw new Error("The docs have no current release line");
+	return folder;
+}
+
+/** The current release line's pages, in the sidebar's order. */
 export function currentPages() {
-	return source
-		.getPages()
-		.filter((page) => versionOfPath(page.path) === LATEST);
+	return flattenTree([currentFolder()]).flatMap(
+		(node) => source.getNodePage(node) ?? [],
+	);
 }

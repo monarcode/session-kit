@@ -7,6 +7,9 @@ import { COLUMN, HEADLINE, PRIMARY_ACTION, SECONDARY_ACTION } from "./buffer";
 import { Install } from "./install";
 import { LiveConfig } from "./live-config";
 
+const LEAD =
+	"max-w-[72ch] text-sm leading-relaxed text-pretty text-fd-muted-foreground sm:text-base sm:leading-[1.75] short:leading-relaxed";
+
 /**
  * The opening: the pitch and install row as comments at the column's edge,
  * then the live config, the first numbered lines of the buffer.
@@ -26,7 +29,7 @@ export function Hero({
 						<span aria-hidden="true" className="text-buffer-dim">
 							{"// "}
 						</span>
-						Your backend signs users in.{" "}
+						Every sign-in ends in a session.{" "}
 					</span>
 				</span>
 				<span className="block">
@@ -37,19 +40,28 @@ export function Hero({
 						>
 							{"// "}
 						</span>
-						Session kit handles everything after.
+						{/* "predictable." never wraps onto a line of its own. */}
+						Make yours{" "}
+						<span className="whitespace-nowrap">type-safe</span> and
+						{"\u00a0"}predictable.
 					</span>
 				</span>
 			</h1>
 
 			<div className="mt-3 sm:mt-4 short:mt-3">
-				<p className="max-w-[72ch] text-sm leading-relaxed text-pretty text-fd-muted-foreground sm:text-base sm:leading-[1.75] short:leading-relaxed">
+				<p className={LEAD}>
 					<span aria-hidden="true" className="text-buffer-dim">
 						{"// "}
 					</span>
-					Hand it the tokens your sign-in endpoint returns. It saves,
-					restores and refreshes the session, keeps tabs in step, and
-					guards your routes.
+					Define, validate, and manage application sessions with a
+					schema-driven toolkit built for React and meta frameworks.
+				</p>
+				<p className={`mt-2 ${LEAD}`}>
+					<span aria-hidden="true" className="text-buffer-dim">
+						{"// "}
+					</span>
+					With support for TanStack Router and Start, React Router,
+					Next.js, Expo Router on iOS and Android, and Effect.
 				</p>
 			</div>
 

@@ -1,6 +1,6 @@
 {
 	"name": "@monarcode/session-kit",
-	"version": "0.1.0-alpha.8",
+	"version": "0.1.0-rc.0",
 	"description": "Schema-driven sessions for React, with TanStack Router, React Router, and Expo Router support, and server rendering with TanStack Start, Next.js, and React Router",
 	"keywords": [
 		"auth",
@@ -111,7 +111,7 @@
 		"test": "pnpm run test:sync && pnpm run test:async",
 		"test:sync": "node --conditions=development --test tests/*.test.ts",
 		"test:async": "node --env-file=tests/async-storage.env --conditions=development --test tests/*.test.ts",
-		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && tsc -p tests/tsconfig.json --exactOptionalPropertyTypes false && tsc -p tests/tsconfig.mirror.json && tsc -p tests/tsconfig.mirror.bundler.json && tsc -p tests/tsconfig.mirror.json --exactOptionalPropertyTypes false && pnpm run test:docs",
+		"test:types": "tsc -p tests/tsconfig.tests.json && tsc -p tests/tsconfig.json && tsc -p tests/tsconfig.bundler.json && tsc -p tests/tsconfig.json --exactOptionalPropertyTypes false && tsc -p tests/tsconfig.mirror.json && tsc -p tests/tsconfig.mirror.bundler.json && tsc -p tests/tsconfig.mirror.json --exactOptionalPropertyTypes false && tsc -p tests/tsconfig.unregistered.json && tsc -p tests/tsconfig.unregistered.bundler.json && tsc -p tests/tsconfig.unregistered.json --exactOptionalPropertyTypes false && node scripts/check-middleware-types.mjs && pnpm run test:docs",
 		"test:docs": "node scripts/check-docs.mjs",
 		"docs:reference": "node scripts/reference-docs.mjs && oxfmt --write \"site/content/docs/(latest)/reference\"",
 		"check": "pnpm run lint && pnpm run format:check && pnpm run build && pnpm test && pnpm run test:types",

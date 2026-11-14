@@ -21,7 +21,7 @@ counts it from when it receives the tokens, so a wrong device clock doesn't
 matter. A JWT with `iat` works the same way. Send `expiresAt` only when your
 backend gives no lifetime.
 
-Pass `expiresIn` or `expiresAt`, not both: tokens with both are an
+Pass `expiresIn` or `expiresAt`, not both. Tokens with both are an
 `INVALID_SESSION` error. See [`Tokens`](/docs/reference/core#tokens) for
 each field.
 

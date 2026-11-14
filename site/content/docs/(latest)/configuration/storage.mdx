@@ -19,8 +19,8 @@ implements `AuthStorage`:
 | `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
 | Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
 
-For Expo, `secureStorage()` splits a session larger than SecureStore's
-2048-byte limit across several keys. See
+For Expo, `secureStorage()` splits a session larger than 2048 bytes, which
+some iOS releases refuse to store in one value, across several keys. See
 [Secure storage](/docs/setups/expo#secure-storage) in the Expo guide.
 
 ## Rotating refresh tokens
@@ -33,7 +33,7 @@ spent token and is signed out. With reuse detection on the backend, both are.
 
 ## Write your own store
 
-An `AuthStorage` has three operations: `get`, `set` and `remove`. Each can
+An `AuthStorage` needs three operations: `get`, `set` and `remove`. Each can
 return a promise. `set` also receives `expiresAt`: when the saved session
 stops being valid, `maxAge` after this save, in Unix milliseconds.
 
@@ -71,7 +71,4 @@ issued them. A store that several tabs share also needs `subscribe` and
 The client saves the tokens and the user in one `<name>:auth:session` entry.
 Each save is then a single write, which other tabs see whole. A
 [user read from the access token](/docs/client/users-from-tokens) isn't
-saved: the client reads it from the token again on restore.
-
-Sessions saved by 0.1.0-alpha.3 or earlier aren't restored. Users of those
-versions sign in once after upgrading.
+saved. The client reads it from the token again on restore.

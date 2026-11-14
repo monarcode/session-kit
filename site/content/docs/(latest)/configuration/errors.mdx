@@ -1,31 +1,18 @@
 ---
 title: Errors
-description: The AuthError codes Session kit fails with, how to show them to users, and the storage failures that need your decision.
+description: How Session kit's errors reach your app, how to show them to users, and the storage failures that need your decision.
 ---
 
 Every error from Session kit's own logic is an `AuthError`, whether a method
-throws it, rejects with it, or publishes it in `state.error`. This page lists
-the codes, shows how to turn them into messages for your users, and covers the
-two storage failures you need to handle.
+throws it, rejects with it, or publishes it in `state.error`. This page shows
+how to match on them, how to turn them into messages for your users, and the
+storage failures you need to handle.
 
 ## Error codes
 
-Match on an error's `code`, not its message, which may change in any release:
-
-| Code                     | Meaning                                                                                                                                                              |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UNAUTHENTICATED`        | The operation needs a signed-in session, and there is none.                                                                                                          |
-| `REFRESH_FAILED`         | The refresh callback threw, or there was no callback or refresh token to use. With server rendering, reading the session or the access token from the server failed. |
-| `SESSION_CHANGED`        | A newer sign-in, a sign-out, or another tab replaced the session while this ran.                                                                                     |
-| `USER_VALIDATION_FAILED` | The user couldn't be accepted: the schema rejected it (`issues`), or, with server rendering, signing in on the server failed (`cause`).                              |
-| `INVALID_SESSION`        | Tokens or a saved session that can't be used, such as an expired token at sign-in.                                                                                   |
-| `PERSISTENCE_FAILED`     | Storage couldn't be read, written, or cleared. With server rendering, signing out on the server failed.                                                              |
-| `REVOKE_FAILED`          | The `revoke` callback failed. Published in `state.error`; `signOut()` still resolves.                                                                                |
-| `LOCKED`                 | The session is locked: `unlock()` it first.                                                                                                                          |
-| `UNLOCK_FAILED`          | `locking.open` failed, so the session stays locked.                                                                                                                  |
-| `INVALID_OPTIONS`        | Misuse: an option or argument Session kit can't use.                                                                                                                 |
-
-See [Error codes](/docs/reference/error-codes) for each code in full.
+Match on an error's `code`, not its message, which may change in any
+release. [Error codes](/docs/reference/error-codes) lists every code and what
+it means.
 
 ## Show errors to users
 
@@ -48,14 +35,18 @@ export function errorMessage(error: unknown): string {
 }
 ```
 
-`authFetch` lets the failures of `fetch` and `Request`, such as a network
-error, through unchanged. They aren't `AuthError`s, so `errorMessage` shows
-their own message.
+`authFetch` passes on the failures of `fetch` and `Request`, such as a
+network error, unchanged. With server rendering, the browser client's
+`signIn` passes on what your sign-in function threw, unchanged too. These
+usually aren't `AuthError`s, so `errorMessage` shows their own message.
 
 ## Handle storage failures
 
-Two storage failures need a decision from you:
+Three storage failures need a decision from you:
 
+- **Storage can't be read.** `status` becomes `unavailable`, with the error
+  in `state.error`. The saved session stays as it is, and the next
+  `getSession()` or `retry()` reads it again.
 - **Storage can't be written.** The client ends the session and publishes
   the error. That way, no one stays signed in to a session that would vanish
   on reload.

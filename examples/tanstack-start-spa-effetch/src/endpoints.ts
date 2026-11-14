@@ -1,10 +1,10 @@
 import * as Fetch from "@monarcode/effetch";
 import * as Schema from "effect/Schema";
 
-import { SessionTokens } from "./auth";
+import { SessionTokens } from "./backend";
 import { api } from "./query";
 
-/** Signs in with DummyJSON. Sent without a token: nobody is signed in yet. */
+/** Signs in with DummyJSON. Sent without a token, as it's how one is got. */
 export const signInMutation = api.mutation(
 	Fetch.endpoint("POST /auth/login", {
 		input: Schema.Struct({
@@ -14,6 +14,7 @@ export const signInMutation = api.mutation(
 		}),
 		output: SessionTokens,
 	}),
+	{ plugins: { sessionBearer: false } },
 );
 
 /** The signed-in user's profile, requested with the access token. */

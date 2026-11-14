@@ -92,13 +92,22 @@ declare module "expo-crypto" {
 const START_ROUTE_TREE = `
 import { Route as rootRoute } from "./routes/__root";
 import { Route as authenticatedRouteImport } from "./routes/_authenticated";
+import { Route as apiSessionRouteImport } from "./routes/api/session";
 
 const authenticatedRoute = authenticatedRouteImport.update({
   id: "/_authenticated",
   getParentRoute: () => rootRoute,
 } as any);
+const apiSessionRoute = apiSessionRouteImport.update({
+  id: "/api/session",
+  path: "/api/session",
+  getParentRoute: () => rootRoute,
+} as any);
 
-export const routeTree = rootRoute.addChildren([authenticatedRoute]);
+export const routeTree = rootRoute.addChildren([
+  authenticatedRoute,
+  apiSessionRoute,
+]);
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
@@ -107,6 +116,13 @@ declare module "@tanstack/react-router" {
       path: "";
       fullPath: "/";
       preLoaderRoute: typeof authenticatedRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+    "/api/session": {
+      id: "/api/session";
+      path: "/api/session";
+      fullPath: "/api/session";
+      preLoaderRoute: typeof apiSessionRouteImport;
       parentRoute: typeof rootRoute;
     };
   }
@@ -155,7 +171,6 @@ const GETTING_STARTED = {
 		"src/backend.ts",
 		"src/auth.ts",
 		"src/sign-in.tsx",
-		"src/hooks.ts",
 		"src/app.tsx",
 		"src/api.ts",
 	],
@@ -205,8 +220,8 @@ export const documents = [
 			files: [
 				"src/backend.ts",
 				"src/auth.ts",
-				"src/hooks.ts",
 				"src/sign-in.tsx",
+				"src/api.ts",
 			],
 			// Framework mode keeps its code in `app`.
 			directories: ["src", "app"],
@@ -224,6 +239,8 @@ export const documents = [
 		path: page("setups/tanstack-start"),
 		// Vite resolves like a bundler, and Start apps import without extensions.
 		resolutions: ["Bundler"],
+		// Start depends on the router its server routes need: 1.170 and later.
+		requires: { "@tanstack/react-router": "1.170" },
 		dom: true,
 		fixtures: {
 			"src/routeTree.gen.ts": START_ROUTE_TREE,
@@ -257,6 +274,28 @@ export const documents = [
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: { "src/env.d.ts": SERVER_ENV },
+	},
+	{
+		path: page("server-rendering/hybrid"),
+		// It builds on the TanStack Start guide's app.
+		resolutions: ["Bundler"],
+		requires: { "@tanstack/react-router": "1.170" },
+		dom: true,
+		fixtures: {
+			"src/routeTree.gen.ts": START_ROUTE_TREE,
+			"src/env.d.ts": SERVER_ENV,
+		},
+		shared: {
+			from: page("setups/tanstack-start"),
+			files: [
+				"src/auth/server.ts",
+				"src/routes/api/session.ts",
+				"src/start.ts",
+				"src/router.tsx",
+				"src/routes/__root.tsx",
+				"src/routes/_authenticated.tsx",
+			],
+		},
 	},
 	{
 		path: page("effect"),

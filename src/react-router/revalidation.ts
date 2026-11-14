@@ -16,8 +16,10 @@ import {
  * refresh while the token is still valid.
  *
  * Call it once in the root layout, in data or framework mode. Declarative
- * mode has no loaders. It watches `client`, or the nearest `AuthProvider`'s,
- * and doesn't mount the client itself.
+ * mode has no loaders, and React Router throws when the hook runs there.
+ *
+ * It watches `client`, or the nearest `AuthProvider`'s, and doesn't mount
+ * the client itself. Throws `INVALID_OPTIONS` without either.
  *
  * @example
  * ```tsx

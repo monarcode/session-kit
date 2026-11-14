@@ -1,9 +1,54 @@
 import { useEffect, useRef, useState } from "react";
 
+import { AuthError } from "../core/errors.js";
 import type { MirrorAuth } from "../core/mirror.js";
 import { watchVersion } from "../core/revalidate.js";
 import type { Session } from "../core/types.js";
 import { sameSession } from "../core/user.js";
+
+/**
+ * Options for {@link useMirrorAuth}.
+ *
+ * @example
+ * ```ts
+ * import type { MirrorAuth, Session } from "@monarcode/session-kit";
+ * import type { UseMirrorAuthOptions } from "@monarcode/session-kit/react";
+ *
+ * type User = { id: number; firstName: string };
+ * declare function createAppAuth(
+ * 	session: Session<User> | null,
+ * ): MirrorAuth<User>;
+ * declare function refreshPage(): void;
+ *
+ * export function mirrorOptions(
+ * 	session: Session<User> | null,
+ * ): UseMirrorAuthOptions<User, MirrorAuth<User>> {
+ * 	return { create: createAppAuth, session, onChange: refreshPage };
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export interface UseMirrorAuthOptions<U, C extends MirrorAuth<U>> {
+	/**
+	 * Creates the client from the session the page was rendered with. It's
+	 * called once, on the first render.
+	 */
+	create: (session: Session<U> | null) => C;
+	/**
+	 * The session your server rendered this page with, or `null`. When a new
+	 * server render brings another one, the client takes it.
+	 */
+	session: Session<U> | null;
+	/**
+	 * Called when the session changes in the browser, such as after
+	 * `signOut()` or in another tab. Make it render on the server again, so
+	 * its redirects run: `router.refresh()` in Next.js, or `revalidate` from
+	 * `useRevalidator()` in React Router. It can be a new function on each
+	 * render: the latest one is called.
+	 */
+	onChange: () => unknown;
+}
 
 /**
  * Creates a `createMirrorAuth` client once, from the session the page was
@@ -11,24 +56,18 @@ import { sameSession } from "../core/user.js";
  * component that renders `AuthProvider`.
  *
  * When a new server render brings another session, such as after a server
- * action signs in or out, the client takes it and tells other tabs.
+ * action signs in or out, the client takes it and tells other tabs. When the
+ * session changes in the browser, it calls `onChange`.
  *
- * When the session changes in the browser, such as after `signOut()` or in
- * another tab, it calls `onChange`. Make that render on the server again, so
- * its redirects run: `router.refresh()` in Next.js, or `revalidate` from
- * `useRevalidator()` in React Router.
+ * Throws `INVALID_OPTIONS` without a `create` or an `onChange` function.
  *
  * Creating the client here, rather than at module level, keeps one per
- * request during server rendering. `onChange` can be a new function on each
- * render, as the latest one is called.
+ * request during server rendering.
  *
  * @example
  * ```tsx
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
- * import {
- * 	createAuthHooks,
- * 	useMirrorAuth,
- * } from "@monarcode/session-kit/react";
+ * import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
  * import { Outlet, useLoaderData, useRevalidator } from "react-router";
  *
  * type User = { id: number; firstName: string };
@@ -43,23 +82,35 @@ import { sameSession } from "../core/user.js";
  * 		revalidate: fetchSession,
  * 		signOut: postSignOut,
  * 	});
- * const { AuthProvider } = createAuthHooks<ReturnType<typeof createAppAuth>>();
  *
  * export default function App() {
  * 	const { session } = useLoaderData<typeof loader>();
  * 	const { revalidate } = useRevalidator();
- * 	const auth = useMirrorAuth(createAppAuth, session, revalidate);
+ * 	const auth = useMirrorAuth({
+ * 		create: createAppAuth,
+ * 		session,
+ * 		onChange: revalidate,
+ * 	});
  * 	return <AuthProvider client={auth}><Outlet /></AuthProvider>;
  * }
  * ```
  *
+ * @see {@link UseMirrorAuthOptions} for `create`, `session` and `onChange`
+ *
  * @since 0.1.0
  */
 export function useMirrorAuth<U, C extends MirrorAuth<U>>(
-	create: (session: Session<U> | null) => C,
-	session: Session<U> | null,
-	onChange: () => unknown,
+	options: UseMirrorAuthOptions<U, C>,
 ): C {
+	if (
+		typeof options?.create !== "function" ||
+		typeof options.onChange !== "function"
+	)
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass useMirrorAuth { create, session, onChange }",
+		);
+	const { create, session, onChange } = options;
 	const [auth] = useState(() => create(session));
 	const latestOnChange = useRef(onChange);
 	// The session the server last rendered, which the client follows.

@@ -171,6 +171,45 @@ test("unlock rejects with UNLOCK_FAILED and stays locked when open throws", asyn
 	assert.equal(auth.state.get().status, "authenticated");
 });
 
+test("unlock stays locked when storage can't be read", async () => {
+	const { locking } = cipher();
+	const { auth, disk } = await relaunch({ locking });
+	await restore(auth);
+	const get = disk.storage.get;
+	disk.storage.get = () => {
+		throw new Error("unreadable");
+	};
+	await assert.rejects(auth.unlock(), { code: "PERSISTENCE_FAILED" });
+	assert.equal(auth.state.get().status, "locked");
+	disk.storage.get = get;
+	await auth.unlock();
+	assert.equal(auth.state.get().status, "authenticated");
+});
+
+test("unlock signs out without an error past maxAge", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const { locking } = cipher();
+	const { auth, disk } = await relaunch({ locking, maxAge: 60 });
+	await restore(auth);
+	assert.equal(auth.state.get().status, "locked");
+	t.mock.timers.tick(61_000);
+	assert.equal(await auth.unlock(), null);
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(auth.state.get().error, null);
+	assert.equal(disk.saved(), null);
+	cleanups.pop()!();
+	t.mock.timers.reset();
+});
+
+test("unlock signs out when the saved session is gone", async () => {
+	const { locking } = cipher();
+	const { auth, disk } = await relaunch({ locking });
+	await restore(auth);
+	disk.entries.clear();
+	assert.equal(await auth.unlock(), null);
+	assert.equal(auth.state.get().status, "unauthenticated");
+});
+
 test("tokens sealed for another session sign out with INVALID_SESSION", async () => {
 	const { locking } = cipher();
 	const { auth, disk } = await relaunch({ locking });
@@ -235,19 +274,22 @@ test("signing in from locked replaces the session", async () => {
 });
 
 test("signing out from locked clears the saved session without revoking", async () => {
-	let revokes = 0;
-	const { locking } = cipher();
-	const { auth, disk } = await relaunch({
-		locking,
-		revoke: async () => {
-			revokes++;
-		},
-	});
-	await restore(auth);
-	await auth.signOut();
-	assert.equal(auth.state.get().status, "unauthenticated");
-	assert.equal(disk.saved(), null);
-	assert.equal(revokes, 0);
+	// Restored, or not restored yet.
+	for (const restored of [true, false]) {
+		let revokes = 0;
+		const { locking } = cipher();
+		const { auth, disk } = await relaunch({
+			locking,
+			revoke: async () => {
+				revokes++;
+			},
+		});
+		if (restored) await restore(auth);
+		await auth.signOut();
+		assert.equal(auth.state.get().status, "unauthenticated");
+		assert.equal(disk.saved(), null);
+		assert.equal(revokes, 0);
+	}
 });
 
 test("lock() drops the tokens and stops timers, keeping the saved session", async (t) => {

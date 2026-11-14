@@ -6,6 +6,8 @@ import {
 	type ReactNode,
 } from "react";
 
+import type { Register, RegisteredAuth } from "../core/register.js";
+import type { AuthClient } from "../core/types.js";
 import {
 	assertAuthSource,
 	ClientContext,
@@ -34,17 +36,18 @@ import {
  */
 export type AuthHooksOptions<Client extends AuthSource> = {
 	/**
-	 * Finds the client some other way than `AuthProvider`, such as from router
-	 * context with `useRouterAuth`. It's called as a hook, inside every hook,
-	 * on every render. The hooks then need no `AuthProvider`, so mount the
-	 * client another way, such as with `connectAuth`. Default: reads the
-	 * nearest `AuthProvider`.
+	 * Finds the client some other way than `AuthProvider`, such as from a
+	 * context of your own. It's called as a hook, inside every hook, on every
+	 * render. The hooks then need no `AuthProvider`, so mount the client
+	 * another way. Default: the client of the nearest `AuthProvider` from the
+	 * same `createAuthHooks` call.
 	 */
 	useClient?: (() => Client) | undefined;
 };
 
 /**
- * Props for the `AuthProvider` that {@link createAuthHooks} returns.
+ * Props for {@link AuthProvider}, and for the one that
+ * {@link createAuthHooks} returns.
  *
  * @example
  * ```tsx
@@ -120,10 +123,10 @@ export type AuthHooks<Client extends AuthSource> = {
 };
 
 /**
- * Creates React hooks typed for one auth client. Each call has its own
- * context, so an app with several clients calls it once per client. With
- * TanStack Router, pass `useRouterAuth` as `useClient` instead of
- * rendering `AuthProvider`. See {@link AuthHooksOptions}.
+ * Creates React hooks typed for one auth client. Use it when an app has
+ * several clients: each call has its own context, so call it once per
+ * client. With one client, register it and use {@link useAuth},
+ * {@link useAuthClient} and {@link AuthProvider} instead.
  *
  * @example
  * ```tsx
@@ -144,6 +147,8 @@ export type AuthHooks<Client extends AuthSource> = {
  * 	return <button onClick={signOut}>Sign out {name}</button>;
  * }
  * ```
+ *
+ * @see {@link AuthHooksOptions} to find the client without `AuthProvider`
  *
  * @since 0.1.0
  */
@@ -178,7 +183,10 @@ export function createAuthHooks<Client extends AuthSource>(
 			client,
 			options.useClient
 				? "useClient did not return an auth client"
-				: "Render AuthProvider with an auth client before using auth hooks",
+				: "Render AuthProvider with an auth client before using auth hooks. " +
+						"The hooks read only the AuthProvider they came with. " +
+						"With TanStack Router, use the hooks from " +
+						"@monarcode/session-kit/tanstack-router, which read Router context",
 		);
 		return client;
 	}
@@ -195,4 +203,134 @@ export function createAuthHooks<Client extends AuthSource>(
 		useAuthClient,
 		useAuth: useAuth as AuthHooks<Client>["useAuth"],
 	};
+}
+
+/**
+ * The client `AuthProvider` takes and `useAuthClient` returns: the one you
+ * register in `Register`, from `@monarcode/session-kit`.
+ *
+ * Until you register one, it's any client, with what every client has: its
+ * state, `mount`, `getSession`, `signOut`, `isCurrent` and `credentials`.
+ * Its user is then `unknown`.
+ *
+ * @example
+ * ```ts
+ * import type { ProvidedAuth } from "@monarcode/session-kit/react";
+ *
+ * export function signOutQuietly(client: ProvidedAuth) {
+ * 	return client.signOut().catch(() => {});
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type ProvidedAuth = Register extends { readonly auth: unknown }
+	? RegisteredAuth
+	: Pick<
+			AuthClient<unknown, unknown>,
+			| "state"
+			| "mount"
+			| "getSession"
+			| "signOut"
+			| "isCurrent"
+			| "credentials"
+		>;
+
+// The hooks most apps use. One context, as for any `createAuthHooks` call.
+const provided = createAuthHooks<ProvidedAuth>();
+
+/**
+ * Gives a client to the hooks below it, and mounts it while rendered, which
+ * starts expiry timers and following other tabs. Render it once, around your
+ * app.
+ *
+ * Mounting restores the saved session, before the first paint with
+ * synchronous storage and schemas. On a server, nothing starts, as effects
+ * don't run there.
+ *
+ * Its `client` is typed by the client you register in `Register`, from
+ * `@monarcode/session-kit`. Until you register one, it takes any client
+ * ({@link ProvidedAuth}).
+ *
+ * @example
+ * ```tsx
+ * import type { ReactNode } from "react";
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { AuthProvider } from "@monarcode/session-kit/react";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * export function Providers({ children }: { children: ReactNode }) {
+ * 	return <AuthProvider client={auth}>{children}</AuthProvider>;
+ * }
+ * ```
+ *
+ * @see {@link useAuth} to read the session below it
+ *
+ * @since 0.1.0
+ */
+export function AuthProvider(
+	props: AuthProviderProps<ProvidedAuth>,
+): ReactElement {
+	return provided.AuthProvider(props);
+}
+
+/**
+ * Reads the current auth state, or the part `selector` picks, and re-renders
+ * when it changes. With a selector, it re-renders only when that part
+ * changes.
+ *
+ * The part is compared with `Object.is`. A selector that returns a new
+ * object or array each time re-renders on every change.
+ *
+ * It reads the client of the nearest {@link AuthProvider}, typed by the
+ * client you register in `Register`, from `@monarcode/session-kit`.
+ *
+ * Throws `INVALID_OPTIONS` without an `AuthProvider` above. With TanStack
+ * Router, use the hooks from `@monarcode/session-kit/tanstack-router`
+ * instead: they read Router context, and need no `AuthProvider`.
+ *
+ * @example
+ * ```tsx
+ * import { useAuth } from "@monarcode/session-kit/react";
+ *
+ * export function Greeting() {
+ * 	const status = useAuth((state) => state.status);
+ * 	return <p>{status === "unauthenticated" ? "Signed out" : "Welcome"}</p>;
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export const useAuth: {
+	(): StateOf<ProvidedAuth>;
+	<T>(selector: (state: StateOf<ProvidedAuth>) => T): T;
+} = provided.useAuth;
+
+/**
+ * Returns the client of the nearest {@link AuthProvider}, for actions such
+ * as `signIn` and `signOut`. It's typed by the client you register in
+ * `Register`, from `@monarcode/session-kit` ({@link ProvidedAuth}).
+ *
+ * Throws `INVALID_OPTIONS` without an `AuthProvider` above, as
+ * {@link useAuth} does.
+ *
+ * @example
+ * ```tsx
+ * import { useAuthClient } from "@monarcode/session-kit/react";
+ *
+ * export function SignOutButton() {
+ * 	const auth = useAuthClient();
+ * 	return (
+ * 		<button onClick={() => void auth.signOut().catch(console.error)}>
+ * 			Sign out
+ * 		</button>
+ * 	);
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function useAuthClient(): ProvidedAuth {
+	return provided.useAuthClient();
 }

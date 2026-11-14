@@ -57,5 +57,8 @@ test("return URL treats login path variants and custom login paths as loops", ()
 	])
 		assert.equal(safeReturnTo(value, options), "/");
 	assert.equal(safeReturnTo("/login", options), "/login");
+	// A sign-in page with a query is still that page.
+	for (const value of ["/login", "/Login/?tab=2"])
+		assert.equal(safeReturnTo(value, { loginPath: "/login?tab=1" }), "/");
 	assert.throws(() => safeReturnTo("/", { loginPath: "sign-in" }));
 });

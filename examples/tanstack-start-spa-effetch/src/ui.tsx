@@ -1,16 +1,21 @@
 import { useState, type FormEvent } from "react";
 
 import { useMutation, useQuery } from "@monarcode/effetch-query/react";
+import { useAuthClient } from "@monarcode/session-kit/tanstack-router";
+import { getRouteApi } from "@tanstack/react-router";
 import * as Exit from "effect/Exit";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 
-import { expiresInMins } from "./auth";
+import { expiresInMins } from "./backend";
 import { profileQuery, signInMutation } from "./endpoints";
 import { apiErrorMessage } from "./error-message";
-import { useAuth, useAuthClient } from "./hooks";
 
-/** The sign-in form, prefilled with DummyJSON's documented test user. */
-export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
+/**
+ * The sign-in form, prefilled with DummyJSON's documented test user. It
+ * doesn't navigate: a sign-in runs the guards again, and the sign-in page's
+ * guard sends the user on.
+ */
+export function LoginForm() {
 	const auth = useAuthClient();
 	const signIn = useMutation(signInMutation);
 	const [error, setError] = useState("");
@@ -33,7 +38,6 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => unknown }) {
 		try {
 			// The tokens carry the user, so they are all the client needs.
 			await auth.signIn(exit.value);
-			await onSignedIn();
 		} catch (cause) {
 			setError(cause instanceof Error ? cause.message : "Could not sign in");
 		}
@@ -81,19 +85,26 @@ function ProfileEmail() {
 	});
 }
 
-/** The signed-in user, a request using the access token, and sign-out. */
+const authenticated = getRouteApi("/_authenticated");
+
+/**
+ * The signed-in user, a request using the access token, and sign-out. It
+ * renders under the guarded layout, whose route context holds the session.
+ */
 export function Profile() {
-	const user = useAuth((state) => state.user);
+	const { user } = authenticated.useRouteContext().session;
 	const auth = useAuthClient();
 	const [showEmail, setShowEmail] = useState(false);
 
 	return (
 		<main>
-			<h1>Welcome, {user?.firstName}</h1>
-			<p>Signed in as {user?.username}</p>
+			<h1>Welcome, {user.firstName}</h1>
+			<p>Signed in as {user.username}</p>
 			<button onClick={() => setShowEmail(true)}>Load profile</button>
 			{showEmail && <ProfileEmail />}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

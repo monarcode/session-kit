@@ -15,7 +15,7 @@
 [![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://session-kit.pages.dev/docs/setups/expo)
 [![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](https://session-kit.pages.dev/docs/effect)
 
-**Your backend signs users in. Session kit handles everything after.**
+**Every sign-in ends in a session. Make yours type-safe and predictable.**
 
 Session kit is the session layer for React apps that have their own backend.
 Hand it the tokens your sign-in endpoint returns, and it saves the session,
@@ -33,6 +33,8 @@ server with TanStack Start, Next.js, and React Router, and comes with an
 **Documentation: [session-kit.pages.dev](https://session-kit.pages.dev)**
 
 ## Installation
+
+To install the package, run the following command:
 
 ```sh
 pnpm add @monarcode/session-kit
@@ -55,8 +57,9 @@ supported versions.
 
 ## Quick start
 
-Session kit never calls your backend. Write the requests you'd write anyway:
-one that signs in, and one that exchanges a refresh token for new tokens.
+Session kit never calls your backend. Write the two requests you'd write
+anyway, one that signs in and one that exchanges a refresh token for new
+tokens:
 
 <!-- from: site/content/docs/(latest)/getting-started.mdx -->
 
@@ -101,7 +104,9 @@ export const auth = createAuth({
 });
 ```
 
-And render by the session's status:
+Register the client's type once, and the hooks from
+`@monarcode/session-kit/react` carry your user. Then render by the session's
+status:
 
 <!-- from: site/content/docs/(latest)/getting-started.mdx -->
 
@@ -150,7 +155,7 @@ one step at a time, against a real test backend.
 | React Router, framework mode with SSR           | [React Router with SSR](https://session-kit.pages.dev/docs/setups/react-router-ssr) |
 | Next.js 16, App Router                          | [Next.js](https://session-kit.pages.dev/docs/setups/next)                           |
 | Expo Router on iOS and Android, SDK 53+         | [Expo Router](https://session-kit.pages.dev/docs/setups/expo)                       |
-| Effect and effetch, with any of the above       | [Effect and effetch](https://session-kit.pages.dev/docs/effect)                     |
+| Effect and effetch, with any setup              | [Effect and effetch](https://session-kit.pages.dev/docs/effect)                     |
 
 All but the first have a runnable app in [`examples/`](./examples).
 

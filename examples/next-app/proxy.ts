@@ -1,21 +1,15 @@
-import { proxyJar } from "@monarcode/session-kit/next";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { serverAuth } from "./lib/auth/server";
+import { session } from "./lib/auth/session";
 
 /**
- * Refreshes access that is about to expire before Server Components and
- * Server Functions read it: they can't set cookies while rendering, but
- * Proxy can, and Next passes the new cookie on to them. A failed refresh is
+ * Refreshes access that is about to expire before any page or Server
+ * Function reads it. Server Components can't set cookies while rendering, so
+ * Proxy sets the new one, and Next passes it on to them. A failed refresh is
  * left for the page, which then reads the session as it was.
  */
-export async function proxy(request: NextRequest) {
-	const response = NextResponse.next();
-	// The example's tokens live a minute: refresh in their last 15 seconds.
-	await serverAuth
-		.refreshIfDue(proxyJar(request, response), { within: 15 })
-		.catch(() => {});
-	return response;
+export function proxy(request: NextRequest) {
+	return session.refresh(request, NextResponse.next());
 }
 
 export const config = {

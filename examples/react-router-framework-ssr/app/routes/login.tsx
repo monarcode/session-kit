@@ -1,44 +1,42 @@
 import {
+	data,
 	redirect,
 	useActionData,
 	useNavigation,
 	type ActionFunctionArgs,
-	type LoaderFunctionArgs,
 } from "react-router";
 
 import { safeReturnTo } from "@monarcode/session-kit";
-import { routerJar } from "@monarcode/session-kit/react-router/server";
+import { redirectIfSignedIn } from "@monarcode/session-kit/react-router/server";
 
 import { login } from "../auth/backend";
-import { serverAuth } from "../auth/session.server";
+import { auth, serverAuth } from "../auth/session.server";
 import { LoginForm } from "../ui";
 
-/** Signed in, before or after the form: the server sends the user on. */
-export async function loader({ context, url }: LoaderFunctionArgs) {
-	if (await serverAuth.getSession(routerJar(context)))
-		throw redirect(safeReturnTo(url.searchParams.get("redirectTo")));
-	return null;
-}
+/** Signed in already: the server sends the user on to `redirectTo`. */
+export const loader = redirectIfSignedIn(serverAuth);
 
 /**
  * Signs in with DummyJSON on the server and sets the cookie. React Router
  * checks that the form came from this site. A failure is returned for the
- * form to show.
+ * form to show, with status 400, so React Router skips running the loaders
+ * again.
  */
 export async function action({ request, context, url }: ActionFunctionArgs) {
 	const form = await request.formData();
 	try {
-		await serverAuth.signIn(
-			routerJar(context),
-			await login(
-				String(form.get("username")),
-				String(form.get("password")),
-			),
+		const tokens = await login(
+			String(form.get("username")),
+			String(form.get("password")),
 		);
+		await auth(context).signIn(tokens);
 	} catch (error) {
-		return {
-			error: error instanceof Error ? error.message : "Could not sign in",
-		};
+		return data(
+			{
+				error: error instanceof Error ? error.message : "Could not sign in",
+			},
+			{ status: 400 },
+		);
 	}
 	throw redirect(safeReturnTo(url.searchParams.get("redirectTo")));
 }

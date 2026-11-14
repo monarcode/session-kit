@@ -23,9 +23,13 @@ Guards your sign-in page in `beforeLoad`, so a signed-in user goes straight to `
 
 Guards a route in `beforeLoad`, so only signed-in users get through. They get `{ session }` in route context, typed and never `null`, with no tokens in it.
 
-### useRouterAuth
+### useAuth
 
-Reads the auth client from Router context, where it's `auth`. Pass it to `createAuthHooks` as `useClient`, so the hooks need no `AuthProvider`. Then mount the client with `connectAuth`.
+Reads the current auth state of the client in Router context, or the part `selector` picks, and re-renders when it changes. With a selector, it re-renders only when that part changes.
+
+### useAuthClient
+
+Returns the auth client from Router context, where it's `auth`, for actions such as `signIn` and `signOut`. It needs no `AuthProvider`: `connectAuth` mounts the client.
 
 ## Components
 
@@ -34,6 +38,10 @@ Reads the auth client from Router context, where it's `auth`. Pass it to `create
 Renders the child routes of a route guarded by `requireSession`, but only while the session it accepted is still the signed-in one.
 
 ## Types
+
+### AuthRouter
+
+What [`connectAuth`](#connectauth) needs from a TanStack Router: the client in its context as `auth`, and the methods that run guards again and clear cached route data. A Router made by `createRouter` with `context: { auth }` fits.
 
 ### RedirectIfSignedInOptions
 
@@ -45,10 +53,6 @@ Options for [`redirectIfSignedIn`](#redirectifsignedin).
   name="RedirectIfSignedInOptions"
 />
 
-### RegisteredAuth
-
-The auth client type in your registered Router's context, which [`useRouterAuth`](#userouterauth) returns. It's `never` until the Router is registered.
-
 ### RequireSessionOptions
 
 Options for [`requireSession`](#requiresession).
@@ -58,6 +62,10 @@ Options for [`requireSession`](#requiresession).
   path="node_modules/@monarcode/session-kit/dist/tanstack-router/index.d.ts"
   name="RequireSessionOptions"
 />
+
+### RouterAuth
+
+The auth client type in your registered Router's context, as `auth`, which [`useAuthClient`](#useauthclient) returns. It's `never` until the Router is registered.
 
 ### SessionOutletProps
 

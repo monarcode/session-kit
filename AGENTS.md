@@ -82,7 +82,9 @@ Consumers import from the root and from subpaths:
   (`INVALID_OPTIONS`). Wrap a failure at the operation's boundary with
   `toAuthError(code, message, cause)`, where the operation knows its code;
   a `cause` is whatever failed, and doesn't need to be an `AuthError`.
-  `fetch`'s and `Request`'s own failures pass through `authFetch`.
+  `fetch`'s and `Request`'s own failures pass through `authFetch`, and the
+  app's own sign-in errors pass through a `createMirrorAuth` client's
+  `signIn`.
 - Source imports use explicit `.js` extensions. Because
   `exactOptionalPropertyTypes` is on, write optional props as
   `foo?: T | undefined`. `readonly` is a separate, per-type choice: outputs

@@ -15,12 +15,62 @@ Guide: [React Router with server rendering](/docs/setups/react-router-ssr).
 
 Server middleware that gives each request a `CookieJar`, found with [`routerJar`](#routerjar). It sets the cookies written to the jar on the response, redirects and error responses included.
 
+### redirectIfSignedIn
+
+Makes the loader for your sign-in page, which sends a signed-in user on to the page's `redirectTo` search param, made safe with `safeReturnTo`. Signed-out users see the page. React Router adds the app's `basename` to the redirect.
+
+### requireSession
+
+Makes server middleware that lets only signed-in users through to a route and the routes nested in it ([`SessionGuard`](#sessionguard)). Their loaders and actions get the session from its `session(context)`, never `null`.
+
+### routerAuth
+
+Returns a function that gives the session of the request React Router is handling (`RequestAuth`), with every `serverAuth` method and no cookie jar. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Make it once, at module level.
+
 ### routerJar
 
-The `CookieJar` for the request React Router is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Every call during one request returns the same jar.
+The `CookieJar` for the request React Router is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. [`routerAuth`](#routerauth) passes it for you. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Every call during one request returns the same jar.
+
+### sessionMiddleware
+
+The root route's server middleware, which gives each request a cookie jar and refreshes the session while the response can still set the cookie. Export it as the root route's `middleware`, or spread it first into a list of your own.
+
+### sessionRoute
+
+Makes the loader and action of your session route, a resource route that answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. It needs [`sessionMiddleware`](#sessionmiddleware) in the root route.
 
 ## Types
 
+### RouterArgs
+
+The arguments React Router passes to server middleware and loaders, as far as the middleware and guards here read them. It's typed by its shape, like [`RouterContextLike`](#routercontextlike).
+
 ### RouterContextLike
 
-The `context` React Router passes to server middleware, loaders and actions in framework mode: a `RouterContextProvider`, one per request. [`routerJar`](#routerjar) and [`cookieJarMiddleware`](#cookiejarmiddleware) find the request's jar by it. It's typed by its shape, so this entry point doesn't depend on React Router's types.
+The `context` React Router passes to server middleware, loaders and actions in framework mode: a `RouterContextProvider`, one per request. [`routerAuth`](#routerauth) and [`cookieJarMiddleware`](#cookiejarmiddleware) find the request by it. It's typed by its shape, so this entry point doesn't depend on React Router's types.
+
+### RouterLoader
+
+A loader typed by its shape, such as [`redirectIfSignedIn`](#redirectifsignedin)'s.
+
+### RouterMiddleware
+
+Server middleware for a route's `middleware`, typed by its shape.
+
+### RouterSessionRoute
+
+The loader and action [`sessionRoute`](#sessionroute) makes, for a resource route.
+
+### SessionGuard
+
+Server middleware that lets only signed-in users through, made by [`requireSession`](#requiresession). Call `session(context)` in the loaders and actions it guards for the session, which is never `null` there.
+
+### SessionGuardOptions
+
+Options for [`requireSession`](#requiresession).
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/server.d.ts"
+  name="SessionGuardOptions"
+/>
