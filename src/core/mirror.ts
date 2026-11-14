@@ -1,6 +1,7 @@
 import { atom } from "nanostores";
 
 import { createDebugger, registerDebugger, type AuthDebug } from "./debug.js";
+import { endpointTransport, isEndpoint } from "./endpoint.js";
 import { AuthError, sessionChanged, toAuthError } from "./errors.js";
 import { isAuthName } from "./persistence.js";
 import { countMounts, inBackground, stateView } from "./store.js";
@@ -78,9 +79,11 @@ export type MirrorCredentials = {
 };
 
 /**
- * Options for {@link createMirrorAuth}. Each function is your own server
- * function, action, or `fetch` to a route handler, which calls `serverAuth`
- * from `@monarcode/session-kit/server`.
+ * Options for {@link createMirrorAuth}. The client talks to your server
+ * through `endpoint`, your session route, or through functions of your own,
+ * such as server functions, which call `serverAuth` from
+ * `@monarcode/session-kit/server`. Pass `endpoint`, or `revalidate` and
+ * `signOut`.
  *
  * @example
  * ```ts
@@ -88,14 +91,11 @@ export type MirrorCredentials = {
  *
  * type User = { id: number; firstName: string };
  * declare const session: Session<User> | null;
- * declare function getSessionFn(): Promise<Session<User> | null>;
- * declare function signOutFn(): Promise<void>;
  *
  * export const options: MirrorAuthOptions<User> = {
  * 	name: "app",
  * 	session,
- * 	revalidate: () => getSessionFn(),
- * 	signOut: () => signOutFn(),
+ * 	endpoint: "/api/session",
  * };
  * ```
  *
@@ -113,10 +113,28 @@ export type MirrorAuthOptions<U, In = never> = {
 	 * `null`. The client starts from it, so there's no loading state.
 	 */
 	session: Session<U> | null;
-	/** Reads the session on the server again, with `serverAuth.getSession`. */
-	revalidate: () => Promise<Session<U> | null>;
-	/** Signs out on the server, with `serverAuth.signOut`. */
-	signOut: () => Promise<unknown>;
+	/**
+	 * The path of your session route on this site, such as `"/api/session"`,
+	 * which answers with `sessionRoute` or `sessionHandler` from the server
+	 * entry points. The client reads the session, signs out and gets the
+	 * access token through it. `revalidate`, `signOut` and `credentials` win
+	 * when you pass them too.
+	 *
+	 * It's the full path, with your app's base path, such as React Router's
+	 * `basename` or Next's `basePath`. It's called from the browser only: on
+	 * the server, a call through it rejects with `INVALID_OPTIONS`.
+	 */
+	endpoint?: string | undefined;
+	/**
+	 * Reads the session on the server again, with `serverAuth.getSession`.
+	 * Default: a `GET` to `endpoint`.
+	 */
+	revalidate?: (() => Promise<Session<U> | null>) | undefined;
+	/**
+	 * Signs out on the server, with `serverAuth.signOut`. Default: through
+	 * `endpoint`.
+	 */
+	signOut?: (() => Promise<unknown>) | undefined;
 	/**
 	 * Signs in on the server with `input`, and resolves the new session. Use
 	 * `serverAuth.signIn`, or your own sign-in that ends with it. Without this
@@ -127,13 +145,25 @@ export type MirrorAuthOptions<U, In = never> = {
 	/**
 	 * Gets the access token from your server ({@link MirrorCredentials}), so
 	 * page scripts can call your API with `createAuthFetch` or `sessionBearer`.
-	 * Leave it out if they never do. `credentials.get()` and
-	 * `credentials.renew()` then reject with `INVALID_OPTIONS`.
+	 * Default: through `endpoint`, which serves it when `createServerAuth`
+	 * has `clientCredentials`. Without either, `credentials.get()` and
+	 * `credentials.renew()` reject with `INVALID_OPTIONS`.
 	 */
 	credentials?: MirrorCredentials | undefined;
 	/** Logs what the client does, like `createAuth`'s `debug`. */
 	debug?: AuthDebug | undefined;
-};
+} & (
+	| {
+			/** Required unless you pass `revalidate` and `signOut`. */
+			endpoint: string;
+	  }
+	| {
+			/** Required without `endpoint`. */
+			revalidate: () => Promise<Session<U> | null>;
+			/** Required without `endpoint`. */
+			signOut: () => Promise<unknown>;
+	  }
+);
 
 type MirrorAuthBase<U> = {
 	/**
@@ -156,9 +186,10 @@ type MirrorAuthBase<U> = {
 	 */
 	getSession: () => Promise<Session<U> | null>;
 	/**
-	 * Asks your server for the session again, with `revalidate`, and resolves
-	 * it. If that fails, it rejects with `REFRESH_FAILED` and keeps the
-	 * current session.
+	 * Asks your server for the session again, with `revalidate` or
+	 * `endpoint`, and resolves it. If that fails, it rejects and keeps the
+	 * current session. The code is `REFRESH_FAILED`, or the session route's
+	 * own code, such as `INVALID_OPTIONS` for a request it refused.
 	 */
 	retry: () => Promise<Session<U> | null>;
 	/**
@@ -174,8 +205,8 @@ type MirrorAuthBase<U> = {
 	isCurrent: (session: { sessionId: string }) => boolean;
 	/**
 	 * Signs out on your server, then in this tab and the others. If the
-	 * server's sign-out fails, it rejects with `PERSISTENCE_FAILED` and keeps
-	 * the session.
+	 * server's sign-out fails, it rejects and keeps the session. The code is
+	 * `PERSISTENCE_FAILED`, or the session route's own code.
 	 */
 	signOut: () => Promise<void>;
 	/**
@@ -195,20 +226,23 @@ type MirrorAuthBase<U> = {
 	mount: () => () => void;
 	/**
 	 * The access token ({@link Credentials}), for `createAuthFetch` and
-	 * `sessionBearer`. Needs the `credentials` option. The token is kept in
+	 * `sessionBearer`. Needs `endpoint` or the `credentials` option, or
+	 * `get` and `renew` reject with `INVALID_OPTIONS`. The token is kept in
 	 * memory only, and fetched again shortly before it expires.
 	 */
 	credentials: {
 		/**
 		 * Resolves the current access token, or `null` when signed out. Calls
 		 * that overlap share one request. Rejects with `REFRESH_FAILED` when
-		 * your server's function fails.
+		 * your server fails, or with the session route's own code, such as
+		 * `INVALID_OPTIONS` without `clientCredentials`.
 		 */
 		get: () => Promise<Credentials | null>;
 		/**
 		 * Asks your server for a new access token after your API rejected
 		 * `credentials`. Calls that overlap share one request. Resolves `null`
-		 * when the server has signed out.
+		 * when the server has signed out. Rejects with `SESSION_CHANGED` when
+		 * the server holds another account, and follows it.
 		 */
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
 		/**
@@ -360,15 +394,28 @@ function stateOf<U>(
 export function createMirrorAuth<U, In = never>(
 	options: MirrorAuthOptions<U, In>,
 ): MirrorAuth<U, In> {
+	if (options.endpoint !== undefined && !isEndpoint(options.endpoint))
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			`endpoint must be a path on this site, starting with "/": ${String(options.endpoint)}`,
+		);
+	const endpoint =
+		options.endpoint === undefined
+			? undefined
+			: endpointTransport(options.endpoint);
+	const readServer = options.revalidate ?? endpoint?.revalidate;
+	const endServer = options.signOut ?? endpoint?.signOut;
+	const credentialsSource = options.credentials ?? endpoint?.credentials;
 	if (
 		!isAuthName(options.name) ||
-		typeof options.revalidate !== "function" ||
-		typeof options.signOut !== "function"
+		typeof readServer !== "function" ||
+		typeof endServer !== "function"
 	)
 		throw new AuthError(
 			"INVALID_OPTIONS",
-			"Pass a simple name, and revalidate and signOut functions",
+			"Pass a simple name, and an endpoint or revalidate and signOut functions",
 		);
+	const server = { revalidate: readServer, signOut: endServer };
 	const debug = createDebugger(options.name, options.debug);
 	let session = readSession<U>(options.session);
 	const store = atom<AuthState<U>>(stateOf(session, null, 0));
@@ -466,7 +513,7 @@ export function createMirrorAuth<U, In = never>(
 		debug.log("sync", `revalidating (${reason})`);
 		const promise = (async () => {
 			try {
-				const next = readSession<U>(await options.revalidate());
+				const next = readSession<U>(await server.revalidate());
 				checkedAt = Date.now();
 				answered = true;
 				if (generation === started) follow(next);
@@ -495,7 +542,7 @@ export function createMirrorAuth<U, In = never>(
 	async function signOut() {
 		const ending = session?.sessionId ?? null;
 		try {
-			await options.signOut();
+			await server.signOut();
 		} catch (cause) {
 			const error = toAuthError(
 				"PERSISTENCE_FAILED",
@@ -511,12 +558,12 @@ export function createMirrorAuth<U, In = never>(
 	}
 
 	function requireCredentials(): MirrorCredentials {
-		if (!options.credentials)
+		if (!credentialsSource)
 			throw new AuthError(
 				"INVALID_OPTIONS",
-				"Pass credentials to createMirrorAuth to read the access token in the browser",
+				"Pass endpoint or credentials to createMirrorAuth to read the access token in the browser",
 			);
-		return options.credentials;
+		return credentialsSource;
 	}
 
 	/** Asks the server for credentials for session `sessionId`. */
@@ -530,6 +577,15 @@ export function createMirrorAuth<U, In = never>(
 			try {
 				value = await ask();
 			} catch (cause) {
+				if (
+					cause instanceof AuthError &&
+					cause.code === "SESSION_CHANGED" &&
+					session?.sessionId === sessionId
+				) {
+					// The server holds another session: follow it.
+					cached = undefined;
+					inBackground(revalidate("another session on the server"));
+				}
 				throw toAuthError(
 					"REFRESH_FAILED",
 					"Could not get the access token from the server",

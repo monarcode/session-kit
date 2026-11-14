@@ -123,15 +123,14 @@ revocation.
 
 Server code calls your API with a request's `credentials`. To call it from
 the browser too, with `createAuthFetch` or effetch's `sessionBearer`, opt in
-with `clientCredentials: true` and expose a request's `clientCredentials.get`
-and `.renew` through your own same-origin endpoint, passed to
-`createMirrorAuth` as `credentials`. Page scripts then hold the access token in memory, never the
-refresh token, so a script injected into the page can use the API while the
-page is open, as it could with any token the browser holds.
+with `clientCredentials: true`. The session route then serves the access
+token, and the browser's client gets it there. Page scripts hold the access
+token in memory, never the refresh token, so a script injected into the page
+can use the API while the page is open, as it could with any token the
+browser holds.
 
-Accept requests to that endpoint from your own site only. Where the framework
-doesn't check, compare `Sec-Fetch-Site` to `same-origin`: browsers send it
-since 2023 (Safari 16.4), and older ones are refused.
+The session route answers your own site's pages only: see
+[The session route](/docs/security#the-session-route).
 
 ## Limits
 

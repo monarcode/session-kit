@@ -159,7 +159,7 @@ The browser client that [`createMirrorAuth`](#createmirrorauth) returns. It mirr
 
 ### MirrorAuthOptions
 
-Options for [`createMirrorAuth`](#createmirrorauth). Each function is your own server function, action, or `fetch` to a route handler, which calls `serverAuth` from `@monarcode/session-kit/server`.
+Options for [`createMirrorAuth`](#createmirrorauth). The client talks to your server through `endpoint`, your session route, or through functions of your own, such as server functions, which call `serverAuth` from `@monarcode/session-kit/server`. Pass `endpoint`, or `revalidate` and `signOut`.
 
 <auto-type-table
   cwd

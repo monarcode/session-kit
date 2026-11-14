@@ -8,7 +8,11 @@ import { session } from "./server";
 // Each handler runs on the server; Start's compiler replaces it with a fetch
 // in the browser, and leaves `session` out of that bundle.
 
-/** Who is signed in, from the cookie. Holds no tokens. */
+/**
+ * Who is signed in, from the cookie. Holds no tokens. The client's
+ * `revalidate`: `loadSession` calls it while Start renders on the server,
+ * where the client can't call the session route.
+ */
 export const getSessionFn = createServerFn().handler(() =>
 	session.getSession(),
 );
@@ -19,21 +23,6 @@ export const signInFn = createServerFn({ method: "POST" })
 	.handler(async ({ data }) =>
 		session.signIn(await login(data.username, data.password)),
 	);
-
-/** Clears the cookie. */
-export const signOutFn = createServerFn({ method: "POST" }).handler(() =>
-	session.signOut(),
-);
-
-/** The access token for the browser's own requests, never the refresh token. */
-export const getCredentialsFn = createServerFn({ method: "POST" }).handler(() =>
-	session.clientCredentials.get(),
-);
-
-/** New access after DummyJSON rejected the browser's token. */
-export const renewCredentialsFn = createServerFn({ method: "POST" })
-	.validator(z.object({ sessionId: z.string(), accessToken: z.string() }))
-	.handler(({ data }) => session.clientCredentials.renew(data));
 
 /** Calls DummyJSON's `auth/me` from the server, with the cookie's token. */
 export const getProfileFn = createServerFn().handler(async () => {

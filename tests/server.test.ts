@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { fromAccessToken } from "@monarcode/session-kit";
+import { AuthError, fromAccessToken } from "@monarcode/session-kit";
 import {
 	createServerAuth,
+	sessionHandler,
 	type CookieJar,
 	type CookieOptions,
 	type ServerAuthOptions,
@@ -891,4 +892,145 @@ test("a writable view with expired access goes straight to refreshing, never una
 		["refreshing", version],
 		["authenticated", version],
 	]);
+});
+
+/** A request to the session route, from this site unless `site` says. */
+function toRoute(
+	method = "GET",
+	body?: unknown,
+	site: string | null = "same-origin",
+	origin?: string,
+) {
+	const headers = new Headers();
+	if (site) headers.set("Sec-Fetch-Site", site);
+	if (origin) headers.set("Origin", origin);
+	if (body !== undefined) headers.set("Content-Type", "application/json");
+	return new Request("https://app.test/api/session", {
+		method,
+		headers,
+		...(body !== undefined && { body: JSON.stringify(body) }),
+	});
+}
+
+const answerOf = async (response: Response) =>
+	(await response.json()) as Record<string, any>;
+
+test("sessionHandler reads the session, gives and renews the token, and signs out", async () => {
+	const app = server({
+		clientCredentials: true,
+		refresh: async () => ({ accessToken: "access-2", expiresIn: 900 }),
+	});
+	const handle = sessionHandler(app);
+	const cookies = browser();
+	await app.signIn(cookies.request(), tokens());
+
+	const read = await handle(toRoute(), cookies.request());
+	assert.equal(read.status, 200);
+	assert.equal(read.headers.get("Cache-Control"), "no-store");
+	const session = await answerOf(read);
+	assert.equal(session.v, 1);
+	assert.deepEqual(session.session.user, user);
+
+	const given = await answerOf(
+		await handle(
+			toRoute("POST", { v: 1, action: "credentials" }),
+			cookies.request(),
+		),
+	);
+	assert.equal(given.credentials.accessToken, "access-1");
+	const renewed = await answerOf(
+		await handle(
+			toRoute("POST", {
+				v: 1,
+				action: "renew",
+				rejected: {
+					sessionId: session.session.sessionId,
+					accessToken: "access-1",
+				},
+			}),
+			cookies.request(),
+		),
+	);
+	assert.equal(renewed.credentials.accessToken, "access-2");
+
+	const signedOut = await handle(
+		toRoute("POST", { v: 1, action: "signOut" }),
+		cookies.request(),
+	);
+	assert.deepEqual(await answerOf(signedOut), { v: 1, session: null });
+	assert.equal(await app.getSession(cookies.request()), null);
+});
+
+test("sessionHandler refuses other sites, other versions and requests it can't read", async () => {
+	const handle = sessionHandler(server());
+	const cookies = browser();
+	const refused = async (request: Request, status: number) => {
+		const response = await handle(request, cookies.request());
+		assert.equal(response.status, status);
+		assert.equal(response.headers.get("Cache-Control"), "no-store");
+		const { error } = await answerOf(response);
+		assert.equal(error.code, "INVALID_OPTIONS");
+		return { response, error };
+	};
+	for (const site of ["cross-site", "same-site", "none", null])
+		await refused(toRoute("POST", { v: 1, action: "signOut" }, site), 403);
+	await refused(toRoute("GET", undefined, "cross-site"), 403);
+	// On plain http, browsers send no Sec-Fetch-Site: a POST needs its Origin.
+	await refused(
+		toRoute("POST", { v: 1, action: "signOut" }, null, "https://evil.test"),
+		403,
+	);
+	const reload = await refused(
+		toRoute("POST", { v: 2, action: "signOut" }),
+		400,
+	);
+	assert.match(reload.error.message, /reload/);
+	await refused(toRoute("POST", { v: 1, action: "lock" }), 400);
+	await refused(toRoute("POST", "not json"), 400);
+	await refused(
+		toRoute("POST", { v: 1, action: "renew", rejected: { sessionId: 1 } }),
+		400,
+	);
+	const put = await refused(toRoute("PUT", { v: 1 }), 405);
+	assert.equal(put.response.headers.get("Allow"), "GET, POST");
+	// Without clientCredentials, the token stays on the server.
+	await refused(toRoute("POST", { v: 1, action: "credentials" }), 400);
+});
+
+test("sessionHandler answers this site's pages on plain http by their Origin", async () => {
+	const handle = sessionHandler(server());
+	const cookies = browser();
+	const read = await handle(
+		toRoute("GET", undefined, null),
+		cookies.request(),
+	);
+	assert.deepEqual(await answerOf(read), { v: 1, session: null });
+	const signedOut = await handle(
+		toRoute("POST", { v: 1, action: "signOut" }, null, "https://app.test"),
+		cookies.request(),
+	);
+	assert.equal(signedOut.status, 200);
+});
+
+test("sessionHandler answers an AuthError with its code, and throws anything else", async () => {
+	const failing = (error: unknown) =>
+		sessionHandler({
+			forRequest: () => ({
+				getSession: async () => {
+					throw error;
+				},
+			}),
+		} as never);
+	const response = await failing(
+		new AuthError("REFRESH_FAILED", "Refresh failed"),
+	)(toRoute(), browser().request());
+	assert.equal(response.status, 500);
+	assert.deepEqual(await answerOf(response), {
+		v: 1,
+		error: { code: "REFRESH_FAILED", message: "Refresh failed" },
+	});
+	await assert.rejects(
+		failing(new TypeError("a bug"))(toRoute(), browser().request()),
+		TypeError,
+	);
 });

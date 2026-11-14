@@ -1,19 +1,13 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { sessionRoute } from "@monarcode/session-kit/react-router/server";
 
-import { auth } from "../auth/session.server";
-
-/** Who is signed in, from the cookie, for the client's `revalidate`. */
-export async function loader({ context }: LoaderFunctionArgs) {
-	return Response.json(await auth(context).getSession());
-}
+import { serverAuth } from "../auth/session.server";
 
 /**
- * Signs out, for the client's `signOut`. React Router checks the origin of
- * route actions, but not of resource routes': accept this site only.
+ * The session route the browser's client calls: it reads the session, signs
+ * out, and gets the access token. It answers this site's own pages only.
  */
-export async function action({ request, context }: ActionFunctionArgs) {
-	if (request.headers.get("sec-fetch-site") !== "same-origin")
-		return new Response(null, { status: 403 });
-	await auth(context).signOut();
-	return Response.json(null);
-}
+const route = sessionRoute(serverAuth);
+
+// One by one: React Router's build can't remove a destructured export.
+export const loader = route.loader;
+export const action = route.action;

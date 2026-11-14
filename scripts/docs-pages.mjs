@@ -92,13 +92,22 @@ declare module "expo-crypto" {
 const START_ROUTE_TREE = `
 import { Route as rootRoute } from "./routes/__root";
 import { Route as authenticatedRouteImport } from "./routes/_authenticated";
+import { Route as apiSessionRouteImport } from "./routes/api/session";
 
 const authenticatedRoute = authenticatedRouteImport.update({
   id: "/_authenticated",
   getParentRoute: () => rootRoute,
 } as any);
+const apiSessionRoute = apiSessionRouteImport.update({
+  id: "/api/session",
+  path: "/api/session",
+  getParentRoute: () => rootRoute,
+} as any);
 
-export const routeTree = rootRoute.addChildren([authenticatedRoute]);
+export const routeTree = rootRoute.addChildren([
+  authenticatedRoute,
+  apiSessionRoute,
+]);
 
 declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
@@ -107,6 +116,13 @@ declare module "@tanstack/react-router" {
       path: "";
       fullPath: "/";
       preLoaderRoute: typeof authenticatedRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+    "/api/session": {
+      id: "/api/session";
+      path: "/api/session";
+      fullPath: "/api/session";
+      preLoaderRoute: typeof apiSessionRouteImport;
       parentRoute: typeof rootRoute;
     };
   }

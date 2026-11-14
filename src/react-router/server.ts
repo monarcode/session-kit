@@ -13,6 +13,7 @@ import {
 	type SessionMiddlewareOptions,
 } from "../server/auth.js";
 import type { CookieJar } from "../server/cookies.js";
+import { handleSession } from "../server/handler.js";
 import {
 	requestJar,
 	withHeaders,
@@ -513,4 +514,66 @@ export function redirectIfSignedIn<U, I>(
 		}
 		return null;
 	};
+}
+
+/**
+ * The loader and action {@link sessionRoute} makes, for a resource route.
+ *
+ * @example
+ * ```ts
+ * import type {
+ * 	RouterSessionRoute,
+ * } from "@monarcode/session-kit/react-router/server";
+ *
+ * declare const route: RouterSessionRoute;
+ *
+ * export const loader = route.loader;
+ * export const action = route.action;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type RouterSessionRoute = {
+	loader: (args: RouterArgs) => Promise<Response>;
+	action: (args: RouterArgs) => Promise<Response>;
+};
+
+/**
+ * Makes the loader and action of your session route, a resource route that
+ * answers `createMirrorAuth`'s `endpoint`: the browser client reads the
+ * session, signs out and gets the access token through it. It needs
+ * {@link sessionMiddleware} in the root route.
+ *
+ * It answers this site's own pages only, as `sessionHandler` from
+ * `@monarcode/session-kit/server` explains, and serves the access token only
+ * when `createServerAuth` has `clientCredentials`. Sign-in stays your own
+ * action.
+ *
+ * Export the loader and action one by one, as below. React Router's build
+ * can't remove a destructured `export const { loader }` from the browser's
+ * bundle, and fails.
+ *
+ * @example
+ * ```ts
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { sessionRoute } from "@monarcode/session-kit/react-router/server";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * // app/routes/auth.session.ts
+ * const route = sessionRoute(serverAuth);
+ *
+ * export const loader = route.loader;
+ * export const action = route.action;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function sessionRoute<U, I>(
+	serverAuth: ServerAuth<U, I>,
+): RouterSessionRoute {
+	const handle = handleSession(serverAuth);
+	const route = ({ request, context }: RouterArgs) =>
+		handle(request, () => routerJar(context));
+	return { loader: route, action: route };
 }

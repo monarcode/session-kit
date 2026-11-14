@@ -15,6 +15,10 @@ Guide: [TanStack Start](/docs/setups/tanstack-start).
 
 Refreshes the session before each request, while the response can still set the cookie. Pass it to Start's `createMiddleware().server()`, and list that middleware in `requestMiddleware` in `src/start.ts`.
 
+### sessionRoute
+
+Makes the handlers of your session route, a server route that answers `createMirrorAuth`'s `endpoint`: the browser client signs out and gets the access token through it. Pass them as the route's `server.handlers`.
+
 ### startAuth
 
 The session of the request TanStack Start is handling (`RequestAuth`), with every `serverAuth` method and no cookie jar. Each call finds the current request, so make it once, at module level, beside `serverAuth`.
@@ -22,3 +26,9 @@ The session of the request TanStack Start is handling (`RequestAuth`), with ever
 ### startJar
 
 The `CookieJar` for the request TanStack Start is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. [`startAuth`](#startauth) passes it for you. Use it in a server function, request middleware, a server route, or `beforeLoad` and loaders while they run on the server. Every call during one request returns the same jar.
+
+## Types
+
+### StartSessionRoute
+
+The handlers [`sessionRoute`](#sessionroute) makes, for a server route's `GET` and `POST`.

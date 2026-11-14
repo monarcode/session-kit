@@ -18,6 +18,7 @@ import {
 	type SessionMiddlewareOptions,
 } from "../server/auth.js";
 import type { CookieJar, CookieOptions } from "../server/cookies.js";
+import { handleSession } from "../server/handler.js";
 
 /** `options` without unset attributes, which Start's types don't accept. */
 function attributes({ domain, maxAge, ...rest }: CookieOptions) {
@@ -187,4 +188,64 @@ export function refreshSession<U, I, TRegister = {}, TMiddlewares = undefined>(
 			setResponseHeader("Cache-Control", cacheControl);
 		return result;
 	};
+}
+
+/**
+ * The handlers {@link sessionRoute} makes, for a server route's `GET` and
+ * `POST`.
+ *
+ * @example
+ * ```ts
+ * import type {
+ * 	StartSessionRoute,
+ * } from "@monarcode/session-kit/tanstack-start/server";
+ *
+ * declare const route: StartSessionRoute;
+ *
+ * export const methods = Object.keys(route); // ["GET", "POST"]
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type StartSessionRoute = {
+	GET: (context: { request: Request }) => Promise<Response>;
+	POST: (context: { request: Request }) => Promise<Response>;
+};
+
+/**
+ * Makes the handlers of your session route, a server route that answers
+ * `createMirrorAuth`'s `endpoint`: the browser client signs out and gets the
+ * access token through it. Pass them as the route's `server.handlers`.
+ *
+ * It answers this site's own pages only, as `sessionHandler` from
+ * `@monarcode/session-kit/server` explains, and serves the access token only
+ * when `createServerAuth` has `clientCredentials`. Start's
+ * `createCsrfMiddleware` filtered to server functions doesn't cover server
+ * routes, so this check does.
+ *
+ * `loadSession` reads the session while Start renders on the server, where
+ * the client can't call the route. Pass `createMirrorAuth` a `revalidate`
+ * server function too. Sign-in stays your own server function.
+ *
+ * @example
+ * ```ts
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { sessionRoute } from "@monarcode/session-kit/tanstack-start/server";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * // In src/routes/api/session.ts:
+ * // createFileRoute("/api/session")({ server: { handlers: route } })
+ * export const route = sessionRoute(serverAuth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function sessionRoute<U, I>(
+	serverAuth: ServerAuth<U, I>,
+): StartSessionRoute {
+	const handle = handleSession(serverAuth);
+	const route = ({ request }: { request: Request }) =>
+		handle(request, startJar);
+	return { GET: route, POST: route };
 }

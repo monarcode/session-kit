@@ -35,6 +35,10 @@ The `CookieJar` for the request React Router is handling, to pass to `serverAuth
 
 The root route's server middleware, which gives each request a cookie jar and refreshes the session while the response can still set the cookie. Export it as the root route's `middleware`, or spread it first into a list of your own.
 
+### sessionRoute
+
+Makes the loader and action of your session route, a resource route that answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. It needs [`sessionMiddleware`](#sessionmiddleware) in the root route.
+
 ## Types
 
 ### RouterArgs
@@ -52,6 +56,10 @@ A loader typed by its shape, such as [`redirectIfSignedIn`](#redirectifsignedin)
 ### RouterMiddleware
 
 Server middleware for a route's `middleware`, typed by its shape.
+
+### RouterSessionRoute
+
+The loader and action [`sessionRoute`](#sessionroute) makes, for a resource route.
 
 ### SessionGuard
 

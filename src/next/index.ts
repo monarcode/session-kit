@@ -12,6 +12,7 @@ import {
 	type CookieJar,
 	type CookieOptions,
 } from "../server/cookies.js";
+import { handleSession } from "../server/handler.js";
 
 /**
  * A request's cookie store, as `cookies()` from `next/headers` resolves it.
@@ -398,4 +399,63 @@ export function nextSession<U, I>(
 			return response;
 		},
 	};
+}
+
+/**
+ * The Route Handlers {@link sessionRoute} makes, for `GET` and `POST`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionRoute } from "@monarcode/session-kit/next";
+ *
+ * declare const route: NextSessionRoute;
+ *
+ * export const { GET, POST } = route;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionRoute = {
+	GET: (request: Request) => Promise<Response>;
+	POST: (request: Request) => Promise<Response>;
+};
+
+/**
+ * Makes the Route Handlers for your session route, which answers
+ * `createMirrorAuth`'s `endpoint`: the browser client reads the session,
+ * signs out and gets the access token through it. Pass `cookies` from
+ * `next/headers`.
+ *
+ * It answers this site's own pages only, as `sessionHandler` from
+ * `@monarcode/session-kit/server` explains, and serves the access token only
+ * when `createServerAuth` has `clientCredentials`. Sign-in stays your own
+ * Server Function.
+ *
+ * @example
+ * ```ts
+ * import { sessionRoute } from "@monarcode/session-kit/next";
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { cookies } from "next/headers";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * // app/api/session/route.ts
+ * export const { GET, POST } = sessionRoute(serverAuth, cookies);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function sessionRoute<U, I>(
+	serverAuth: ServerAuth<U, I>,
+	cookies: () => Promise<NextCookies>,
+): NextSessionRoute {
+	if (typeof cookies !== "function")
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass cookies from next/headers to sessionRoute",
+		);
+	const handle = handleSession(serverAuth);
+	const route = (request: Request) =>
+		handle(request, async () => nextJar(await cookies(), { writable: true }));
+	return { GET: route, POST: route };
 }

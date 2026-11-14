@@ -11,6 +11,7 @@ import {
 	routerAuth,
 	routerJar,
 	sessionMiddleware,
+	sessionRoute,
 	type RouterArgs,
 	type RouterContextLike,
 	type RouterMiddleware,
@@ -83,6 +84,19 @@ function handle(
 
 test("routerJar needs cookieJarMiddleware", () => {
 	assert.throws(() => routerJar(newContext()), code("INVALID_OPTIONS"));
+});
+
+test("sessionRoute without the middleware answers with the code the client reads", async () => {
+	const response = await sessionRoute(serverAuth).loader({
+		request: new Request("https://app.test/auth/session", {
+			headers: { "Sec-Fetch-Site": "same-origin" },
+		}),
+		context: newContext(),
+	} as never);
+	assert.equal(response.status, 400);
+	const body = (await response.json()) as any;
+	assert.equal(body.error.code, "INVALID_OPTIONS");
+	assert.match(body.error.message, /cookieJarMiddleware/);
 });
 
 test("routerAuth gives the request's session by its context", async () => {
@@ -348,6 +362,12 @@ function requestHandler({ basename }: { basename?: string } = {}) {
 					user: guard.session(context).user,
 				}),
 			},
+		},
+		"routes/auth.session": {
+			id: "routes/auth.session",
+			parentId: "root",
+			path: "auth/session",
+			module: sessionRoute(serverAuth),
 		},
 		"routes/session": {
 			id: "routes/session",
@@ -810,5 +830,39 @@ test(
 		);
 		assert.equal(login.status, 302);
 		assert.equal(login.headers.get("Location"), "/app/session");
+	},
+);
+
+test(
+	"React Router: sessionRoute is a resource route for the browser client",
+	{ skip: !middlewareSupported },
+	async () => {
+		const handler = requestHandler();
+		const toRoute = (cookie: string, method: string, body?: object) =>
+			new Request("https://app.test/auth/session", {
+				method,
+				headers: { cookie, "Sec-Fetch-Site": "same-origin" },
+				...(body && { body: JSON.stringify(body) }),
+			});
+		const cookie = cookieHeader(
+			await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+		);
+		const read = await handler(toRoute(cookie, "GET"));
+		assert.equal(read.status, 200);
+		assert.equal(read.headers.get("Cache-Control"), "no-store");
+		assert.deepEqual(((await read.json()) as any).session.user, user);
+
+		const signedOut = await handler(
+			toRoute(cookie, "POST", { v: 1, action: "signOut" }),
+		);
+		assert.equal(signedOut.status, 200);
+		assert.deepEqual(deleted(signedOut), ["app.session"]);
+
+		const elsewhere = await handler(
+			new Request("https://app.test/auth/session", {
+				headers: { cookie, "Sec-Fetch-Site": "cross-site" },
+			}),
+		);
+		assert.equal(elsewhere.status, 403);
 	},
 );

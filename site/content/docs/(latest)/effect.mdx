@@ -649,9 +649,9 @@ the mirror client.
   does, rather than inferring them from `requestLayer`. With a mirror
   registered, the registration depends on the server functions the mirror
   calls, which call `runRequest`, and TypeScript reports a circular type. For
-  the same reason,
-  the server functions the mirror is made from (its `revalidate`, `signIn`
-  and `signOut`) read the request's session directly, not `Auth.session`.
+  the same reason, the server functions the mirror is made from, such as its
+  `revalidate` and `signIn`, read the request's session directly, not
+  `Auth.session`.
 - **Keep a request's layer off a shared `memoMap`,** such as the runtime's
   or one passed to `QueryClient.make`. Layers are shared by identity there,
   so overlapping requests can get one build: a service that keeps `Auth`

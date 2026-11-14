@@ -127,7 +127,7 @@ refresh doesn't fail the request. Loaders read the session as usual, and an
 error there reaches the route's error boundary.
 
 `createMirrorAuth` makes the client that components use, from the session
-the root loader read and the resource route that step 3 adds:
+the root loader read and the session route that step 3 adds:
 
 ```ts title="app/auth/client.ts"
 import { createMirrorAuth, type SessionOf } from "@monarcode/session-kit";
@@ -137,18 +137,11 @@ import type { serverAuth } from "./session.server";
 
 export type AppSession = SessionOf<typeof serverAuth>;
 
-async function session(method: "GET" | "POST") {
-  const response = await fetch("/auth/session", { method });
-  if (!response.ok) throw new Error(`Session failed (${response.status})`);
-  return (await response.json()) as AppSession | null;
-}
-
-export function createAppAuth(initial: AppSession | null) {
+export function createAppAuth(session: AppSession | null) {
   return createMirrorAuth({
     name: "app",
-    session: initial,
-    revalidate: () => session("GET"),
-    signOut: () => session("POST"),
+    session,
+    endpoint: "/auth/session",
   });
 }
 
@@ -292,28 +285,26 @@ export default function Login() {
 }
 ```
 
-A resource route gives the browser's client the session and signs out. React
-Router doesn't check where resource routes' requests come from, so its action
-accepts your own site only:
+The browser's client reads the session and signs out through a session
+route, a resource route. `sessionRoute` from
+`@monarcode/session-kit/react-router/server` makes its loader and action:
 
 ```ts title="app/routes/auth.session.ts"
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { sessionRoute } from "@monarcode/session-kit/react-router/server";
 
-import { auth } from "../auth/session.server";
+import { serverAuth } from "../auth/session.server";
 
-export async function loader({ context }: LoaderFunctionArgs) {
-  return Response.json(await auth(context).getSession());
-}
+const route = sessionRoute(serverAuth);
 
-export async function action({ request, context }: ActionFunctionArgs) {
-  if (request.headers.get("sec-fetch-site") !== "same-origin")
-    return new Response(null, { status: 403 });
-  await auth(context).signOut();
-  return Response.json(null);
-}
+export const loader = route.loader;
+export const action = route.action;
 ```
 
 Add it to `app/routes.ts` as `route("auth/session", "routes/auth.session.ts")`.
+Export the loader and action one by one, as above. React Router's build fails
+on a destructured `export const { loader, action }`. The route answers your
+own site's pages only, so another site can't sign the user out: see
+[Security](/docs/security).
 
 ## 4. Protect routes
 
@@ -400,34 +391,9 @@ export default function Orders() {
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-Expose the request's `clientCredentials.get` and `.renew` through a resource
-route, added as `route("auth/credentials", "routes/auth.credentials.ts")`:
-
-```ts title="app/routes/auth.credentials.ts"
-import type { ActionFunctionArgs } from "react-router";
-
-import { z } from "zod";
-
-import { auth } from "../auth/session.server";
-
-const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
-
-export async function action({ request, context }: ActionFunctionArgs) {
-  if (request.headers.get("sec-fetch-site") !== "same-origin")
-    return new Response(null, { status: 403 });
-  const session = auth(context);
-  const body = rejected.safeParse(await request.json().catch(() => null));
-  return Response.json(
-    body.success
-      ? await session.clientCredentials.renew(body.data)
-      : await session.clientCredentials.get(),
-  );
-}
-```
-
-Then pass the client a `credentials` option: `get` posts to the route with
-no body, and `renew` posts the rejected token. The browser keeps the access
-token in memory, never the refresh token; see
+The session route then serves the access token, and the client's
+`credentials` get it there. The browser keeps the access token in memory,
+never the refresh token; see
 [Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
 The example app does this.
 
@@ -447,7 +413,8 @@ The example app does this.
 - **A `basename`.** Pass it to the guard too, as
   `requireSession(serverAuth, { basename: "/app" })`. React Router adds it to
   loaders' and actions' redirects, but not to middleware's, so the guard adds
-  it to its own.
+  it to its own. The client's `endpoint` includes it as well:
+  `"/app/auth/session"`.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the
   server again and run their loaders again. So does returning to a tab after
   a while.

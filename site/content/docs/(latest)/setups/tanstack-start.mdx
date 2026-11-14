@@ -95,10 +95,32 @@ export async function login(username: string, password: string) {
 its other options, rotating the secret, signing out, and the limits every
 setup shares.
 
-## 2. Add server functions
+## 2. Add the session route and server functions
 
-`session` finds the request each time it's called, so one object serves
-every request. Your server functions decide what the browser may ask for:
+The browser's client signs out and gets the access token through a session
+route. `sessionRoute` from `@monarcode/session-kit/tanstack-start/server`
+makes its `GET` and `POST` handlers, for a server route. Start leaves
+`server.handlers` out of the browser bundle, `serverAuth` included:
+
+```ts title="src/routes/api/session.ts"
+import { sessionRoute } from "@monarcode/session-kit/tanstack-start/server";
+import { createFileRoute } from "@tanstack/react-router";
+
+import { serverAuth } from "../../auth/server";
+
+export const Route = createFileRoute("/api/session")({
+  server: { handlers: sessionRoute(serverAuth) },
+});
+```
+
+It answers your own site's pages only, so another site can't sign the user
+out: see [Security](/docs/security).
+
+Two server functions do the rest. Signing in takes your form's input. Reading
+the session is a server function too, because `loadSession` reads it while
+Start renders on the server, where the client can't call a route on its own
+site. `session` finds the request each time it's called, so one object
+serves every request:
 
 ```ts title="src/auth/functions.ts"
 import { createServerFn } from "@tanstack/react-start";
@@ -115,10 +137,6 @@ export const signInFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) =>
     session.signIn(await login(data.username, data.password)),
   );
-
-export const signOutFn = createServerFn({ method: "POST" }).handler(() =>
-  session.signOut(),
-);
 ```
 
 `getSession` and `signIn` resolve `{ sessionId, user }`, never tokens, so
@@ -169,9 +187,10 @@ usual, and an error there reaches the route's error component.
 An app that defines `createStart` has no CSRF protection for its server
 functions until it adds `createCsrfMiddleware`. Its `filter` keeps the check
 to server-function calls: unfiltered, it also refuses page loads from links
-on other sites and from the address bar. Server routes are left out too, so
-a server route that changes the session must refuse other sites itself:
-compare its `Sec-Fetch-Site` header to `same-origin`.
+on other sites and from the address bar. Server routes are left out too.
+`sessionRoute` refuses other sites itself. A server route of your own that
+changes the session must do the same: compare its `Sec-Fetch-Site` header to
+`same-origin`.
 
 ## 4. Create the browser client
 
@@ -186,16 +205,16 @@ First, the client:
 ```ts title="src/auth/client.ts"
 import { createMirrorAuth } from "@monarcode/session-kit";
 
-import { getSessionFn, signInFn, signOutFn } from "./functions";
+import { getSessionFn, signInFn } from "./functions";
 
 export function createAppAuth() {
   return createMirrorAuth({
     name: "app",
     session: null, // filled by loadSession, then by hydration
+    endpoint: "/api/session",
     revalidate: () => getSessionFn(),
     signIn: (data: { username: string; password: string }) =>
       signInFn({ data }),
-    signOut: () => signOutFn(),
   });
 }
 
@@ -332,10 +351,9 @@ export const getOrdersFn = createServerFn().handler(async () => {
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-Expose `session.clientCredentials.get` and `.renew` through two POST server
-functions, and pass them as the client's `credentials`. The browser then
-keeps the access token in memory, never the refresh token. The example app
-does this.
+The session route then serves the access token, and the client's
+`credentials` get it there. The browser keeps the access token in memory,
+never the refresh token. The example app does this.
 
 ## Things to know
 

@@ -23,6 +23,10 @@ Gives a Next.js app its session ([`NextSession`](#nextsession)), over [`nextJar`
 
 The `CookieJar` for a request in Next's Proxy (`proxy.ts`). It reads `request`'s cookies and sets new ones on `response`. Use it with `serverAuth.refreshIfDue`, so the pages that render the request see a fresh token through [`nextJar`](#nextjar).
 
+### sessionRoute
+
+Makes the Route Handlers for your session route, which answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. Pass `cookies` from `next/headers`.
+
 ## Types
 
 ### NextCookies
@@ -52,6 +56,10 @@ Options for [`nextSession`](#nextsession). Pass Next's own `cookies` and `redire
   path="node_modules/@monarcode/session-kit/dist/next/index.d.ts"
   name="NextSessionOptions"
 />
+
+### NextSessionRoute
+
+The Route Handlers [`sessionRoute`](#sessionroute) makes, for `GET` and `POST`.
 
 ### ProxyRequest
 

@@ -15,6 +15,10 @@ Guide: [Server sessions](/docs/server-rendering/server-sessions).
 
 Creates the server side of Session kit ([`ServerAuth`](#serverauth)). It keeps both tokens and the user in an encrypted, `httpOnly` cookie, so page scripts never see the refresh token.
 
+### sessionHandler
+
+Makes the handler for your session route ([`SessionHandler`](#sessionhandler)), which answers `createMirrorAuth`'s `endpoint`. A `GET` reads the session. A `POST` signs out, or gets or renews the access token for page scripts.
+
 ## Types
 
 ### ClientCredentials
@@ -78,6 +82,10 @@ The session cookie's attributes: the `cookie` option of [`ServerAuthOptions`](#s
   path="node_modules/@monarcode/session-kit/dist/server/index.d.ts"
   name="SessionCookieOptions"
 />
+
+### SessionHandler
+
+Answers the browser client's requests to your session route, for one request and its cookie jar. [`sessionHandler`](#sessionhandler) makes one.
 
 ### SessionMiddlewareOptions
 

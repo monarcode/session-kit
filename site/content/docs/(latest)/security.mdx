@@ -32,6 +32,23 @@ Each setup saves the tokens in a different place:
   backups with the `expo-secure-store` config plugin. It also removes a
   session that an earlier install left in the iOS keychain.
 
+## The session route
+
+With server rendering, the browser's client reads the session, signs out and
+gets the access token through your session route. `sessionHandler` from
+`@monarcode/session-kit/server` answers it, through each framework's
+`sessionRoute`.
+
+It answers your own site's pages only, so another site can't sign the user
+out or ask for the access token. It checks the `Sec-Fetch-Site` header,
+which browsers send to https and localhost pages since 2023 (Safari 16.4).
+On plain http, such as a phone testing your dev server, a `POST` needs an
+`Origin` header that matches the request's URL. Anything else is refused
+with 403. Every answer has `Cache-Control: no-store`.
+
+Signing in stays your own server code. A route of your own that changes the
+session must refuse other sites too, where the framework doesn't check.
+
 ## Where tokens go
 
 [`authFetch`](/docs/client/requests) and the effetch plugin

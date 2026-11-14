@@ -90,6 +90,31 @@
   sign-in page's URL with `?redirectTo=`, for a guard of your own.
 - `SessionMiddlewareOptions` in `@monarcode/session-kit/server`: `within`
   and `cacheControl`, for `refreshSession` and `sessionMiddleware`.
+- A session route, in place of the server functions, Server Functions and
+  resource routes the guides had you write for the browser's client. It
+  reads the session, signs out, and gets or renews the access token when
+  `createServerAuth` has `clientCredentials`. It answers your own site's
+  pages only (by `Sec-Fetch-Site`, or a `POST`'s `Origin` on plain http),
+  with `Cache-Control: no-store`. Signing in stays your own code.
+  - `createMirrorAuth({ endpoint })` calls it. `revalidate`, `signOut` and
+    `credentials` are optional now, and win over `endpoint` when given. The
+    options' type needs `endpoint`, or `revalidate` and `signOut`. A failure
+    the server reports rejects with its `AuthErrorCode`.
+  - `sessionHandler(serverAuth)` in `@monarcode/session-kit/server` answers
+    it, for a request and its cookie jar (`SessionHandler`).
+  - `sessionRoute(serverAuth)` wraps it for each framework: a server route's
+    `handlers` in `@monarcode/session-kit/tanstack-start/server`
+    (`StartSessionRoute`), a resource route's `loader` and `action` in
+    `@monarcode/session-kit/react-router/server` (`RouterSessionRoute`), and
+    a Route Handler's `GET` and `POST` in `@monarcode/session-kit/next`, with
+    Next's `cookies` (`NextSessionRoute`).
+
+  ```ts
+  // app/api/session/route.ts
+  export const { GET, POST } = sessionRoute(serverAuth, cookies);
+  // lib/auth/client.ts
+  createMirrorAuth({ name: "app", session, endpoint: "/api/session", signIn });
+  ```
 
 ### Changed
 

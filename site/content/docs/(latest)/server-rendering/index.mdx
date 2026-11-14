@@ -31,7 +31,8 @@ before rendering, so pages never show a "Checking session…" state.
 The engine is the same `createServerAuth` call in every framework:
 [Create the server engine](/docs/setups/tanstack-start#1-create-the-server-engine)
 on the TanStack Start page shows one. The browser's client mirrors what the
-server rendered, and asks the server to sign in and out through your own
+server rendered. It reads the session and signs out through a session route,
+which each adapter's `sessionRoute` makes, and signs in through your own
 server code, as in
 [Create the browser client](/docs/setups/tanstack-start#4-create-the-browser-client).
 
@@ -48,7 +49,8 @@ session, and how the session reaches the browser:
 
 Locking isn't available with server rendering. For another server, such as
 the Next.js Pages Router, build a `CookieJar` over its cookies and pass it
-to `serverAuth.forRequest(jar)`.
+to `serverAuth.forRequest(jar)`. Its session route is `sessionHandler`, from
+`@monarcode/session-kit/server`, called with the request and that jar.
 
 ## Next steps
 

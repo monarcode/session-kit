@@ -1,4 +1,5 @@
 import type {
+	ActionFunction,
 	LoaderFunction,
 	LoaderFunctionArgs,
 	MiddlewareFunction,
@@ -58,6 +59,7 @@ import {
 	nextJar,
 	nextSession,
 	proxyJar,
+	sessionRoute as nextSessionRoute,
 	type NextCookies,
 	type NextSession,
 } from "../dist/next/index.js";
@@ -69,6 +71,7 @@ import {
 	routerAuth,
 	routerJar,
 	sessionMiddleware,
+	sessionRoute as routerSessionRoute,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
 import * as react from "../dist/react/index.js";
@@ -79,6 +82,7 @@ import {
 } from "../dist/react/index.js";
 import {
 	createServerAuth,
+	sessionHandler,
 	type CookieJar,
 	type RequestAuth,
 } from "../dist/server/index.js";
@@ -655,6 +659,17 @@ const proxied: Promise<NextResponse> = appSessionNext.refresh(
 	NextResponse.next(),
 );
 void proxied;
+// The session route, in each framework's own route types.
+export const { GET, POST } = nextSessionRoute(serverAuth, cookies);
+const resourceRoute = routerSessionRoute(serverAuth);
+const sessionLoader: LoaderFunction = resourceRoute.loader;
+const sessionAction: ActionFunction = resourceRoute.action;
+void [sessionLoader, sessionAction];
+const answered: Promise<Response> = sessionHandler(serverAuth)(
+	new Request("https://app.test/api/session"),
+	jar,
+);
+void answered;
 // @ts-expect-error nextSession needs Next's cookies and redirect.
 nextSession(serverAuth, { cookies });
 
@@ -708,11 +723,40 @@ void requireSession(mirror, {
 	location: { href: "/private" },
 	loginPath: "/login",
 });
+// With the session route, a session that starts null, and a typed signIn.
+declare function signInFn(input: {
+	data: { username: string };
+}): Promise<Session<z.output<typeof userSchema>>>;
+const routed = createMirrorAuth({
+	name: "type-test",
+	session: null,
+	endpoint: "/api/session",
+	signIn: (data: { username: string }) => signInFn({ data }),
+});
+const routedEmail: string | undefined = routed.state.get().user?.email;
+void routedEmail;
+void routed.signIn({ username: "emilys" });
+// @ts-expect-error signIn's input is inferred from the option.
+void routed.signIn({ password: "x" });
+createAuthFetch(routed, { baseUrl });
 const plainMirror: MirrorAuth<{ id: string }> = createMirrorAuth({
 	name: "type-test",
 	session: null as Session<{ id: string }> | null,
 	revalidate: async () => null,
 	signOut: async () => {},
+});
+// With endpoint, revalidate alone is fine, as Start passes it.
+createMirrorAuth({
+	name: "type-test",
+	session: null as Session<{ id: string }> | null,
+	endpoint: "/api/session",
+	revalidate: async () => null,
+});
+// @ts-expect-error Without endpoint, revalidate needs signOut.
+createMirrorAuth({
+	name: "type-test",
+	session: null,
+	revalidate: async () => null,
 });
 // @ts-expect-error Without the signIn option, there is no signIn.
 void plainMirror.signIn;

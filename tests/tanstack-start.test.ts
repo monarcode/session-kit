@@ -17,6 +17,7 @@ import {
 } from "@monarcode/session-kit/tanstack-start";
 import {
 	refreshSession,
+	sessionRoute,
 	startAuth,
 	startJar,
 } from "@monarcode/session-kit/tanstack-start/server";
@@ -286,6 +287,34 @@ test("refreshSession takes the header's value or leaves it alone, and a failed r
 		() => refreshSession(app, { within: -1 }),
 		code("INVALID_OPTIONS"),
 	);
+});
+
+test("sessionRoute's handlers answer the browser client through Start's cookies", async () => {
+	const route = sessionRoute(serverAuth);
+	const toRoute = (method: string, body?: object) =>
+		new Request("https://app.test/api/session", {
+			method,
+			headers: { "Sec-Fetch-Site": "same-origin" },
+			...(body && { body: JSON.stringify(body) }),
+		});
+	const signedIn = await handle("", () => session.signIn(tokens()));
+	const cookie = cookieHeader(signedIn.setCookies);
+
+	const read = await handle(cookie, async () =>
+		(await route.GET({ request: toRoute("GET") })).json(),
+	);
+	assert.deepEqual(read.result, { v: 1, session: signedIn.result });
+	const signedOut = await handle(
+		cookie,
+		async () =>
+			(
+				await route.POST({
+					request: toRoute("POST", { v: 1, action: "signOut" }),
+				})
+			).status,
+	);
+	assert.equal(signedOut.result, 200);
+	assert.match(signedOut.setCookies[0]!, /^app\.session=; Max-Age=0/);
 });
 
 test("startAuth has every member a request's session has, passed through", async () => {

@@ -4,8 +4,8 @@ description: Keep the session in an encrypted cookie with the Next.js App Router
 ---
 
 In this guide, you keep the session in an encrypted cookie with the Next.js
-App Router. Server Functions sign in and out, Proxy refreshes the tokens, and
-Server Components read the session. The first response already shows the
+App Router. A Server Function signs in, a session route answers the browser,
+Proxy refreshes the tokens, and Server Components read the session. The first response already shows the
 signed-in page, so the browser never shows a "Checking session…" state or a
 flash of signed-out content. Client Components get a small client that
 mirrors the session, and the
@@ -135,11 +135,27 @@ If the refresh fails, the page still renders with the cookie as it is.
 Server Functions are POST requests to the page that calls them, so keep the
 matcher wide enough to include those pages.
 
-## 4. Add Server Functions
+## 4. Add the session route and sign-in
 
-Server Functions set cookies, so they use `session.writable()`, the
-request's session with every `serverAuth` method. They decide what the
-browser may ask for:
+The browser's client reads the session and signs out through a session
+route. `sessionRoute` from `@monarcode/session-kit/next` makes its `GET` and
+`POST` handlers. Pass it Next's `cookies`:
+
+```ts title="app/api/session/route.ts"
+import { sessionRoute } from "@monarcode/session-kit/next";
+import { cookies } from "next/headers";
+
+import { serverAuth } from "../../../lib/auth/server";
+
+export const { GET, POST } = sessionRoute(serverAuth, cookies);
+```
+
+It answers your own site's pages only, so another site can't sign the user
+out: see [Security](/docs/security).
+
+Signing in is yours, as it takes your form's input. A Server Function sets
+the cookie with `session.writable()`, the request's session with every
+`serverAuth` method:
 
 ```ts title="app/actions.ts"
 "use server";
@@ -148,10 +164,6 @@ import { z } from "zod";
 
 import { login } from "../lib/auth/server";
 import { session } from "../lib/auth/session";
-
-export async function getSessionAction() {
-  return (await session.writable()).getSession();
-}
 
 const credentials = z.object({ username: z.string(), password: z.string() });
 
@@ -169,10 +181,6 @@ export async function signInAction(input: unknown) {
     };
   }
 }
-
-export async function signOutAction() {
-  await (await session.writable()).signOut();
-}
 ```
 
 `signInAction` returns its failure rather than throwing it, as Next advises
@@ -182,16 +190,12 @@ the browser.
 ## 5. Create the browser client
 
 `createMirrorAuth` makes the client that Client Components use, from the
-session the layout read and your Server Functions:
+session the layout read, the session route and your sign-in:
 
 ```ts title="lib/auth/client.ts"
 import { createMirrorAuth, type SessionOf } from "@monarcode/session-kit";
 
-import {
-  getSessionAction,
-  signInAction,
-  signOutAction,
-} from "../../app/actions";
+import { signInAction } from "../../app/actions";
 // Types only: left out of the browser's bundle.
 import type { serverAuth } from "./server";
 
@@ -201,13 +205,12 @@ export function createAppAuth(session: AppSession | null) {
   return createMirrorAuth({
     name: "app",
     session,
-    revalidate: getSessionAction,
+    endpoint: "/api/session",
     signIn: async (input: { username: string; password: string }) => {
       const result = await signInAction(input);
       if ("error" in result) throw new Error(result.error);
       return result.session;
     },
-    signOut: signOutAction,
   });
 }
 
@@ -399,31 +402,8 @@ In Server Functions and Route Handlers, `session.writable()` can also
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-Expose the request's `clientCredentials.get` and `.renew` through a Route
-Handler, and pass them as the client's `credentials`. A Route Handler rather
-than a Server Function, because Next dispatches Server Functions one at a
-time and renders the page again after one sets a cookie. Next doesn't check
-where a Route Handler's requests come from, so accept your own site only:
-
-```ts title="app/api/auth/credentials/route.ts"
-import { z } from "zod";
-
-import { session } from "../../../../lib/auth/session";
-
-const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
-
-export async function POST(request: Request) {
-  if (request.headers.get("sec-fetch-site") !== "same-origin")
-    return new Response(null, { status: 403 });
-  const auth = await session.writable();
-  const body = rejected.safeParse(await request.json().catch(() => null));
-  return Response.json(
-    body.success
-      ? await auth.clientCredentials.renew(body.data)
-      : await auth.clientCredentials.get(),
-  );
-}
-```
+The session route then serves the access token, and the client's
+`credentials` get it there.
 
 The browser keeps the access token in memory, never the refresh token; see
 [Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
@@ -444,6 +424,8 @@ The example app does this.
   on one server: they share no refresh. A matcher that covers every route
   that reads the session lets Proxy refresh first, so Route Handlers and
   Server Functions rarely need to.
+- **A `basePath`.** Next doesn't add it to `fetch`, so the client's
+  `endpoint` includes it: `"/app/api/session"`.
 - **Rendering.** Reading cookies makes a page dynamic. Next sends such pages
   with `Cache-Control: no-store`, and plain `use cache` can't read cookies.
   Keep pages that read the session on the Node.js runtime, the default:

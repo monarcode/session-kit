@@ -1,16 +1,12 @@
 "use server";
 
-// Server Functions the browser calls. Each is a public endpoint: Next checks
-// that calls come from this site, and each one checks its own input.
+// The sign-in the browser calls: a public endpoint. Next checks that calls
+// come from this site, and it checks its own input. The session route in
+// `api/session/route.ts` does the rest.
 import { z } from "zod";
 
 import { login } from "../lib/auth/backend";
 import { session } from "../lib/auth/session";
-
-/** Who is signed in, from the cookie. Holds no tokens. */
-export async function getSessionAction() {
-	return (await session.writable()).getSession();
-}
 
 const credentials = z.object({ username: z.string(), password: z.string() });
 
@@ -32,9 +28,4 @@ export async function signInAction(input: unknown) {
 			error: error instanceof Error ? error.message : "Could not sign in",
 		};
 	}
-}
-
-/** Clears the cookie. */
-export async function signOutAction() {
-	await (await session.writable()).signOut();
 }

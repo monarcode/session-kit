@@ -20,7 +20,7 @@ function sessionSecret(): string {
 /**
  * Keeps both tokens and the user in an encrypted, httpOnly cookie. With
  * `clientCredentials`, the browser can ask for the access token too, through
- * the server functions in `functions.ts`; the refresh token stays here.
+ * the session route in `routes/api/session.ts`; the refresh token stays here.
  */
 export const serverAuth = createServerAuth({
 	name: "session-kit-example",

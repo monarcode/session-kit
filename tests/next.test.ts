@@ -5,6 +5,7 @@ import {
 	nextJar,
 	nextSession,
 	proxyJar,
+	sessionRoute,
 	type NextCookies,
 } from "@monarcode/session-kit/next";
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -369,5 +370,32 @@ test("nextSession's refresh refreshes in Proxy and resolves the response", async
 			kept,
 		),
 		kept,
+	);
+});
+
+test("sessionRoute answers the browser client in a Route Handler, setting cookies", async () => {
+	const signedIn = NextResponse.next();
+	const session = await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
+		tokens(),
+	);
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(signedIn), response);
+	const { GET, POST } = sessionRoute(serverAuth, async () => store);
+	const toRoute = (method: string, body?: object) =>
+		new Request("https://app.test/api/session", {
+			method,
+			headers: { "Sec-Fetch-Site": "same-origin" },
+			...(body && { body: JSON.stringify(body) }),
+		});
+
+	const read = await GET(toRoute("GET"));
+	assert.deepEqual((await read.json()).session, session);
+	const signedOut = await POST(toRoute("POST", { v: 1, action: "signOut" }));
+	assert.equal(signedOut.status, 200);
+	assert.deepEqual(deleted(response), ["app.session"]);
+	assert.throws(
+		() => sessionRoute(serverAuth, undefined as never),
+		code("INVALID_OPTIONS"),
 	);
 });
