@@ -129,13 +129,14 @@ export const docsLlms = llms(source, {
 
 /**
  * Rewrites what the processed Markdown keeps of the MDX: headings lose their
- * anchor IDs, a page's cards become a list, and links to the site's pages
+ * anchor IDs, a page's cards become a list, the Introduction's figure keeps
+ * its text diagram without the tags around it, and links to the site's pages
  * get its URL.
  */
 function plainMarkdown(text: string) {
 	return text
 		.replace(/^(#+ .*) \[#[\w-]+\]$/gm, "$1")
-		.replace(/^<\/?Cards>\n?/gm, "")
+		.replace(/^<\/?(?:Cards|HowItWorks)>\n?/gm, "")
 		.replace(/<Card\s([\s\S]*?)\/>/g, (_, attributes: string) => {
 			const value = (name: string) =>
 				new RegExp(`${name}="([^"]*)"`).exec(attributes)?.[1] ?? "";

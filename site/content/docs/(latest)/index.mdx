@@ -1,12 +1,13 @@
 ---
 title: Introduction
-description: Session kit keeps your app signed in with your backend's tokens, through reloads, expired tokens, other tabs, and outages.
+description: Define, validate, and manage your app's session from your backend's tokens, through reloads, expired tokens, other tabs, and outages.
 ---
 
-Session kit is a React library for apps whose own backend signs users in and
-issues access and refresh tokens. You hand it the tokens your backend
-returns, and it manages the session from there. It works with TanStack
-Router, React Router, Expo Router, TanStack Start, and Next.js.
+Session kit is a schema-driven toolkit for defining, validating, and managing
+the session in a React app whose own backend signs users in and issues access
+and refresh tokens. You give it the tokens your backend returns, and it
+manages the session from there. It supports TanStack Router and Start, React
+Router, Next.js, Expo Router on iOS and Android, and Effect.
 
 This page explains why it exists, what it does, and the terms the rest of the
 docs use. To start using it, see [Installation](/docs/installation).
@@ -54,6 +55,8 @@ or Clerk, which manage their own sessions.
 Session kit sits between your backend and your components. Tokens travel on
 the left, and only state reaches the right:
 
+<HowItWorks>
+
 ```text
     Your backend             Session kit             Your components
  ┌───────────────┐      ┌───────────────────┐      ┌──────────────────┐
@@ -63,6 +66,8 @@ the left, and only state reaches the right:
  └───────────────┘      └───────────────────┘      └──────────────────┘
    issues tokens          keeps the session        state, never tokens
 ```
+
+</HowItWorks>
 
 Your backend issues the tokens. Session kit saves them, refreshes them on
 time, and attaches them to your requests. Your components and route guards

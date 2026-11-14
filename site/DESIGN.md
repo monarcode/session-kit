@@ -485,6 +485,19 @@ world's vocabulary. Scoped by `.docs-source`.
   the name in Geist Mono 600, the description in quiet grey.
 - **Links and inline code:** links as on the landing. Inline code is Geist
   Mono on the lane-empty fill, square, no border.
+- **How it works figure** (`HowItWorks`, the Introduction): three flat
+  panels, your backend, Session kit and your components, each with a name,
+  a comment caption and three mono rows between hairlines. Session kit's
+  panel takes the `buffer-mark` outline and a foreground name, never lime.
+  Between the panels, hairline arrows label what crosses (tokens, state,
+  request, token). From 36rem of container width they run beside the panels,
+  level with their rows. Below that the panels stack with a two-headed arrow
+  between them. It is HTML, not an image, and the page's Markdown keeps a
+  text diagram in its place. **Motion:** once, when the figure first scrolls
+  into view, a 5px foreground square crosses each arrow in its direction
+  (450ms; both ways on a two-headed arrow), in the order a sign-in and then
+  a request travel, about 2.7s in all. Reduced motion leaves the arrows
+  still.
 - **Prev/next:** two square rows between hairlines, titles in the mono.
 - **Not found:** the home layout with one comment-voice line, "// 404:
   nothing at this path.", at the hero's scale, a quiet line pointing to
