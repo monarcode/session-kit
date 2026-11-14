@@ -1,7 +1,7 @@
 {
 	"name": "@monarcode/session-kit",
 	"version": "0.1.0-rc.0",
-	"description": "Schema-driven sessions for React, with TanStack Router, React Router, and Expo Router support, and server rendering with TanStack Start, Next.js, and React Router",
+	"description": "Schema-driven, type-safe sessions for React, with TanStack Router, React Router, Expo Router, Next.js, TanStack Start, and Effect support",
 	"keywords": [
 		"auth",
 		"effect",
