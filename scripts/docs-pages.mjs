@@ -269,6 +269,27 @@ export const documents = [
 		fixtures: { "src/env.d.ts": SERVER_ENV },
 	},
 	{
+		path: page("server-rendering/hybrid"),
+		// It builds on the TanStack Start guide's app.
+		resolutions: ["Bundler"],
+		dom: true,
+		fixtures: {
+			"src/routeTree.gen.ts": START_ROUTE_TREE,
+			"src/env.d.ts": SERVER_ENV,
+		},
+		shared: {
+			from: page("setups/tanstack-start"),
+			files: [
+				"src/auth/server.ts",
+				"src/routes/api/session.ts",
+				"src/start.ts",
+				"src/router.tsx",
+				"src/routes/__root.tsx",
+				"src/routes/_authenticated.tsx",
+			],
+		},
+	},
+	{
 		path: page("effect"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,

@@ -284,6 +284,19 @@
   in. The server-rendering guides call the API with `createAuthFetch` over the
   request's session, and the Expo guide adds the profile screen its deep-link
   steps open.
+- The hovers on a request's session say what `signIn` takes, that it never
+  calls your backend and trusts its input, and which errors `signIn` and
+  `updateUser` reject with. `getSession`, `signOut` and `credentials.get` say
+  where to use them.
+- A Hybrid setup page, under Server rendering: the browser signs in with
+  your backend and calls your API, and the server keeps the session. It shows
+  a server function that checks the tokens with your backend before
+  `session.signIn`, and one that passes them on unchecked, with when that's
+  safe.
+- `createMirrorAuth`'s `endpoint`, `revalidate` and `signOut` options show
+  their docs in editor hovers, which showed none. `revalidate`'s say when the
+  client calls it: when the tab becomes visible after 10 seconds or more, and
+  when another tab signs in or out.
 - The reference lists the members of `AuthStorage`, `Tokens` and
   `CookieJar`, the types an app builds itself. The server-rendering guides'
   sign-in shows the backend's own message for a failed sign-in, as the

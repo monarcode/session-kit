@@ -1,0 +1,249 @@
+---
+title: Hybrid setup
+description: Sign in with your backend from the browser and call your API there, while the server keeps the session in its cookie.
+---
+
+In a hybrid setup, the browser talks to your backend: it signs in, and calls
+your API with the access token. The server still keeps the session in its
+cookie, refreshes it, and renders who is signed in. Use it when your
+backend's sign-in has to run in the browser, such as a provider's SDK, or when
+your pages call your API themselves.
+
+Two things change from a server-rendered setup:
+
+- **Signing in.** The browser gets the tokens from your backend and sends
+  them to a server function, which seals them into the cookie with
+  `session.signIn`.
+- **Calling your API.** The session route gives the browser the access token,
+  and `createAuthFetch` sends it. The refresh token stays in the cookie.
+
+This page builds on the [TanStack Start](/docs/setups/tanstack-start) guide.
+With Next.js or React Router, do the same in a Server Function or an action.
+
+## Before you begin
+
+Follow the [TanStack Start](/docs/setups/tanstack-start) guide through step 5.
+This page replaces its `src/auth/functions.ts`, `src/auth/client.ts` and
+`src/sign-in.ts`.
+
+Then let the session route serve the access token, with `clientCredentials`
+in `createServerAuth`, in `src/auth/server.ts`:
+
+```ts
+export const serverAuth = createServerAuth({
+  // …the options from the guide
+  clientCredentials: true,
+});
+```
+
+## 1. Sign in with your backend in the browser
+
+The browser calls your backend's sign-in, which must allow requests from your
+site (CORS):
+
+```ts title="src/backend.ts"
+import { z } from "zod";
+
+const API = "https://api.example.com";
+
+const tokensSchema = z.object({
+  accessToken: z.string(),
+  refreshToken: z.string(),
+});
+const userSchema = z.object({ id: z.number(), firstName: z.string() });
+
+/** Signs in with your backend, from the browser. */
+export async function login(username: string, password: string) {
+  const response = await fetch(`${API}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+  const body: unknown = await response.json();
+  return { ...tokensSchema.parse(body), user: userSchema.parse(body) };
+}
+```
+
+## 2. Send the tokens to the server
+
+`session.signIn` seals what it's given, and never asks your backend. So the
+server function decides what to trust. Check the tokens first, unless the
+cookie's user is only ever shown.
+
+### Check the tokens first
+
+The server function takes the tokens only, and asks your backend who they
+belong to. A forged or expired token is refused, and the cookie's user comes
+from your backend, not from the browser:
+
+```ts title="src/auth/functions.ts"
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+import { session } from "./server";
+
+const API = "https://api.example.com";
+
+export const getSessionFn = createServerFn().handler(() =>
+  session.getSession(),
+);
+
+export const signInFn = createServerFn({ method: "POST" })
+  .validator(z.object({ accessToken: z.string(), refreshToken: z.string() }))
+  .handler(async ({ data }) => {
+    // Proves the access token is real, and reads its user.
+    const response = await fetch(`${API}/auth/me`, {
+      headers: { Authorization: `Bearer ${data.accessToken}` },
+    });
+    if (!response.ok) throw new Error("Your backend refused the token");
+    const me: unknown = await response.json();
+    const user = z.object({ id: z.number(), firstName: z.string() }).parse(me);
+    return session.signIn({ ...data, user });
+  });
+```
+
+The client's `signIn` takes the tokens, and sends them to `signInFn`:
+
+```ts title="src/auth/client.ts"
+import { createMirrorAuth } from "@monarcode/session-kit";
+
+import { getSessionFn, signInFn } from "./functions";
+
+export function createAppAuth() {
+  return createMirrorAuth({
+    name: "app",
+    session: null, // filled by loadSession, then by hydration
+    endpoint: "/api/session",
+    revalidate: () => getSessionFn(),
+    signIn: (tokens: { accessToken: string; refreshToken: string }) =>
+      signInFn({ data: tokens }),
+  });
+}
+
+export type AppAuth = ReturnType<typeof createAppAuth>;
+```
+
+The form signs in with your backend, then with the client. The sign-in
+page's guard sends the user on, so the form doesn't navigate:
+
+```ts title="src/sign-in.ts"
+import type { AppAuth } from "./auth/client";
+import { login } from "./backend";
+
+/** Signs in, and resolves the message to show when it fails. */
+export async function signIn(
+  auth: AppAuth,
+  username: string,
+  password: string,
+): Promise<string | null> {
+  try {
+    const { accessToken, refreshToken } = await login(username, password);
+    await auth.signIn({ accessToken, refreshToken });
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Could not sign in";
+  }
+}
+```
+
+With [`fromAccessToken`](/docs/client/users-from-tokens) as the server's
+`user` option, the server reads the user from the access token instead. Give
+it a `decode` that verifies the token's signature, and that's the check.
+
+### Pass the tokens without a check
+
+The server function takes the tokens and the user the browser sends, and
+seals them as they are:
+
+```ts title="src/auth/trusting-sign-in.ts"
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+
+import { session } from "./server";
+
+export const trustingSignInFn = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      accessToken: z.string(),
+      refreshToken: z.string(),
+      user: z.object({ id: z.number(), firstName: z.string() }),
+    }),
+  )
+  .handler(({ data }) => session.signIn(data));
+```
+
+The client passes on what your backend's sign-in returned, and the form calls
+`auth.signIn(await login(username, password))`:
+
+```ts
+signIn: (result: Awaited<ReturnType<typeof login>>) =>
+  trustingSignInFn({ data: result }),
+```
+
+Anyone can then put any user in their own cookie, with tokens of their own.
+That's safe only when the cookie's user is shown, never trusted:
+
+- **Your backend authorizes every request** with the access token, and
+  nothing on your server acts on `session.user` alone, such as reading
+  another account's data by its `id`.
+- **A forged token gets nowhere.** Your API refuses it, and the first refresh
+  fails and signs the user out.
+
+When in doubt, check the tokens first. It costs one request at sign-in.
+
+## 3. Call your API from the browser
+
+`createAuthFetch` from `@monarcode/session-kit/http` sends the access token
+that the session route serves. Make one per client, since the client is made
+once per page load:
+
+```tsx title="src/orders.tsx"
+import { useMemo, useState } from "react";
+
+import { createAuthFetch } from "@monarcode/session-kit/http";
+import { useAuthClient } from "@monarcode/session-kit/tanstack-router";
+
+export function Orders() {
+  const auth = useAuthClient();
+  const apiFetch = useMemo(
+    () => createAuthFetch(auth, { baseUrl: "https://api.example.com/" }),
+    [auth],
+  );
+  const [count, setCount] = useState<number | null>(null);
+
+  async function load() {
+    const response = await apiFetch("orders");
+    if (!response.ok) throw new Error(`Orders failed (${response.status})`);
+    const orders: unknown = await response.json();
+    setCount(Array.isArray(orders) ? orders.length : 0);
+  }
+
+  return (
+    <div>
+      <button onClick={() => void load().catch(() => {})}>Load orders</button>
+      {count !== null && <p>{count} orders</p>}
+    </div>
+  );
+}
+```
+
+The browser keeps the access token in memory, never the refresh token. After
+a 401, the client asks the session route for a new token, and the server
+refreshes with the cookie's refresh token. Server functions can still call
+your API too, as the guide's
+[Call your API](/docs/setups/tanstack-start#call-your-api) shows.
+
+## Things to know
+
+- **The refresh token passes through the browser once,** in your backend's
+  sign-in response, on its way to the server. After that, page scripts never
+  see it. If your backend's sign-in can run on the server, sign in there, as
+  the setup guides do.
+- **Your backend must allow your site (CORS)** for its sign-in and the API
+  calls you make from the browser. Session kit's own requests go to your
+  session route, on your site.
+- **Signing out** works as in the guide, through the session route. To end
+  the session at your backend too, give `createServerAuth` a `revoke`.
+- **Security** has more on what the cookie's user can be trusted for, in
+  [Your backend decides what's allowed](/docs/security#your-backend-decides-whats-allowed).

@@ -101,7 +101,18 @@ export type MirrorCredentials = {
  *
  * @since 0.1.0
  */
-export type MirrorAuthOptions<U, In = never> = {
+export type MirrorAuthOptions<U, In = never> = MirrorAuthBaseOptions<U, In> &
+	(EndpointOption | ServerFunctions<U>);
+
+// Calls of `createMirrorAuth` take these through overloads rather than the
+// union, because an editor shows no docs for an option a union declares.
+type EndpointOption = { endpoint: string };
+type ServerFunctions<U> = {
+	revalidate: () => Promise<Session<U> | null>;
+	signOut: () => Promise<unknown>;
+};
+
+type MirrorAuthBaseOptions<U, In> = {
 	/**
 	 * Names this auth. Tabs tell each other about changes on the
 	 * `BroadcastChannel` `<name>:auth`. Letters, digits, `_` or `-`, up to 64
@@ -117,8 +128,8 @@ export type MirrorAuthOptions<U, In = never> = {
 	 * The path of your session route on this site, such as `"/api/session"`,
 	 * which answers with `sessionRoute` or `sessionHandler` from the server
 	 * entry points. The client reads the session, signs out and gets the
-	 * access token through it. `revalidate`, `signOut` and `credentials` win
-	 * when you pass them too.
+	 * access token through it. Pass it, or `revalidate` and `signOut`.
+	 * `revalidate`, `signOut` and `credentials` win when you pass them too.
 	 *
 	 * It's the full path, with your app's base path, such as React Router's
 	 * `basename` or Next's `basePath`. It's called from the browser only: on
@@ -126,13 +137,20 @@ export type MirrorAuthOptions<U, In = never> = {
 	 */
 	endpoint?: string | undefined;
 	/**
-	 * Reads the session on the server again, with `serverAuth.getSession`.
+	 * Reads the session on your server again, with `serverAuth.getSession`,
+	 * such as through a server function. Required without `endpoint`.
+	 *
+	 * The client calls it when the tab becomes visible after 10 seconds or
+	 * more, when another tab signs in or out, and from `retry()` and
+	 * `refresh()`. Pass one when the session is also read while the server
+	 * renders, where `endpoint` can't be called, as in TanStack Start.
 	 * Default: a `GET` to `endpoint`.
 	 */
 	revalidate?: (() => Promise<Session<U> | null>) | undefined;
 	/**
-	 * Signs out on the server, with `serverAuth.signOut`. Default: through
-	 * `endpoint`.
+	 * Signs out on your server, with `serverAuth.signOut`. The client's
+	 * `signOut()` calls it, then signs out this tab and the others. Required
+	 * without `endpoint`. Default: a `POST` to `endpoint`.
 	 */
 	signOut?: (() => Promise<unknown>) | undefined;
 	/**
@@ -152,18 +170,7 @@ export type MirrorAuthOptions<U, In = never> = {
 	credentials?: MirrorCredentials | undefined;
 	/** Logs what the client does, like `createAuth`'s `debug`. */
 	debug?: AuthDebug | undefined;
-} & (
-	| {
-			/** Required unless you pass `revalidate` and `signOut`. */
-			endpoint: string;
-	  }
-	| {
-			/** Required without `endpoint`. */
-			revalidate: () => Promise<Session<U> | null>;
-			/** Required without `endpoint`. */
-			signOut: () => Promise<unknown>;
-	  }
-);
+};
 
 type MirrorAuthBase<U> = {
 	/**
@@ -391,6 +398,15 @@ function stateOf<U>(
  *
  * @since 0.1.0
  */
+export function createMirrorAuth<U, In = never>(
+	options: MirrorAuthBaseOptions<U, In> & EndpointOption,
+): MirrorAuth<U, In>;
+export function createMirrorAuth<U, In = never>(
+	options: MirrorAuthBaseOptions<U, In> & ServerFunctions<U>,
+): MirrorAuth<U, In>;
+export function createMirrorAuth<U, In = never>(
+	options: MirrorAuthOptions<U, In>,
+): MirrorAuth<U, In>;
 export function createMirrorAuth<U, In = never>(
 	options: MirrorAuthOptions<U, In>,
 ): MirrorAuth<U, In> {

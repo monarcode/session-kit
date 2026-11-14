@@ -100,7 +100,7 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 * Where the user comes from: a schema that checks the `user` passed to
 	 * `signIn`, or `fromAccessToken(…)`. The cookie is trusted once sealed,
 	 * but `signIn` doesn't check its input with your backend
-	 * ({@link ServerAuth} says what to do).
+	 * ({@link RequestAuth}'s `signIn` says what to do).
 	 */
 	user: Src;
 	/**
@@ -241,17 +241,20 @@ type RequestAuthBase<U, I> = {
 	 */
 	[requestAuth]: true;
 	/**
-	 * Resolves who is signed in, from the cookie, or `null`. An expired access
-	 * token is refreshed first, and a refresh token your backend rejects signs
-	 * out. Where the request can't set cookies, the session is returned as the
-	 * cookie holds it.
+	 * Resolves who is signed in, from the cookie, or `null`. It holds no
+	 * tokens, so you can return it to the browser, such as from a server
+	 * function or a loader.
+	 *
+	 * An expired access token is refreshed first, and a refresh token your
+	 * backend rejects signs out. Where the request can't set cookies, the
+	 * session is returned as the cookie holds it.
 	 */
 	getSession: () => Promise<Session<U> | null>;
 	/**
 	 * Refreshes the access token when it has less than `within` seconds left
-	 * ({@link RefreshIfDueOptions}), then resolves the session. Use it in
-	 * middleware or a proxy that runs before rendering, so pages get a fresh
-	 * token to read.
+	 * ({@link RefreshIfDueOptions}), then resolves the session. Each adapter's
+	 * middleware calls it before rendering, so pages get a fresh token to
+	 * read. Call it yourself only in middleware of your own.
 	 *
 	 * It refreshes at most once per request. A failed refresh is ignored while
 	 * the access token still works. Rejects with `INVALID_OPTIONS` where the
@@ -259,16 +262,46 @@ type RequestAuthBase<U, I> = {
 	 */
 	refreshIfDue: (options?: RefreshIfDueOptions) => Promise<Session<U> | null>;
 	/**
-	 * Signs in with `input`, checked as the client's `signIn` does, and seals
-	 * it into the cookie. Resolves the new session, which holds no tokens, so
-	 * you can return it to the browser. Rejects with `INVALID_OPTIONS` where
-	 * the request can't set cookies.
+	 * Signs in by sealing your backend's tokens and the user into the cookie,
+	 * replacing any session it held. Pass what your backend's sign-in
+	 * returned: `accessToken`, `refreshToken` if there is one, and `user`
+	 * unless the user comes from the access token. Resolves the new session,
+	 * which holds no tokens, so you can return it to the browser.
+	 *
+	 * It never calls your backend, and trusts what it's given. If the browser
+	 * signs in with your backend and sends the tokens and the user, the
+	 * cookie's user is what the browser said, until a refresh or `updateUser`
+	 * replaces it. Show it, but let your backend authorize with the access
+	 * token. To trust it, check the input first, or sign in on the server.
+	 *
+	 * Rejects with `USER_VALIDATION_FAILED` for a user your schema rejects,
+	 * with `INVALID_SESSION` for tokens that already expired, and with
+	 * `INVALID_OPTIONS` where the request can't set cookies.
+	 *
+	 * @example
+	 * ```ts
+	 * import type { RequestAuth } from "@monarcode/session-kit/server";
+	 *
+	 * type User = { id: number; firstName: string };
+	 * declare const session: RequestAuth<User, User>;
+	 * declare function login(
+	 * 	username: string,
+	 * 	password: string,
+	 * ): Promise<{ accessToken: string; refreshToken: string; user: User }>;
+	 *
+	 * // Your backend checks the password, and signIn keeps the result.
+	 * export async function signIn(username: string, password: string) {
+	 * 	return session.signIn(await login(username, password));
+	 * }
+	 * ```
 	 */
 	signIn: (input: SignInInput<I>) => Promise<Session<U>>;
 	/**
 	 * Signs out by clearing the cookie, then calls `revoke` and waits for it.
-	 * A failed `revoke` doesn't reject. Rejects with `INVALID_OPTIONS` where
-	 * the request can't set cookies.
+	 * A failed `revoke` doesn't reject. The browser's client signs out through
+	 * your session route, so call it yourself only from server code of your
+	 * own, such as an action. Rejects with `INVALID_OPTIONS` where the request
+	 * can't set cookies.
 	 */
 	signOut: () => Promise<void>;
 	/**
@@ -277,9 +310,11 @@ type RequestAuthBase<U, I> = {
 	 */
 	credentials: Readonly<{
 		/**
-		 * Resolves the current access token, or `null`, refreshing an expired
-		 * one first. Where the request can't set cookies, an expired one rejects
-		 * with `REFRESH_FAILED`.
+		 * Resolves the current access token, or `null` when signed out,
+		 * refreshing an expired one first. Use it with an HTTP client of your
+		 * own. `createAuthFetch` from `@monarcode/session-kit/http` calls it,
+		 * and `renew` after a 401, for you. Where the request can't set
+		 * cookies, an expired token rejects with `REFRESH_FAILED`.
 		 */
 		get: () => Promise<Credentials | null>;
 		/**
@@ -378,9 +413,14 @@ export type RequestAuth<U, I> = Readonly<RequestAuthBase<U, I>> &
 		? unknown
 		: Readonly<{
 				/**
-				 * Replaces the signed-in user and keeps the session, as the
-				 * client's `updateUser` does, then resolves the session. Rejects
-				 * with `INVALID_OPTIONS` where the request can't set cookies.
+				 * Replaces the signed-in user in the cookie, such as after a
+				 * profile edit, and resolves the session. Pass the user, or an
+				 * async function that fetches it. The session ID stays.
+				 *
+				 * Rejects with `UNAUTHENTICATED` when signed out, and with
+				 * `USER_VALIDATION_FAILED` for a user your schema rejects, or when
+				 * the function rejects or times out. Rejects with
+				 * `INVALID_OPTIONS` where the request can't set cookies.
 				 */
 				updateUser: (input: I | (() => Promise<I>)) => Promise<Session<U>>;
 			}>);
@@ -464,11 +504,8 @@ type ServerAuthBase<U, I> = {
  * module once per bundle, making several, so with rotating refresh tokens,
  * give your backend a short reuse window.
  *
- * `signIn` seals what it's given. If the browser signs in with your backend
- * and sends the tokens and the user, the cookie's user is what the browser
- * said, until a refresh or `updateUser` replaces it. Show it, but let your
- * backend authorize with the access token. To trust it, check the input
- * before `signIn`, or sign in with your backend on the server.
+ * `signIn` trusts what it's given. {@link RequestAuth}'s `signIn` says what
+ * that means.
  *
  * @example
  * ```ts
