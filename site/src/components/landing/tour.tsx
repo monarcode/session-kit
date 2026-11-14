@@ -25,11 +25,11 @@ export type TourStep = {
 export function Tour({ steps }: { steps: TourStep[] }) {
 	return (
 		<section className={`${COLUMN} pt-20 sm:pt-28`}>
-			<SectionHead title="The whole idea in three files">
-				A client that knows your backend, a route only signed-in users
-				reach, and a page that reads the session. This is the TanStack
-				Router guide's own code, type-checked with every other example in
-				the docs. Each setup's guide has its own version.
+			<SectionHead title="From schema to a guarded page in three files">
+				Create the client with your schema, guard a route, and read the
+				signed-in user, typed by that schema, with no null check. This is
+				the TanStack Router setup, compiled with every other example in the
+				docs. Each setup's guide has its own version.
 			</SectionHead>
 			{/* One surface, the code block: the tabs sit on the page, not on a card. */}
 			<Tabs
