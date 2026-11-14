@@ -247,6 +247,8 @@ function AuthError() {
 }
 ```
 
+Each part of this file has a job:
+
 - `AuthProvider` mounts the client. It restores the saved session, starts the
   refresh timer, and follows other tabs.
 - `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
@@ -255,7 +257,7 @@ function AuthError() {
 - With more than one client in an app, create hooks for each with
   `createAuthHooks<typeof client>()` instead.
 - `isSignedIn(state)` is `true` while `authenticated` or `refreshing`. Pass it
-  to `useAuth` to read just that: `useAuth(isSignedIn)`. It comes from
+  to `useAuth` to read only that: `useAuth(isSignedIn)`. It comes from
   `@monarcode/session-kit`.
 - `retry` and `signOut` reject when they fail, and publish the same failure in
   `state.error`. `AuthError` shows it, so the handlers have nothing left to

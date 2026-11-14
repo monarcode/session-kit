@@ -19,8 +19,8 @@ implements `AuthStorage`:
 | `memoryStorage()`                 | Memory                                    | Tests, and sessions that shouldn't outlive the page. |
 | Your own `AuthStorage`            | Anywhere                                  | Another store. Its operations may return promises.   |
 
-For Expo, `secureStorage()` splits a session larger than SecureStore's
-2048-byte limit across several keys. See
+For Expo, `secureStorage()` splits a session larger than 2048 bytes, which
+some iOS releases refuse to store in one value, across several keys. See
 [Secure storage](/docs/setups/expo#secure-storage) in the Expo guide.
 
 ## Rotating refresh tokens

@@ -140,11 +140,11 @@ type MirrorAuthBaseOptions<U, In> = {
 	 * Reads the session on your server again, with `serverAuth.getSession`,
 	 * such as through a server function. Required without `endpoint`.
 	 *
-	 * The client calls it when the tab becomes visible after 10 seconds or
-	 * more, when another tab signs in or out, and from `retry()` and
-	 * `refresh()`. Pass one when the session is also read while the server
-	 * renders, where `endpoint` can't be called, as in TanStack Start.
-	 * Default: a `GET` to `endpoint`.
+	 * The client calls it when the tab becomes visible again, unless the
+	 * server answered in the last 10 seconds, when another tab signs in or
+	 * out, and from `retry()` and `refresh()`. Pass one when the session is
+	 * also read while the server renders, where `endpoint` can't be called,
+	 * as in TanStack Start. Default: a `GET` to `endpoint`.
 	 */
 	revalidate?: (() => Promise<Session<U> | null>) | undefined;
 	/**
@@ -242,7 +242,9 @@ type MirrorAuthBase<U> = {
 		 * Resolves the current access token, or `null` when signed out. Calls
 		 * that overlap share one request. Rejects with `REFRESH_FAILED` when
 		 * your server fails, or with the session route's own code, such as
-		 * `INVALID_OPTIONS` without `clientCredentials`.
+		 * `INVALID_OPTIONS` without `clientCredentials`. Rejects with
+		 * `SESSION_CHANGED` when the session changed meanwhile, here or on the
+		 * server.
 		 */
 		get: () => Promise<Credentials | null>;
 		/**
@@ -369,7 +371,8 @@ function stateOf<U>(
  *
  * Let TypeScript infer its types from the options. With an explicit
  * `createMirrorAuth<User>(…)`, `signIn` drops out of the type. Throws
- * `INVALID_OPTIONS` for options it can't use.
+ * `INVALID_OPTIONS` for options it can't use, and `INVALID_SESSION` for a
+ * `session` that isn't a session or `null`.
  *
  * @example
  * ```ts

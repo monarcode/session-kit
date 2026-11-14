@@ -92,8 +92,8 @@ setup shares.
 ## 2. Read the session in Server Components
 
 `nextSession` from `@monarcode/session-kit/next` gives your app its session
-over Next's cookies. Pass it Next's own `cookies` and `redirect`, and create
-it in a server-only module too:
+over Next's cookies. Session kit doesn't import `next`, so pass it Next's own
+`cookies` and `redirect`. Create it in a server-only module too:
 
 ```ts title="lib/auth/session.ts"
 import "server-only";
@@ -428,8 +428,9 @@ The example app does this.
   Server Functions rarely need to.
 - **A `basePath`.** Next doesn't add it to `fetch`, so the client's
   `endpoint` includes it: `"/app/api/session"`.
-- **Rendering.** Reading cookies makes a page dynamic. Next sends such pages
-  with `Cache-Control: no-store`, and plain `use cache` can't read cookies.
+- **Rendering.** Reading cookies makes a page dynamic, and the root layout
+  reads the session, so every page is dynamic. Next sends such pages with
+  `Cache-Control: no-store`, and plain `use cache` can't read cookies.
   Keep pages that read the session on the Node.js runtime, the default.
   Next may not pass Proxy's refreshed cookie on to Edge runtime pages.
 - **Tabs.** Signing in or out in one tab reaches the others, which ask the

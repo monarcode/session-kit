@@ -53,9 +53,9 @@ export function sameRoute(a: string, b: string): boolean {
  * leads somewhere in your app, query and fragment included.
  *
  * Anything else returns `"/"`:
- * - another site, including protocol-relative `//host` paths;
- * - a path with backslashes, spaces or control characters;
- * - the sign-in page itself, so a stale `redirectTo` can't loop.
+ * - Another site, including protocol-relative `//host` paths.
+ * - A path with backslashes, spaces or control characters.
+ * - The sign-in page itself, so a stale `redirectTo` can't loop.
  *
  * Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
  *

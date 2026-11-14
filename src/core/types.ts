@@ -205,8 +205,8 @@ export type RefreshResult<I = never> =
  * Auth calls it whenever it needs a new access token: shortly before the
  * current one expires (while mounted), once it has expired, when your API
  * rejects it, on `refresh()`, and on `retry()` once it has expired. It never
- * runs two at once.
- * Callers that need a refresh while one runs share its result.
+ * runs two at once. Callers that need a refresh while one runs share its
+ * result.
  *
  * @example
  * ```ts
@@ -249,9 +249,10 @@ export type RefreshFn<I = never> = (context: {
  * Asks your backend to revoke the tokens of a session that just signed out.
  * It's the `revoke` option of {@link AuthOptions}.
  *
- * `signOut()` calls it after the user is already signed out, so the UI never
- * waits for it. If it fails, `state.error` shows `REVOKE_FAILED`, and
- * `signOut()` still resolves.
+ * `signOut()` calls it after the user is already signed out, so a UI that
+ * follows the state never waits for it. `signOut()` itself resolves once it
+ * settles. If it fails, `state.error` shows `REVOKE_FAILED`, and `signOut()`
+ * still resolves.
  *
  * It isn't called when your backend ended the session itself, or when a
  * `locked` session signs out, as its tokens aren't in memory.
@@ -413,8 +414,8 @@ type SignedOutState<Status extends AuthStatus> = StateFields & {
  * tokens.
  *
  * Check `status`, not `user`, to know whether requests can be made. `user`
- * stays set while `refreshing` or `locked`. Checking `status` also narrows
- * `user`, so TypeScript knows when it's set.
+ * stays set while `locked`, when they can't. `isSignedIn` is that check.
+ * Checking `status` also narrows `user`, so TypeScript knows when it's set.
  *
  * @example
  * ```ts
@@ -474,17 +475,20 @@ type AuthClientBase<U, I> = {
 	 * Signs in with the tokens your backend issued, and saves the session. It
 	 * replaces any current session, even a locked one.
 	 *
-	 * Rejects with `INVALID_SESSION` for tokens that already expired, and with
-	 * `USER_VALIDATION_FAILED` for a user the schema rejects. The previous
-	 * session then stays. If `signIn` or `signOut()` is called again while it's
-	 * still checking the user, it rejects with `SESSION_CHANGED`, as the latest
-	 * call wins.
+	 * Rejects with `INVALID_SESSION` for tokens it can't use, such as ones that
+	 * already expired, and with `USER_VALIDATION_FAILED` for a user the schema
+	 * rejects. The previous session then stays. If `signIn` or `signOut()` is
+	 * called again while it's still checking the user, it rejects with
+	 * `SESSION_CHANGED`, as the latest call wins.
+	 *
+	 * If the session can't be saved, it rejects with `PERSISTENCE_FAILED`, and
+	 * no one is signed in.
 	 */
 	signIn: (input: SignInInput<I>) => Promise<void>;
 	/**
 	 * Signs out at once, clears the saved session, then calls your `revoke`
-	 * option. Other tabs that share the storage sign out too, when it reports
-	 * changes (`subscribe`) and `locking` is off.
+	 * option and waits for it. Other tabs that share the storage sign out too,
+	 * when it reports changes (`subscribe`) and `locking` is off.
 	 *
 	 * If `revoke` fails, `state.error` shows `REVOKE_FAILED`, and `signOut()`
 	 * still resolves. If storage can't be cleared, it rejects with
@@ -497,7 +501,9 @@ type AuthClientBase<U, I> = {
 	 * session first if needed, and refreshes an expired access token.
 	 *
 	 * After a refresh fails, it rejects with that failure until `retry()`,
-	 * `signIn` or `signOut()`. Rejects with `LOCKED` while locked.
+	 * `signIn` or `signOut()`. Rejects with `PERSISTENCE_FAILED` when the saved
+	 * session can't be read, with `SESSION_CHANGED` when the session changes
+	 * while it runs, and with `LOCKED` while locked.
 	 */
 	getSession: () => Promise<Session<U> | null>;
 	/**
@@ -540,8 +546,11 @@ type AuthClientBase<U, I> = {
 	 * `getSession()`. Overlapping calls share one unlock.
 	 *
 	 * If `open` throws or doesn't return a string, it rejects with
-	 * `UNLOCK_FAILED`, and the session stays locked. If the saved session can't
-	 * be used, it signs out and rejects with `INVALID_SESSION`.
+	 * `UNLOCK_FAILED`, and the session stays locked. If storage can't be read,
+	 * it rejects with `PERSISTENCE_FAILED`, and the session stays locked too.
+	 *
+	 * If the saved session can't be used, it signs out and rejects with
+	 * `INVALID_SESSION`. If it's gone, it signs out and resolves `null`.
 	 *
 	 * An expired access token is refreshed at once. If your backend rejects the
 	 * refresh token, it signs out and resolves `null`. If the refresh fails
@@ -572,6 +581,9 @@ type AuthClientBase<U, I> = {
 		 * Gets a new access token after your API rejected `credentials`, such as
 		 * with a 401. Calls that overlap share one refresh. Without a `refresh`
 		 * option or a refresh token, it signs out and resolves `null`.
+		 *
+		 * Rejects with `REFRESH_FAILED` when the refresh fails, and with
+		 * `SESSION_CHANGED` when another session has replaced theirs.
 		 */
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
 		/**
@@ -618,8 +630,9 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 				 *
 				 * Rejects with `UNAUTHENTICATED` when signed out, and with
 				 * `USER_VALIDATION_FAILED` for a user the schema rejects, or when
-				 * the function rejects or times out. If calls overlap, the latest
-				 * wins and the others reject with `SESSION_CHANGED`.
+				 * the function rejects or takes more than 15 seconds. If calls
+				 * overlap, the latest wins and the others reject with
+				 * `SESSION_CHANGED`.
 				 */
 				updateUser: (input: I | (() => Promise<I>)) => Promise<void>;
 			});
@@ -649,7 +662,11 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
  * @since 0.1.0
  */
 export type AuthLocking = {
-	/** Encrypts the tokens, given as a JSON string. */
+	/**
+	 * Encrypts the tokens, given as a JSON string. If it throws while a
+	 * session is saved, the save fails with `PERSISTENCE_FAILED`, which signs
+	 * the user out.
+	 */
 	seal: (payload: string) => string | Promise<string>;
 	/** Decrypts what `seal` returned. It must throw when it can't. */
 	open: (sealed: string) => string | Promise<string>;
@@ -715,8 +732,10 @@ export type AuthOptions<Src extends UserSource> = {
 	 */
 	revoke?: RevokeFn | undefined;
 	/**
-	 * How long a saved session lasts, in seconds. Each save, such as after a
-	 * refresh, starts it again. Default: 30 days.
+	 * How long a saved session lasts, in whole seconds. Each save, such as
+	 * after a refresh, starts it again. A session saved longer ago isn't
+	 * restored: the user is signed out, with `INVALID_SESSION` in
+	 * `state.error`. Default: 30 days.
 	 */
 	maxAge?: number | undefined;
 	/**
@@ -727,6 +746,8 @@ export type AuthOptions<Src extends UserSource> = {
 	 * Tokens, user fields, saved values and error details are left out unless
 	 * you pass `{ sensitive: true }`. Pass a development flag, such as Expo's
 	 * `__DEV__`, to keep it out of production.
+	 *
+	 * @default false
 	 */
 	debug?: AuthDebug | undefined;
 	/**

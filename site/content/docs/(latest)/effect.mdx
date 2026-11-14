@@ -55,7 +55,7 @@ This is the backend from
 [Getting started](/docs/getting-started#1-talk-to-your-backend), as Effect
 Schemas: the user, the tokens, and the body DummyJSON explains a failure
 with. They're schemas only, with no client, so the rest of the app, and the
-[server](#on-the-server), import them from one place.
+[server](#on-the-server), import them from one place:
 
 ```ts title="src/backend.ts"
 import * as Schema from "effect/Schema";
@@ -334,8 +334,10 @@ export const accountName = Auth.session.pipe(
 );
 ```
 
-Code outside `Auth` that rejects with an `AuthError`, such as
-`createAuthFetch`, converts it with `Auth.fromAuthError`.
+A client method that `Auth` doesn't wrap, such as `auth.unlock()`, rejects
+with an `AuthError`. `Auth.fromAuthError` turns it into an `AuthFailure`.
+Anything else it's given, such as a network error from `createAuthFetch`, is
+a defect.
 
 ## Update the user
 
@@ -434,6 +436,7 @@ queries and mutations made of them:
 import * as Fetch from "@monarcode/effetch";
 import { useMutation, useQuery } from "@monarcode/effetch-query/react";
 import { useAuthClient } from "@monarcode/session-kit/react";
+import * as Exit from "effect/Exit";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as Schema from "effect/Schema";
 
@@ -455,19 +458,22 @@ const profileQuery = api.query(
 export function SignInButton() {
   const auth = useAuthClient();
   const { result, run } = useMutation(signInMutation);
+
+  async function signIn() {
+    const exit = await run({
+      // DummyJSON's documented test user.
+      body: { username: "emilys", password: "emilyspass" },
+    });
+    // A failed request shows in `result`.
+    if (Exit.isFailure(exit)) return;
+    const { accessToken, refreshToken, ...user } = exit.value;
+    await auth.signIn({ accessToken, refreshToken, user });
+  }
+
   return (
     <button
       disabled={result.waiting}
-      onClick={() =>
-        run(
-          // DummyJSON's documented test user.
-          { body: { username: "emilys", password: "emilyspass" } },
-          {
-            onSuccess: ({ accessToken, refreshToken, ...user }) =>
-              auth.signIn({ accessToken, refreshToken, user }),
-          },
-        )
-      }
+      onClick={() => void signIn().catch(console.error)}
     >
       Sign in
     </button>

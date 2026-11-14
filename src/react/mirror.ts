@@ -67,10 +67,7 @@ export interface UseMirrorAuthOptions<U, C extends MirrorAuth<U>> {
  * @example
  * ```tsx
  * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
- * import {
- * 	createAuthHooks,
- * 	useMirrorAuth,
- * } from "@monarcode/session-kit/react";
+ * import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
  * import { Outlet, useLoaderData, useRevalidator } from "react-router";
  *
  * type User = { id: number; firstName: string };
@@ -85,7 +82,6 @@ export interface UseMirrorAuthOptions<U, C extends MirrorAuth<U>> {
  * 		revalidate: fetchSession,
  * 		signOut: postSignOut,
  * 	});
- * const { AuthProvider } = createAuthHooks<ReturnType<typeof createAppAuth>>();
  *
  * export default function App() {
  * 	const { session } = useLoaderData<typeof loader>();

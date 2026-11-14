@@ -6,7 +6,7 @@ description: How Session kit's errors reach your app, how to show them to users,
 Every error from Session kit's own logic is an `AuthError`, whether a method
 throws it, rejects with it, or publishes it in `state.error`. This page shows
 how to match on them, how to turn them into messages for your users, and the
-two storage failures you need to handle.
+storage failures you need to handle.
 
 ## Error codes
 
@@ -42,8 +42,11 @@ usually aren't `AuthError`s, so `errorMessage` shows their own message.
 
 ## Handle storage failures
 
-Two storage failures need a decision from you:
+Three storage failures need a decision from you:
 
+- **Storage can't be read.** `status` becomes `unavailable`, with the error
+  in `state.error`. The saved session stays as it is, and the next
+  `getSession()` or `retry()` reads it again.
 - **Storage can't be written.** The client ends the session and publishes
   the error. That way, no one stays signed in to a session that would vanish
   on reload.

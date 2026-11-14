@@ -4,12 +4,12 @@ description: Keep the session in an encrypted cookie in React Router's framework
 ---
 
 In this guide, you keep the session in an encrypted cookie in React Router's
-framework mode. Actions sign in and out, middleware refreshes the tokens, and
-loaders read the session. The first response already shows the signed-in
-page, so the browser never shows a "Checking session…" state or a flash of
-signed-out content. Components get a small client that mirrors the session,
-and the [hooks](/docs/getting-started#4-read-the-session-in-react) work with
-it.
+framework mode. An action signs in, a session route answers the browser,
+middleware refreshes the tokens, and loaders read the session. The first
+response already shows the signed-in page, so the browser never shows a
+"Checking session…" state or a flash of signed-out content. Components get a
+small client that mirrors the session, and the
+[hooks](/docs/getting-started#4-read-the-session-in-react) work with it.
 [Server rendering](/docs/server-rendering) explains how the pieces fit.
 
 For framework mode with `ssr: false`, follow
@@ -20,9 +20,9 @@ instead. A complete app is in
 ## Before you begin
 
 - React Router's middleware: React Router 8, or 7.9 and later with
-  `future.v8_middleware`. The code on this page is for React Router 8. On 7,
-  read the URL with `new URL(request.url)` where the code uses the `url`
-  argument.
+  `future.v8_middleware`. The code on this page is for React Router 8. On
+  7.14 and earlier, read the URL with `new URL(request.url)` where the code
+  uses the `url` argument.
 - A secret of 32 or more random characters to seal the cookie, set as
   `SESSION_SECRET` on the server. To make one, run
   `openssl rand -base64 32`. `react-router build` doesn't need it.
@@ -32,18 +32,10 @@ instead. A complete app is in
 To install the packages, run the following command:
 
 ```npm
-npm install @monarcode/session-kit zod
+npm install @monarcode/session-kit react-router zod
 ```
 
 ## 1. Create the server engine
-
-Put the user schema in a module that the server and the browser both import:
-
-```ts title="app/auth/user.ts"
-import { z } from "zod";
-
-export const userSchema = z.object({ id: z.number(), firstName: z.string() });
-```
 
 `createServerAuth` from `@monarcode/session-kit/server` keeps the session in
 a cookie sealed with your `secret`, and refreshes it with your backend.
@@ -59,10 +51,9 @@ import {
 import { createServerAuth } from "@monarcode/session-kit/server";
 import { z } from "zod";
 
-import { userSchema } from "./user";
-
 const API = "https://api.example.com";
 
+const userSchema = z.object({ id: z.number(), firstName: z.string() });
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
 
 export const serverAuth = createServerAuth({
@@ -302,8 +293,9 @@ export const action = route.action;
 ```
 
 Add it to `app/routes.ts` as `route("auth/session", "routes/auth.session.ts")`.
-Export the loader and action one by one, as above. React Router's build fails
-on a destructured `export const { loader, action }`. The route answers your
+Export the loader and action one by one, as `app/routes/auth.session.ts`
+does. React Router's build fails on a destructured
+`export const { loader, action }`. The route answers your
 own site's pages only, so another site can't sign the user out: see
 [Security](/docs/security).
 
@@ -416,6 +408,14 @@ The example app does this.
   refreshes before that.
 - **One session per request.** `auth(context)` returns the same session for
   every call with the same `context`, which React Router makes per request.
+- **Caching.** `sessionMiddleware` leaves a response that sets its own
+  `Cache-Control` as it is. Pass `cacheControl` to send another value, or
+  `{ cacheControl: false }` to leave every response as it is.
+- **Guards with the same names.** `requireSession` and `redirectIfSignedIn`
+  on this page come from `@monarcode/session-kit/react-router/server`.
+  `@monarcode/session-kit/react-router` exports guards with the same names
+  that take the browser's client, for apps without server rendering: see
+  [React Router](/docs/setups/react-router).
 - **A `basename`.** Pass it to the guard too, as
   `requireSession(serverAuth, { basename: "/app" })`. React Router adds it to
   loaders' and actions' redirects, but not to middleware's, so the guard adds

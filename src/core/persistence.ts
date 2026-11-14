@@ -189,8 +189,9 @@ export function createPersistence(
 
 	/**
 	 * The saved session in `entry`, opening sealed tokens with `sealing.open`.
-	 * Rejects with `UNLOCK_FAILED` when `open` throws, and `INVALID_SESSION`
-	 * when what it returns isn't this entry's tokens.
+	 * Fails with `UNLOCK_FAILED` when `open` throws or doesn't return a
+	 * string, and with `INVALID_SESSION` when what it returns isn't this
+	 * entry's tokens.
 	 */
 	function open(entry: SavedEntry): MaybePromise<StoredSession> {
 		if (entry.tokens)

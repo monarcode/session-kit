@@ -22,6 +22,10 @@ longer fit your app.
 | `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                                                        |
 | `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.                                        |
 
+`createAuth` throws an `AuthError` with the code `INVALID_OPTIONS` for an
+option it can't use, such as a `name` with other characters, or a `maxAge`
+that isn't a positive whole number.
+
 ## Pages in this section
 
 Each page covers one part of the client: how it checks users, gets new

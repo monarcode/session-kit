@@ -86,14 +86,19 @@ async function readAction(request: Request) {
  *
  * It answers only this site's own pages, by the `Sec-Fetch-Site` header, so
  * another site can't sign the user out or ask for a token. Browsers send it
- * to https and localhost pages, since 2023 (Safari 16.4). On plain http, a
- * `POST` needs an `Origin` header that matches the request's URL. Anything
- * else is refused with 403. Every answer has `Cache-Control: no-store`.
+ * to https and localhost pages, since 2023 (Safari 16.4). Without it, as on
+ * plain http, a `GET` is answered, and a `POST` needs an `Origin` header
+ * that matches the request's URL. Anything else is refused with 403. Every
+ * answer has `Cache-Control: no-store`.
  *
  * The access token is served only when `createServerAuth` has
  * `clientCredentials`. A failure answers with its `AuthErrorCode`, which the
  * browser client rejects with. Anything that isn't an `AuthError` is thrown,
  * for your framework to log.
+ *
+ * A failure's status is 400 for `INVALID_OPTIONS`, 401 for `UNAUTHENTICATED`,
+ * 409 for `SESSION_CHANGED` and 500 for any other code. A method other than
+ * `GET` or `POST` answers 405.
  *
  * Each framework's `sessionRoute` wraps it in a route. Use it directly on a
  * server without an adapter, with the request's cookie jar.

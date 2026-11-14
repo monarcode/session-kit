@@ -16,6 +16,9 @@ const connections = new WeakMap<object, () => void>();
  * guards such as `requireSession` again when the session changes. Call it
  * once, beside the Router.
  *
+ * When the session changes, it also clears the Router's cached and preloaded
+ * route data, so one account's data never shows for the next.
+ *
  * It returns a function that stops. Calling it again for the same Router
  * returns that same function.
  *

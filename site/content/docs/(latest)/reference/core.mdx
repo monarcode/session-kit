@@ -41,7 +41,7 @@ Makes a "send me back here after sign-in" path safe to redirect to, such as a `?
 
 ### webStorage
 
-Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. Tabs follow each other's changes, such as a sign-out, and take turns to refresh where the browser supports Web Locks.
+Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. With `localStorage`, tabs follow each other's changes, such as a sign-out. Tabs take turns to refresh where the browser supports Web Locks.
 
 ## Classes
 

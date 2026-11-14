@@ -28,7 +28,7 @@ instead. A complete app is in
 To install the packages, run the following command:
 
 ```npm
-npm install @monarcode/session-kit @tanstack/react-start zod
+npm install @monarcode/session-kit @tanstack/react-start @tanstack/react-router zod
 ```
 
 ## 1. Create the server engine
@@ -114,7 +114,7 @@ export const Route = createFileRoute("/api/session")({
 ```
 
 It answers your own site's pages only, so another site can't sign the user
-out: see [Security](/docs/security).
+out: see [The session route](/docs/security#the-session-route).
 
 Two server functions do the rest. Signing in takes your form's input. Reading
 the session is a server function too, because `loadSession` reads it while
@@ -179,6 +179,10 @@ export const startInstance = createStart(() => ({
   ],
 }));
 ```
+
+It refreshes access that expires within 60 seconds. Access tokens that live
+a minute or less are refreshed on every request, so pass a smaller `within`
+for them, such as `refreshSession(serverAuth, { within: 15 })`.
 
 A failed refresh doesn't fail the request. Routes read the session as
 usual, and an error there reaches the route's error component.
@@ -266,6 +270,11 @@ export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
 });
 ```
 
+When the server can't read the session, such as after a failed refresh,
+`loadSession` rejects, and the root route's `errorComponent` shows. In the
+example app, it offers a retry with `router.invalidate()`, which runs
+`loadSession` again.
+
 Guards are the ones from `@monarcode/session-kit/tanstack-router`. On the
 server, a redirect is a real HTTP redirect:
 
@@ -284,7 +293,8 @@ export const Route = createFileRoute("/_authenticated")({
 ```
 
 [Guard private routes](/docs/setups/tanstack-router#3-guard-private-routes)
-explains `SessionOutlet`, and an error component for a failed refresh.
+explains `SessionOutlet`. Its error component isn't needed here, as
+`loadSession` reports a failed refresh first.
 
 Guards decide what a page shows. Server functions that return private data
 must check the session themselves, with `session.getSession()` or
@@ -326,6 +336,27 @@ In this guide, the server signs in with your backend, so the user in the cookie
 comes from the backend. If the browser signs in with the backend itself, for
 example through a provider's SDK, have `signInFn` take the tokens instead, as
 [Hybrid setup](/docs/server-rendering/hybrid) shows.
+
+## Sign out
+
+The client's `signOut()` signs out on the server through the session route,
+which clears the cookie and calls your `revoke` option, when
+`createServerAuth` has one. It then signs out this tab and tells the others.
+Guards run again, so `requireSession` sends the user to the sign-in page:
+
+```tsx title="src/sign-out.tsx"
+import { useAuthClient } from "@monarcode/session-kit/tanstack-router";
+
+export function SignOutButton() {
+  const auth = useAuthClient();
+  // A failed sign-out keeps the session, and shows in `state.error`.
+  return (
+    <button onClick={() => void auth.signOut().catch(() => {})}>
+      Sign out
+    </button>
+  );
+}
+```
 
 ## Call your API
 

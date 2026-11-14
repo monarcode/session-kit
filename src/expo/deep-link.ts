@@ -14,9 +14,9 @@ import type { AuthStatus } from "../core/types.js";
 import type { AuthSource } from "../react/context.js";
 
 /**
- * Options for {@link rememberDeepLink}, the same as `safeReturnTo`'s. Set
- * `loginPath` when your sign-in screen isn't `/login`, so links to it are
- * dropped rather than kept.
+ * Options for {@link rememberDeepLink} and {@link deepLinkHandler}, the same
+ * as `safeReturnTo`'s. Set `loginPath` when your sign-in screen isn't
+ * `/login`, so links to it are dropped rather than kept.
  *
  * @example
  * ```ts
@@ -108,6 +108,10 @@ export function deepLinkPath(url: string): string {
  *   sign-in or unlock, once `SessionGate`'s `ready` is `true`.
  * - **A screen anyone may see**: drops it once that screen is showing.
  *
+ * Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`.
+ * Expo Router warns that a throw in `redirectSystemPath` can crash the app.
+ * {@link deepLinkHandler} throws when it's made instead.
+ *
  * @example
  * ```ts
  * // app/+native-intent.tsx
@@ -192,6 +196,8 @@ export type DeepLinkHandler = (event: {
  *
  * export const redirectSystemPath = deepLinkHandler(auth);
  * ```
+ *
+ * @see {@link RememberDeepLinkOptions} to set your sign-in screen's path
  *
  * @since 0.1.0
  */

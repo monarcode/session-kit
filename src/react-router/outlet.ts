@@ -53,8 +53,8 @@ export type SessionOutletProps = {
 	 */
 	loginPath?: string | undefined;
 	/**
-	 * Shown while the saved session is read and, in data mode, until the
-	 * loader has accepted a new session.
+	 * Shown while the saved session is read and, in data or framework mode,
+	 * until the loader has accepted a new session.
 	 */
 	pending?: ReactNode | undefined;
 	/**
@@ -95,7 +95,7 @@ function useGuardedSessionId(): string | undefined {
  * `?redirectTo=` set to where they were. In declarative mode, that makes it
  * the guard.
  *
- * In data mode, use it as the element of a route whose loader returns
+ * In data or framework mode, render it from a route whose loader returns
  * `requireSession`'s result. When the account changes, it shows
  * `pending` until the loader has run again, so no child sees the last
  * account's data.
@@ -104,6 +104,9 @@ function useGuardedSessionId(): string | undefined {
  * profile updates. UI the route renders around the outlet, such as a
  * sidebar, isn't guarded this way. Read the user there from state, where it
  * may be `null`.
+ *
+ * Throws `INVALID_OPTIONS` when it has neither an `AuthProvider` around it
+ * nor a `client`.
  *
  * @example
  * ```tsx

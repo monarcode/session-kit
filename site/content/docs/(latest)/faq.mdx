@@ -40,7 +40,9 @@ does.
 ## What if some endpoints answer 401 for other reasons?
 
 Set `signOutOnRepeated401: false` in `createAuthFetch`'s options, beside
-`baseUrl`, so that those endpoints can't sign users out. See
+`baseUrl`, so that a second 401 from those endpoints, after a refresh,
+doesn't sign users out. Without a refresh token or a `refresh` callback,
+any 401 still signs the user out. See
 [Authenticated requests](/docs/client/requests).
 
 ## How much does it add to my bundle?

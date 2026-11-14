@@ -89,7 +89,7 @@ calls, and a client with its own transport can use the same ones:
    requests failed, they share one refresh. It resolves `null` when the user
    was signed out instead.
 3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
-   session, unless a newer one has replaced it.
+   session, unless newer credentials have replaced the ones you pass.
 
 An axios instance that keeps its default adapter does it with two
 interceptors:

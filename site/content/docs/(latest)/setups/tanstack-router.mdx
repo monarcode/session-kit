@@ -359,8 +359,7 @@ written with Effect and effetch, in
   signed-in user never sees the sign-in page.
 - **Stopping.** Call `disconnectAuth` on app teardown or hot-module disposal.
   It stops background work without signing out. In Start's SPA mode,
-  `getRouter()` above doesn't keep it, as the Router lasts as long as the
-  page.
+  `getRouter()` doesn't keep it, as the Router lasts as long as the page.
 - **A failed refresh is not a redirect.** `requireSession` rethrows it for the
   route's error component, which can offer `auth.retry()`. The user is still
   signed in.

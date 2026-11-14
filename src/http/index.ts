@@ -45,8 +45,9 @@ export type AuthFetchClient = Pick<
  */
 export type AuthFetchOptions = {
 	/**
-	 * Your API's base URL. The access token goes only to requests on its
-	 * origin. A path is resolved against it as a link is against a page's
+	 * Your API's base URL. It must be absolute, such as
+	 * `https://api.example.com/`. The access token goes only to requests on
+	 * its origin. A path is resolved against it as a link is against a page's
 	 * address. End it with `/`, so that `"orders"` lands under it.
 	 */
 	baseUrl: string;
@@ -62,7 +63,9 @@ export type AuthFetchOptions = {
 	/**
 	 * Whether a second 401, after a successful refresh, signs the user out.
 	 * Set `false` when some endpoints answer 401 for reasons other than a
-	 * rejected token, so they can't sign users out.
+	 * rejected token, so a second 401 from them doesn't sign users out.
+	 * Without a refresh token or a `refresh` option, the first 401 still does.
+	 *
 	 * @default true
 	 */
 	signOutOnRepeated401?: boolean | undefined;
@@ -114,9 +117,11 @@ async function discard(response: Response) {
  * the user is signed out, unless `signOutOnRepeated401` is off.
  *
  * Rejects with `UNAUTHENTICATED` when signed out, unless `optional` sends the
- * request without a token, and with `LOCKED` while locked. If the session
- * changes during a request, it rejects with `SESSION_CHANGED` rather than
- * resolve a response meant for another account.
+ * request without a token, and with `LOCKED` while locked. When a refresh
+ * fails, it rejects with that failure, such as `REFRESH_FAILED`.
+ *
+ * If the session changes during a request, it rejects with `SESSION_CHANGED`
+ * rather than resolve a response meant for another account.
  *
  * The token never leaves your API. A request for another origin, with a
  * username or password in its URL, or with an invalid URL rejects with
@@ -128,8 +133,8 @@ async function discard(response: Response) {
  * `Request` refuses, reject as `fetch` and `Request` do.
  *
  * An HTTP client that takes a custom `fetch`, such as ky or openapi-fetch,
- * can take this one. Its requests are then sent, and sent again after a 401,
- * as above.
+ * can take this one. Its requests then get the same checks, and the same
+ * handling of a 401.
  *
  * @example
  * ```ts

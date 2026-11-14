@@ -60,6 +60,9 @@ export type SessionOutletProps = {
  * UI the route renders around the outlet, such as a sidebar, isn't guarded
  * this way. Read the user there from state, where it may be `null`.
  *
+ * Throws `INVALID_OPTIONS` when neither an `AuthProvider` nor Router context
+ * has a client.
+ *
  * @example
  * ```tsx
  * import {

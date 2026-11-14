@@ -294,7 +294,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * with a 401. Calls at the same time share one refresh.
 	 *
 	 * Fails with `UNAUTHENTICATED` when the session ended instead, and with
-	 * `SESSION_CHANGED` when another session replaced it.
+	 * `SESSION_CHANGED` when another session replaced it. It fails with
+	 * `LOCKED` while locked, and with the refresh's own failure, such as
+	 * `REFRESH_FAILED`.
 	 *
 	 * `sessionBearer` from `@monarcode/session-kit/effetch` renews on a 401
 	 * by itself.
@@ -365,6 +367,10 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * client is signed out anyway when only its storage couldn't be cleared,
 	 * and a failed `revoke` doesn't fail it. A `createMirrorAuth` client
 	 * stays signed in when your server's sign-out fails.
+	 *
+	 * Dies with a request's session on the server where the request can't set
+	 * cookies, such as in a Next.js page. Sign out in an action or a route
+	 * handler.
 	 */
 	static readonly signOut: Effect.Effect<void, AuthFailure, Auth> = Auth.use(
 		(client) => fromPromise(() => client.signOut()),

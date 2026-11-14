@@ -51,6 +51,7 @@ export type RequireSessionOptions = {
  *
  * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
  * rethrown to the route's error component, which can offer `auth.retry()`.
+ * A `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
  *
  * Render the route's children with `SessionOutlet`, and call `connectAuth`,
  * so the guard runs again when the session changes.

@@ -8,8 +8,8 @@ React Router's framework mode, Session kit keeps the session on the server.
 This page explains how the pieces fit, then sends you to your framework's
 guide.
 
-Both tokens and the user sit in one `httpOnly` cookie that page scripts can't
-read, so the refresh token never reaches the browser. The server refreshes
+Both tokens and the user sit in one encrypted, `httpOnly` cookie that page
+scripts can't read, so they never see the refresh token. The server refreshes
 before rendering, so pages never show a "Checking session…" state.
 
 ## The pieces

@@ -9,8 +9,8 @@ exports, with their options and types.
 
 ## Entry points
 
-Import from these paths only. Internal `dist` paths aren't part of the public
-API.
+Internal `dist` paths aren't part of the public API. Import from these paths
+only:
 
 | Import                                                                                  | Exports                                                                                                                                           |
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -37,4 +37,6 @@ entry point you don't import adds nothing.
 
 Errors from Session kit's own logic are `AuthError`s. In `./effect` and
 `./effetch`, Effects fail with `AuthFailure`, which carries the same code.
-See [Error codes](/docs/reference/error-codes) for every `AuthErrorCode`.
+The exception is `INVALID_OPTIONS`: it's misuse, so the Effect dies with the
+`AuthError` instead. See [Error codes](/docs/reference/error-codes) for every
+`AuthErrorCode`.

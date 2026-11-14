@@ -110,8 +110,8 @@ export type RequireSessionLoader<U> = (args: {
  *
  * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
  * rethrown to the route's error element, which can offer `auth.retry()`.
- * A `loginPath` that doesn't start with `/`, or a bad `basename`, rejects
- * with `INVALID_OPTIONS`.
+ * A `loginPath` or `basename` that doesn't start with `/` rejects with
+ * `INVALID_OPTIONS`.
  *
  * Use `SessionOutlet` as the route's element, and call
  * `useAuthRevalidation`, so the loader runs again when the session changes.
@@ -146,7 +146,7 @@ export async function requireSession<U>(
  * client's user, and works as {@link requireSession} does.
  *
  * Pass `loginPath` or `basename` when they aren't the defaults. A
- * `loginPath` that doesn't start with `/`, or a bad `basename`, throws
+ * `loginPath` or `basename` that doesn't start with `/` throws
  * `INVALID_OPTIONS` when the loader is made.
  *
  * @example

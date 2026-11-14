@@ -39,9 +39,10 @@ picks the peer versions that match your SDK:
 npx expo install @monarcode/session-kit expo-secure-store expo-file-system zod
 ```
 
-An Expo Router app already has `expo-router` and `react-native`. Add the
-`expo-secure-store` config plugin to `app.json`, so Android Auto Backup leaves
-the session out of backups:
+An Expo Router app already has `expo-router` and `react-native`. Holding the
+splash screen needs `expo-splash-screen`, so install it too if your app
+doesn't have it. Add the `expo-secure-store` config plugin to `app.json`, so
+Android Auto Backup leaves the session out of backups:
 
 ```json
 {
@@ -171,13 +172,14 @@ function RootStack() {
 guards never see `initializing`.
 
 If the first screen needs more than the session, such as fonts, pass `ready`.
-The splash screen then stays up until both are done:
+The splash screen then stays up until both are done. Count a failed load as
+done, or the splash screen never hides:
 
 ```tsx
-const [fontsLoaded] = useFonts(fonts);
+const [fontsLoaded, fontError] = useFonts(fonts);
 
 <SessionGate
-  ready={fontsLoaded}
+  ready={fontsLoaded || fontError !== null}
   unavailable={(props) => <Unavailable {...props} />}
 >
   <RootStack />
@@ -394,47 +396,53 @@ To check the app:
 
 ## Secure storage
 
-`secureStorage()` saves the session with `expo-secure-store`, in the iOS
-keychain and in Keystore-encrypted storage on Android. The
-[reference](/docs/reference/expo#securestorage) covers how it splits large
-sessions, starts a reinstalled app signed out, and handles data Android can't
-decrypt. Its options are in
+[`secureStorage()`](/docs/reference/expo#securestorage) saves the session
+with `expo-secure-store`, in the iOS keychain and in Keystore-encrypted
+storage on Android. A session over 2048 bytes, which some iOS releases refuse
+to store in one value, is split across several keys, up to 128 KB. By
+default, a reinstalled app starts signed out. So does an app whose saved
+session Android can't decrypt, as after a backup is restored onto another
+device. Its options are in
 [`SecureStorageOptions`](/docs/reference/expo#securestorageoptions).
 
 Two things depend on your app:
 
-- **Background refreshes.** While the iOS keychain can't be read, the session
-  is `unavailable`, never signed out. An app that refreshes in a background
-  task before the device's first unlock needs
+- **Background refreshes.** By default, iOS lets the app read the keychain
+  only while the device is unlocked. While the keychain can't be read, the
+  session is `unavailable`, never signed out. An app that refreshes in a
+  background task while the device is locked needs
   `secureStorage({ keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK })`.
 - **Android backups.** The `expo-secure-store` config plugin from
   [Installation](#installation) keeps the session out of Auto Backup.
 
 ## SessionGate
 
-`SessionGate` adds what `Stack.Protected` lacks. It holds the splash screen
-while the session is restored, shows `unavailable` when access can't be used,
-checks the session again when the app returns to the foreground, and opens
-deep links kept for after sign-in. The
-[reference](/docs/reference/expo#sessiongate) says what it does in each
-state, and [`SessionGateProps`](/docs/reference/expo#sessiongateprops)
+[`SessionGate`](/docs/reference/expo#sessiongate) adds what `Stack.Protected`
+lacks. It holds the splash screen while the session is restored, shows
+`unavailable` when access can't be used, checks the session again when the
+app returns to the foreground, and opens deep links kept for after sign-in.
+While the session is locked, it renders the navigator, so your guards can
+show an unlock screen. When one account replaces another without a sign-out
+between them, it remounts the navigator, so no screen keeps the previous
+account's state. [`SessionGateProps`](/docs/reference/expo#sessiongateprops)
 covers `ready` and `unavailable`.
 
 ## Deep links
 
-`deepLinkHandler` keeps one link at a time, and `SessionGate` opens it after
-the next sign-in or unlock. The
-[reference](/docs/reference/expo#rememberdeeplink) says when a link is
-opened, dropped or ignored. A link to a screen anyone may see is dropped once
+[`deepLinkHandler`](/docs/reference/expo#deeplinkhandler) keeps one link at a
+time, and `SessionGate` opens it after the next sign-in or unlock. A link to
+the root or the sign-in screen is ignored, as is one that could leave the
+app. A link that arrives while the user is signed in is dropped, since Expo
+Router opens it as usual. A link to a screen anyone may see is dropped once
 that screen shows. If the app launched with it, it's dropped at the sign-in
 instead, unopened.
 
-Pass `deepLinkHandler(auth, { loginPath: "/sign-in" })` if your sign-in
-screen isn't `/login`.
+If your sign-in screen isn't `/login`, pass
+`deepLinkHandler(auth, { loginPath: "/sign-in" })`.
 
-`Stack.Protected`'s `redirectTo` only chooses the screen a turned-away link
-goes to, such as `/login`. It doesn't keep the link, so `deepLinkHandler` is
-still what opens it after the sign-in.
+Where `Stack.Protected` takes a `redirectTo`, as in Expo SDK 58, it only
+chooses the screen a turned-away link goes to, such as `/login`. It doesn't
+keep the link, so `deepLinkHandler` is still what opens it after the sign-in.
 
 There is no `?redirectTo=` parameter on Expo. The link waits in memory, not
 in the URL, and an app restart forgets it.
@@ -468,8 +476,12 @@ with `user` and `sessionId` set and its tokens sealed by a key your app holds.
 Expo side.
 
 Keep a random key in a SecureStore item that needs biometrics to read, and
-seal the tokens with AES-GCM. This example uses `@noble/ciphers` and
-`expo-crypto`, your app's dependencies, not Session kit's:
+seal the tokens with AES-GCM. SecureStore's biometric prompt needs a
+development build on a real device. Expo Go doesn't support it, and
+simulators don't ask for biometrics. On iOS, the `expo-secure-store` config
+plugin from [Installation](#installation) adds the Face ID permission. This
+example uses `@noble/ciphers` and `expo-crypto`, your app's dependencies, not
+Session kit's:
 
 ```ts title="src/session-key.ts"
 import { Platform } from "react-native";
@@ -486,7 +498,7 @@ import { getRandomBytes } from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 
 const KEY_ITEM = "session-key";
-// Whether the key needs biometrics: it must be read the way it was saved.
+// Whether the key was saved behind biometrics, so it's read the same way.
 const BIOMETRIC_ITEM = "session-key-biometric";
 
 function keyOptions(biometric: boolean): SecureStore.SecureStoreOptions {
@@ -515,11 +527,21 @@ async function saveKey(next: Uint8Array): Promise<void> {
   await SecureStore.setItemAsync(BIOMETRIC_ITEM, String(biometric));
 }
 
-/** Reads the key, which shows the prompt when it needs biometrics. */
+/**
+ * Reads the key, which shows the prompt when it needs biometrics. Resolves
+ * `null` when no key was saved yet.
+ */
 async function readKey(): Promise<string | null> {
   const biometric = await SecureStore.getItemAsync(BIOMETRIC_ITEM);
   if (biometric === null) return null;
-  return SecureStore.getItemAsync(KEY_ITEM, keyOptions(biometric === "true"));
+  const saved = await SecureStore.getItemAsync(
+    KEY_ITEM,
+    keyOptions(biometric === "true"),
+  );
+  // SecureStore reads `null` for a key that a change to the device's
+  // biometrics made unreadable.
+  if (saved === null) throw new Error("The session key can't be read");
+  return saved;
 }
 
 /**
@@ -536,8 +558,7 @@ export async function loadKey(): Promise<void> {
   // iOS, saving doesn't prompt, so read it back to show the prompt.
   const next = getRandomBytes(32);
   await saveKey(next);
-  if (Platform.OS === "ios" && !(await readKey()))
-    throw new Error("Could not read the new session key");
+  if (Platform.OS === "ios") await readKey();
   key = next;
 }
 

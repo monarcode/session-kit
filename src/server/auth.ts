@@ -112,7 +112,7 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 * It's checked when a method first runs, not at creation, so build tools
 	 * that load your module without it, such as `next build`, still work.
 	 * Without a valid secret, every method rejects with `INVALID_OPTIONS`, and
-	 * `forRequest`'s view reports `unavailable`.
+	 * a request's `state` is `unavailable`.
 	 */
 	secret: string | readonly string[];
 	/**
@@ -246,8 +246,9 @@ type RequestAuthBase<U, I> = {
 	 * function or a loader.
 	 *
 	 * An expired access token is refreshed first, and a refresh token your
-	 * backend rejects signs out. Where the request can't set cookies, the
-	 * session is returned as the cookie holds it.
+	 * backend rejects signs out. Rejects with `REFRESH_FAILED` when that
+	 * refresh fails. Where the request can't set cookies, the session is
+	 * returned as the cookie holds it.
 	 */
 	getSession: () => Promise<Session<U> | null>;
 	/**
@@ -257,8 +258,9 @@ type RequestAuthBase<U, I> = {
 	 * read. Call it yourself only in middleware of your own.
 	 *
 	 * It refreshes at most once per request. A failed refresh is ignored while
-	 * the access token still works. Rejects with `INVALID_OPTIONS` where the
-	 * request can't set cookies.
+	 * the access token still works. Once the token has expired, it rejects
+	 * with `REFRESH_FAILED`. Rejects with `INVALID_OPTIONS` for a negative
+	 * `within`, or where the request can't set cookies.
 	 */
 	refreshIfDue: (options?: RefreshIfDueOptions) => Promise<Session<U> | null>;
 	/**
@@ -276,7 +278,8 @@ type RequestAuthBase<U, I> = {
 	 *
 	 * Rejects with `USER_VALIDATION_FAILED` for a user your schema rejects,
 	 * with `INVALID_SESSION` for tokens that already expired, and with
-	 * `INVALID_OPTIONS` where the request can't set cookies.
+	 * `PERSISTENCE_FAILED` for a session too large for the cookie. Rejects
+	 * with `INVALID_OPTIONS` where the request can't set cookies.
 	 *
 	 * @example
 	 * ```ts
@@ -389,9 +392,9 @@ type Members<U, I> = Omit<RequestAuthBase<U, I>, typeof requestAuth> & {
  * Some requests can't set cookies: a Next.js page, or a React Router loader
  * once its response has left the middleware. There, nothing can be saved, so
  * `signIn`, `signOut`, `updateUser` and `refreshIfDue` reject with
- * `INVALID_OPTIONS`, and an expired access token rejects with
- * `REFRESH_FAILED`. Refresh first, in middleware or a proxy, with
- * `refreshIfDue`.
+ * `INVALID_OPTIONS`. `getSession` still resolves, and `credentials.get`
+ * rejects with `REFRESH_FAILED` once the access token has expired. Refresh
+ * first, in middleware or a proxy, with `refreshIfDue`.
  *
  * @example
  * ```ts
@@ -493,7 +496,8 @@ type ServerAuthBase<U, I> = {
  * Your framework's adapter gives you one request's session
  * ({@link RequestAuth}), with every method and no cookie jar. Its methods
  * are here too, each taking the request's {@link CookieJar}, for a server
- * without an adapter. `forRequest(jar)` gives that request's session.
+ * without an adapter. `forRequest(jar)` gives that request's session, which
+ * alone has `isCurrent` and `state`.
  *
  * `U` is the user, and `I` is the user `signIn` accepts, or `never` with
  * `fromAccessToken`. Write `typeof serverAuth` rather than spelling them out.

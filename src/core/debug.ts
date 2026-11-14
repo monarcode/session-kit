@@ -4,6 +4,10 @@ import { AuthError } from "./errors.js";
  * Which part of auth an {@link AuthDebugEvent} comes from, such as `refresh`
  * or `storage`. These names don't change between releases, so filter on them.
  *
+ * `sync` events report changes from other tabs and, with server rendering,
+ * from the server. `gate`, `deep-link` and `foreground` events come from
+ * `@monarcode/session-kit/expo`.
+ *
  * @example
  * ```ts
  * import type { AuthDebugEvent, AuthDebugType } from "@monarcode/session-kit";
@@ -56,7 +60,7 @@ export type AuthDebugType =
  * @since 0.1.0
  */
 export type AuthDebugEvent = Readonly<{
-	/** The `name` passed to `createAuth`. */
+	/** The `name` option of the client that reports it. */
 	name: string;
 	/** Which part of auth it comes from. */
 	type: AuthDebugType;
@@ -65,9 +69,8 @@ export type AuthDebugEvent = Readonly<{
 	/** Details, such as `status`, `sessionId`, or `durationMs`. */
 	data?: Readonly<Record<string, unknown>> | undefined;
 	/**
-	 * The failure, when the event reports one. Without `sensitive`, only its
-	 * `code` and `message` are kept, as `cause` and `issues` can hold tokens
-	 * or user fields.
+	 * The failure, when the event reports one. Without `sensitive`, it comes
+	 * without its `cause` and `issues`, which can hold tokens or user fields.
 	 */
 	error?: AuthError | undefined;
 }>;

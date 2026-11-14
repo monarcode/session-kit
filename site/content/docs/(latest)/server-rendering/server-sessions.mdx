@@ -46,8 +46,10 @@ export const serverAuth = createServerAuth({
 });
 ```
 
-Remove `OLD_SESSION_SECRET` once the sessions it sealed have expired. A cookie
-that no listed secret opens reads as signed out.
+Each save seals the cookie with the first secret. Remove
+`OLD_SESSION_SECRET` once `maxAge` has passed since the change, 30 days by
+default. By then, every cookie it sealed has expired. A cookie that no listed
+secret opens reads as signed out.
 
 ## A request's session
 
@@ -72,12 +74,13 @@ a renewed one after a 401, and Effect's `Auth.layer` takes it
 
 Some requests can't set cookies: a Next.js Server Component rendering, or a
 React Router loader once its response has left the middleware. There,
-nothing is saved, so the methods that write reject, and an expired access
-token rejects with `REFRESH_FAILED`. TanStack Start can't tell once a page
-has started streaming, so a cookie set then is lost. Refresh before rendering,
-with the middleware each setup guide adds: `refreshSession` in TanStack Start,
-`sessionMiddleware` in React Router, and `nextSession`'s `refresh` in
-Next.js's Proxy.
+nothing is saved, so `signIn`, `signOut`, `updateUser` and `refreshIfDue`
+reject with `INVALID_OPTIONS`. `getSession` still resolves, and
+`credentials.get` rejects with `REFRESH_FAILED` once the access token has
+expired. TanStack Start can't tell once a page has started streaming, so a
+cookie set then is lost. Refresh before rendering, with the middleware each
+setup guide adds: `refreshSession` in TanStack Start, `sessionMiddleware` in
+React Router, and `nextSession`'s `refresh` in Next.js's Proxy.
 
 ## Servers without an adapter
 
@@ -97,7 +100,9 @@ request's session to the next. A jar that can't set cookies says so with
 
 Parallel requests to one instance that carry the same cookie share one
 refresh. For ten seconds afterwards, a request still carrying the old cookie
-gets the new tokens rather than refreshing again.
+gets the new tokens rather than refreshing again. A refresh that fails at
+your backend is shared too. For ten seconds, requests carrying that cookie
+reject with its error rather than call your backend again.
 
 Each `createServerAuth` call is its own instance, and a framework may make
 several on one server, one per bundle. Separate processes, servers, and
@@ -137,8 +142,10 @@ The session route answers your own site's pages only: see
 - **Size.** The cookie can take about 7.5 KB across two cookies, since
   servers and proxies refuse larger request headers (nginx: 8 KB for the
   `Cookie` line, shared with the site's other cookies), and go on refusing
-  every page until the cookie is cleared. A larger user rejects at sign-in
-  with `PERSISTENCE_FAILED`, so keep the user small.
+  every page until the cookie is cleared. That holds about 5.5 KB of tokens
+  and user before encryption. A larger session rejects at sign-in with
+  `PERSISTENCE_FAILED`, so keep the user small. An `updateUser` or a refresh
+  that outgrows the cookie rejects the same way, and signs the user out.
 - **Plain http.** The cookie is `Secure` by default. Browsers accept that on
   `http://localhost` except Safari: pass `cookie: { secure: false }` for
   local development there, never in production.

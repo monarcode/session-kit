@@ -39,13 +39,15 @@ export type AuthHooksOptions<Client extends AuthSource> = {
 	 * Finds the client some other way than `AuthProvider`, such as from a
 	 * context of your own. It's called as a hook, inside every hook, on every
 	 * render. The hooks then need no `AuthProvider`, so mount the client
-	 * another way. Default: reads the nearest `AuthProvider`.
+	 * another way. Default: the client of the nearest `AuthProvider` from the
+	 * same `createAuthHooks` call.
 	 */
 	useClient?: (() => Client) | undefined;
 };
 
 /**
- * Props for the `AuthProvider` that {@link createAuthHooks} returns.
+ * Props for {@link AuthProvider}, and for the one that
+ * {@link createAuthHooks} returns.
  *
  * @example
  * ```tsx
@@ -208,8 +210,8 @@ export function createAuthHooks<Client extends AuthSource>(
  * register in `Register`, from `@monarcode/session-kit`.
  *
  * Until you register one, it's any client, with what every client has: its
- * state, `getSession`, `signOut`, `isCurrent` and `credentials`. Its user is
- * then `unknown`.
+ * state, `mount`, `getSession`, `signOut`, `isCurrent` and `credentials`.
+ * Its user is then `unknown`.
  *
  * @example
  * ```ts
@@ -277,6 +279,9 @@ export function AuthProvider(
  * Reads the current auth state, or the part `selector` picks, and re-renders
  * when it changes. With a selector, it re-renders only when that part
  * changes.
+ *
+ * The part is compared with `Object.is`. A selector that returns a new
+ * object or array each time re-renders on every change.
  *
  * It reads the client of the nearest {@link AuthProvider}, typed by the
  * client you register in `Register`, from `@monarcode/session-kit`.

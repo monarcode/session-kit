@@ -29,14 +29,16 @@ Each setup saves the tokens in a different place:
 | [Server rendering](/docs/server-rendering) | An encrypted `httpOnly` cookie                              |
 | [Expo app](/docs/setups/expo)              | The iOS keychain, or encrypted with an Android Keystore key |
 
+Each place protects the tokens differently:
+
 - **In a browser app**, any JavaScript on your origin can read the tokens, as
   with any credential a browser saves. They never go in cookies, so the
   browser doesn't send them on its own.
 - **With server rendering**, page scripts can't read the cookie. Only the
   access token reaches page scripts, and only with `clientCredentials`.
-- **In an Expo app**, `secureStorage()` keeps the session out of Android
-  backups with the `expo-secure-store` config plugin. It also removes a
-  session that an earlier install left in the iOS keychain.
+- **In an Expo app**, the `expo-secure-store` config plugin keeps the
+  session out of Android backups. `secureStorage()` removes a session that
+  an earlier install left in the iOS keychain.
 
 ## The session route
 
@@ -46,14 +48,18 @@ setups. `sessionHandler` from `@monarcode/session-kit/server` answers it,
 through each framework's `sessionRoute`.
 
 It answers your own site's pages only, so another site can't sign the user
-out or ask for the access token.
-[`sessionHandler`](/docs/reference/server#sessionhandler) says how it tells.
+out or ask for the access token. It makes two checks, and answers 403 to a
+request that fails one:
+
+- A `Sec-Fetch-Site` header, when the request has one, must be
+  `same-origin`. Browsers send it with requests to https and localhost sites.
+- On plain http, where browsers don't send that header, a `POST` must have
+  an `Origin` header that matches the request's URL. A `GET` passes: it
+  changes nothing, and another site can't read the answer.
 
 Signing in stays your own server code. A route of your own that changes the
-session must refuse other sites too, where the framework doesn't check.
-Refuse a request that has a `Sec-Fetch-Site` header other than `same-origin`.
-On plain http, where browsers don't send that header, refuse a `POST` whose
-`Origin` isn't your site's.
+session must refuse other sites too, where the framework doesn't check. Make
+the same two checks there.
 
 ## Where tokens go
 

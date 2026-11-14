@@ -7,7 +7,8 @@ Locking is for native apps that ask a returning user to unlock, for example
 with biometrics, before the app opens. With the `locking` option, a saved
 session restores as `locked`. `user` and `sessionId` are set, so a
 "Welcome back" screen can greet the user, but the tokens wait for
-`auth.unlock()`.
+`auth.unlock()`. The following client encrypts its saved tokens with a key
+the app holds:
 
 ```ts title="src/locked-auth.ts"
 import { createAuth, type AuthStorage } from "@monarcode/session-kit";
@@ -39,6 +40,8 @@ export const unlockApp = () => lockedAuth.unlock();
 /** `locked` again. The saved session stays, and the tokens leave memory. */
 export const lockApp = () => lockedAuth.lock();
 ```
+
+Locking comes with these rules:
 
 - **Sealing is yours.** Session kit depends on no crypto or biometrics
   library. The user and session ID are saved beside the sealed tokens,

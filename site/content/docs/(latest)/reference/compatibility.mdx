@@ -25,6 +25,8 @@ import use:
 | `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
 | `react-native`           | `>=0.79.0`              | `/expo`                                                |
 
+Three things to know about these peers:
+
 - **Expo.** The Expo ranges cover Expo SDK 53 and newer. Install them with
   `npx expo install`, so that they match your SDK, as the
   [Expo guide](/docs/setups/expo#installation) shows.
@@ -42,7 +44,9 @@ publishes no `exports` map, so its types don't resolve under NodeNext.
 ## Runtimes
 
 Session kit runs in browsers, in React Native (Expo SDK 53 and newer, with
-Hermes and Metro), and in Node.js 20 and newer:
+Hermes and Metro), and in Node.js 20 and newer. Your framework can need a
+newer Node.js: React Router 8 needs 22.22. Session kit uses these platform
+features:
 
 - **`AbortController`** is required.
 - **`crypto.randomUUID`** makes session IDs when present. Without it, the

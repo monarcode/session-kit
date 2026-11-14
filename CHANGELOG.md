@@ -314,6 +314,29 @@
   sign-in shows the backend's own message for a failed sign-in, as the
   example apps do, and the secret-rotation example works once the old secret
   is removed.
+- The hovers and the guides are checked line by line against the code. The
+  hovers name errors they left out: `PERSISTENCE_FAILED` from `signIn`,
+  `getSession` and `unlock`, `REFRESH_FAILED` and `SESSION_CHANGED` from
+  `credentials.renew`, `createAuthFetch` and `sessionBearer`, a request's
+  `getSession` and `refreshIfDue` on the server, the `INVALID_OPTIONS` that
+  guards, outlets and `sessionRoute` throw, and the session route's status
+  codes. `AuthErrorCode`'s docs cover a saved session older than `maxAge`, a
+  `locking.seal` that fails, and a refresh that times out.
+- Corrected in the docs: `signOut()` waits for `revoke`.
+  `signOutOnRepeated401: false` only stops a second 401 from signing users
+  out, and without a refresh token the first one still does. A read-only
+  request's `getSession` resolves, and only `credentials.get` rejects once
+  the token has expired. React Router passes loaders `url` from 7.15, not
+  from 8. `AFTER_FIRST_UNLOCK` is for a refresh while the device is locked.
+  Remove an old `secret` once `maxAge` has passed since the change.
+- The guides gain what they lacked: a Sign out section for TanStack Start,
+  `cacheControl` and the two sets of guards for React Router with server
+  rendering, the session route's checks on the Security page, storage that
+  can't be read on the Errors page, and what `secureStorage`, `SessionGate`
+  and `deepLinkHandler` do on the Expo page. The Expo guide's locking example
+  throws when a change to the device's biometrics made the key unreadable,
+  as its comment says, where it made a new key. The Effect guide's sign-in
+  button awaits `auth.signIn`, where a failed sign-in went unhandled.
 
 ## 0.1.0-alpha.8
 

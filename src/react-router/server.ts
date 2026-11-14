@@ -214,8 +214,8 @@ export type RouterArgs = {
 	request: Request;
 	context: RouterContextLike;
 	/**
-	 * The URL without React Router's `.data` suffix, from React Router 8.
-	 * React Router 7 removes the suffix from `request.url` instead.
+	 * The URL without React Router's `.data` suffix, from React Router 7.15.
+	 * Earlier versions remove the suffix from `request.url` instead.
 	 */
 	url?: URL | undefined;
 };
@@ -247,7 +247,8 @@ export type RouterMiddleware = (
 /** The URL the request asked for, without React Router's `.data` suffix. */
 function urlOf({ request, url }: RouterArgs): URL {
 	if (url) return url;
-	// React Router 7 passes no `url`. `_routes` is only ever its own param.
+	// Before 7.15, React Router passes no `url`. `_routes` is only ever its
+	// own param.
 	const fromRequest = new URL(request.url);
 	fromRequest.searchParams.delete("_routes");
 	return fromRequest;
@@ -270,7 +271,8 @@ function redirectTo(location: string): Response {
  * boundary.
  *
  * It sets `Cache-Control` to `private, no-store` on each response that
- * doesn't set its own, unless you pass `cacheControl`.
+ * doesn't set its own. Pass `cacheControl` for another value, or `false` to
+ * leave every response as it is ({@link SessionMiddlewareOptions}).
  *
  * It's {@link cookieJarMiddleware} followed by the refresh, and needs React
  * Router 8, or 7.9 and later with `future.v8_middleware`.
@@ -489,6 +491,8 @@ export type RouterLoader = (args: RouterArgs) => Promise<null>;
  *
  * Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
  *
+ * It needs {@link sessionMiddleware} in the root route.
+ *
  * @example
  * ```ts
  * import type { ServerAuth } from "@monarcode/session-kit/server";
@@ -551,9 +555,9 @@ export type RouterSessionRoute = {
  * when `createServerAuth` has `clientCredentials`. Sign-in stays your own
  * action.
  *
- * Export the loader and action one by one, as below. React Router's build
- * can't remove a destructured `export const { loader }` from the browser's
- * bundle, and fails.
+ * Export the loader and action one by one, as the example does. React
+ * Router's build can't remove a destructured `export const { loader }` from
+ * the browser's bundle, and fails.
  *
  * @example
  * ```ts

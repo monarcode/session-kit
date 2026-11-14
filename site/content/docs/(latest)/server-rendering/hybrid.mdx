@@ -243,7 +243,9 @@ your API too, as the guide's
 - **Your backend must allow your site (CORS)** for its sign-in and the API
   calls you make from the browser. Session kit's own requests go to your
   session route, on your site.
-- **Signing out** works as in the guide, through the session route. To end
-  the session at your backend too, give `createServerAuth` a `revoke`.
+- **Signing out** works as in the guide's
+  [Sign out](/docs/setups/tanstack-start#sign-out), through the session
+  route. To end the session at your backend too, give `createServerAuth` a
+  `revoke`.
 - **Security** has more on what the cookie's user can be trusted for, in
   [Your backend decides what's allowed](/docs/security#your-backend-decides-whats-allowed).

@@ -34,9 +34,10 @@ React Router 7 and 8 both work.
 
 ## Add a page to protect
 
-In every mode, `AuthProvider` goes around the router. It mounts the client in
-a layout effect, so with `localStorage` and a synchronous schema, the session
-is restored before the first paint. Nothing starts on a server. Register the
+In declarative and data mode, `AuthProvider` goes around the router. In
+framework mode, it goes in the root route. It mounts the client in a layout
+effect, so with `localStorage` and a synchronous schema, the session is
+restored before the first paint. Nothing starts on a server. Register the
 client where you render it, as step 4 of Getting started shows, and the hooks
 from `@monarcode/session-kit/react` carry your user.
 
@@ -146,7 +147,7 @@ A complete app is in
 ## Data mode
 
 In data mode, loaders run before a route renders, so the guard goes there. A
-private route's data is never fetched for a signed-out user:
+signed-out user is redirected before a private route renders:
 
 ```tsx title="src/router.tsx"
 import { createBrowserRouter, Outlet, useRouteError } from "react-router";
@@ -206,7 +207,7 @@ Then render the router inside the provider, in `src/main.tsx`:
 
 ```tsx
 import { StrictMode } from "react";
-import { RouterProvider } from "react-router";
+import { RouterProvider } from "react-router/dom";
 
 import { AuthProvider } from "@monarcode/session-kit/react";
 import { createRoot } from "react-dom/client";
@@ -400,7 +401,7 @@ typed with your user:
 
 - **`requireSessionLoader(auth)`** is the whole loader. Use it on a route
   that guards and loads nothing else, usually the layout route around your
-  private pages, as above.
+  private pages, as in [Data mode](#data-mode).
 - **`requireSession(auth, { request })`** is a call inside a loader of your
   own. Use it when the loader loads data too: data only a signed-in user may
   load, or data that needs who is signed in.

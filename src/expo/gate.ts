@@ -143,6 +143,7 @@ function useAccountKey(sessionId: string | null): number {
  * for after sign-in.
  *
  * Render it inside `AuthProvider`, or pass a `client`, which it mounts.
+ * Without either, it throws `INVALID_OPTIONS`.
  *
  * - **While the session is restored**, and until `ready`, it renders
  *   nothing, so the splash screen stays up, and hides the splash screen once
@@ -156,7 +157,9 @@ function useAccountKey(sessionId: string | null): number {
  *   unlock screen. Neither unlocking nor a password sign-in from the lock
  *   screen remounts the navigator.
  * - **When the app returns to the foreground** it re-checks the session,
- *   because timers don't run while iOS suspends the app.
+ *   because timers don't run while iOS suspends the app. An access token that
+ *   expired meanwhile is refreshed. A refresh that already failed stays
+ *   failed until `retry()`.
  * - **After a sign-in or unlock** it opens the deep link
  *   `rememberDeepLink` kept, with `router.replace`, once `ready`.
  * - **When one account replaces another** without a sign-out between them, it

@@ -15,7 +15,7 @@ when the storage reports changes, as `webStorage()` does, and `locking` is
 off.
 
 If your backend can revoke tokens, give the client a `revoke` callback. It
-receives the ended tokens after the user is signed out.
+receives the ended tokens after the user is signed out:
 
 ```ts title="src/revoke.ts"
 import type { RevokeFn } from "@monarcode/session-kit";
@@ -32,6 +32,9 @@ export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
   if (!response.ok) throw new Error(`Revoke failed (${response.status})`);
 };
 ```
+
+`signOut()` resolves once `revoke` settles, so await it before a full-page
+redirect, which would cancel the request.
 
 A failed revocation shows in `state.error` as `REVOKE_FAILED`, and the
 sign-out stands. The user asked to leave, and has. The client doesn't revoke

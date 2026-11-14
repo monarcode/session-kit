@@ -333,7 +333,7 @@ export type NextSession<U, I> = {
  * Server Functions and Route Handlers sign in and out through `writable()`.
  * `proxy.ts` refreshes with `refresh`, as rendering can't set cookies.
  *
- * Throws `INVALID_OPTIONS` without `cookies` and `redirect`, when
+ * Throws `INVALID_OPTIONS` without `cookies` or `redirect`, when
  * `loginPath` doesn't start with `/`, or when `within` is negative.
  *
  * @example
@@ -449,6 +449,8 @@ export type NextSessionRouteOptions = {
  * `@monarcode/session-kit/server` explains, and serves the access token only
  * when `createServerAuth` has `clientCredentials`. Sign-in stays your own
  * Server Function.
+ *
+ * Throws `INVALID_OPTIONS` without `cookies`.
  *
  * @example
  * ```ts
