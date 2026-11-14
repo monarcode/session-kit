@@ -1,4 +1,9 @@
-export { redirectIfSignedIn, requireSession } from "./guards.js";
+export {
+	redirectIfSignedIn,
+	redirectIfSignedInLoader,
+	requireSession,
+	requireSessionLoader,
+} from "./guards.js";
 export { SessionOutlet } from "./outlet.js";
 export { useAuthRevalidation } from "./revalidation.js";
 

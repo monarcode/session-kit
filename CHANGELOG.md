@@ -119,15 +119,17 @@
 - `isSignedIn(state)` in `@monarcode/session-kit`: `true` while
   `authenticated` or `refreshing`, and `false` while `locked`. It narrows
   `user`, and works as a selector: `useAuth(isSignedIn)`.
-- React Router's guards are loaders of their own: `requireSession(auth)` and
-  `redirectIfSignedIn(auth)` read the request, and the second reads
-  `redirectTo` from its URL. They take `RequireSessionLoaderOptions` and
-  `RedirectIfSignedInLoaderOptions`, and return `RequireSessionLoader` and
-  `RedirectIfSignedInLoader`. The forms that take `request` or `redirectTo`
-  stay, for a loader of your own: awaiting a loader form checks nothing.
+- `requireSessionLoader(auth, options?)` and
+  `redirectIfSignedInLoader(auth, options?)` in
+  `@monarcode/session-kit/react-router` make the guards' loaders, for
+  `loader` or `clientLoader`. The second reads `?redirectTo=` from the URL.
+  Their options are `RequireSessionLoaderOptions` and
+  `RedirectIfSignedInLoaderOptions`, and they return `RequireSessionLoader`
+  and `RedirectIfSignedInLoader`. `requireSession` and `redirectIfSignedIn`
+  stay, for a loader that does more.
 
   ```ts
-  export const clientLoader = requireSession(auth);
+  export const clientLoader = requireSessionLoader(auth);
   ```
 
 - `loginPath` defaults to `"/login"` in `requireSession` for TanStack Router

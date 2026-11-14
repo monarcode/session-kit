@@ -383,18 +383,22 @@ export async function defaultLoader({ request }: { request: Request }) {
 	const email: string = session.user.email;
 	return email;
 }
-// The loader forms, typed by the client.
-const guardLoader: LoaderFunction = reactRouter.requireSession(auth);
+// @ts-expect-error The check needs the loader's request.
+void reactRouter.requireSession(auth);
+// The loaders, typed by the client.
+const guardLoader: LoaderFunction = reactRouter.requireSessionLoader(auth);
 void guardLoader;
-const shortLoader = reactRouter.requireSession(auth, { basename: "/app" });
+const shortLoader = reactRouter.requireSessionLoader(auth, {
+	basename: "/app",
+});
 export async function useShortLoader(request: Request) {
 	const email: string = (await shortLoader({ request })).session.user.email;
 	return email;
 }
-const signInLoader: LoaderFunction = reactRouter.redirectIfSignedIn(auth);
+const signInLoader: LoaderFunction = reactRouter.redirectIfSignedInLoader(auth);
 void signInLoader;
-// @ts-expect-error The immediate form needs redirectTo.
-void reactRouter.redirectIfSignedIn(auth, { loginPath: "/x" }).then(() => {});
+// @ts-expect-error The check needs redirectTo.
+void reactRouter.redirectIfSignedIn(auth, { loginPath: "/x" });
 reactRouter.SessionOutlet({
 	loginPath: "/login",
 	unavailable: ({ error, retry }) => `${error?.code}${String(retry)}`,

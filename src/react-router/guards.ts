@@ -39,7 +39,7 @@ export type RequireSessionOptions = RequireSessionLoaderOptions & {
 };
 
 /**
- * Options for the loader that `requireSession(auth, options)` makes.
+ * Options for {@link requireSessionLoader}.
  *
  * @example
  * ```ts
@@ -71,21 +71,21 @@ export type RequireSessionLoaderOptions = {
 };
 
 /**
- * The loader that `requireSession(auth)` makes. It resolves `{ session }`,
+ * The loader that {@link requireSessionLoader} makes. It resolves `{ session }`,
  * typed with the client's user.
  *
  * @example
  * ```ts
  * import type { AuthClient } from "@monarcode/session-kit";
  * import {
- * 	requireSession,
+ * 	requireSessionLoader,
  * 	type RequireSessionLoader,
  * } from "@monarcode/session-kit/react-router";
  *
  * type User = { name: string };
  * declare const auth: AuthClient<User, User>;
  *
- * export const loader: RequireSessionLoader<User> = requireSession(auth);
+ * export const loader: RequireSessionLoader<User> = requireSessionLoader(auth);
  * ```
  *
  * @since 0.1.0
@@ -95,9 +95,10 @@ export type RequireSessionLoader<U> = (args: {
 }) => Promise<{ session: Session<U> }>;
 
 /**
- * Guards a route in its loader, in data or framework mode, so only
- * signed-in users get through. They get `{ session }`, which holds no tokens.
- * `requireSession(auth)` is the loader itself.
+ * Checks for a signed-in user inside a loader of your own, in data or
+ * framework mode, and resolves `{ session }`, which holds no tokens. When
+ * the loader does nothing else, use {@link requireSessionLoader} as the
+ * loader instead.
  *
  * Signed-out users go to `loginPath`, with `?redirectTo=` set to the URL they
  * asked for. A locked session counts as signed out, as locking is for native
@@ -105,16 +106,51 @@ export type RequireSessionLoader<U> = (args: {
  *
  * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
  * rethrown to the route's error element, which can offer `auth.retry()`.
+ * A `loginPath` that doesn't start with `/`, or a bad `basename`, rejects
+ * with `INVALID_OPTIONS`.
  *
  * Use `SessionOutlet` as the route's element, and call
  * `useAuthRevalidation`, so the loader runs again when the session changes.
+ *
+ * @example
+ * ```ts
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { requireSession } from "@monarcode/session-kit/react-router";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ * declare function fetchOrders(): Promise<string[]>;
+ *
+ * export async function clientLoader({ request }: { request: Request }) {
+ * 	const { session } = await requireSession(auth, { request });
+ * 	return { name: session.user.name, orders: await fetchOrders() };
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export async function requireSession<U>(
+	auth: GuardClient<U>,
+	options: RequireSessionOptions,
+): Promise<{ session: Session<U> }> {
+	checkPaths(options);
+	return guard(auth, options.request, options);
+}
+
+/**
+ * Makes the loader that guards a route, for `loader` or `clientLoader`, so
+ * only signed-in users get through. It resolves `{ session }`, typed with the
+ * client's user, and works as {@link requireSession} does.
+ *
+ * Pass `loginPath` or `basename` when they aren't the defaults. A
+ * `loginPath` that doesn't start with `/`, or a bad `basename`, throws
+ * `INVALID_OPTIONS` when the loader is made.
  *
  * @example
  * ```tsx
  * import { createBrowserRouter } from "react-router";
  * import type { AuthClient } from "@monarcode/session-kit";
  * import {
- * 	requireSession,
+ * 	requireSessionLoader,
  * 	SessionOutlet,
  * } from "@monarcode/session-kit/react-router";
  *
@@ -122,7 +158,7 @@ export type RequireSessionLoader<U> = (args: {
  *
  * export const router = createBrowserRouter([
  * 	{
- * 		loader: requireSession(auth),
+ * 		loader: requireSessionLoader(auth),
  * 		element: <SessionOutlet />,
  * 		children: [{ index: true, element: <p>Signed in</p> }],
  * 	},
@@ -131,48 +167,12 @@ export type RequireSessionLoader<U> = (args: {
  *
  * @since 0.1.0
  */
-export function requireSession<U>(
+export function requireSessionLoader<U>(
 	auth: GuardClient<U>,
-	options: RequireSessionOptions,
-): Promise<{ session: Session<U> }>;
-/**
- * The guard as a loader of its own, for `loader` or `clientLoader`. Pass
- * `loginPath` or `basename` when they aren't the defaults.
- *
- * It returns the loader, so pass it as one. Inside a loader of your own,
- * call the form that takes `request`: awaiting this one checks nothing.
- *
- * Throws `INVALID_OPTIONS` when it's made, for a `loginPath` that doesn't
- * start with `/` or a bad `basename`.
- *
- * @example
- * ```ts
- * import type { AuthClient } from "@monarcode/session-kit";
- * import { requireSession } from "@monarcode/session-kit/react-router";
- *
- * declare const auth: AuthClient<{ name: string }, { name: string }>;
- *
- * export const clientLoader = requireSession(auth, { loginPath: "/sign-in" });
- * ```
- *
- * @since 0.1.0
- */
-export function requireSession<U>(
-	auth: GuardClient<U>,
-	options?: RequireSessionLoaderOptions,
-): RequireSessionLoader<U>;
-export function requireSession<U>(
-	auth: GuardClient<U>,
-	options: Partial<RequireSessionOptions> = {},
-): RequireSessionLoader<U> | Promise<{ session: Session<U> }> {
-	const { request, ...rest } = options;
-	if (request)
-		return (async () => {
-			checkPaths(rest);
-			return guard(auth, request, rest);
-		})();
-	checkPaths(rest);
-	return (args) => guard(auth, args.request, rest);
+	options: RequireSessionLoaderOptions = {},
+): RequireSessionLoader<U> {
+	checkPaths(options);
+	return ({ request }) => guard(auth, request, options);
 }
 
 /** Fails fast on a bad path, before any session is read. */
@@ -229,7 +229,7 @@ export type RedirectIfSignedInOptions = RedirectIfSignedInLoaderOptions & {
 };
 
 /**
- * Options for the loader that `redirectIfSignedIn(auth, options)` makes.
+ * Options for {@link redirectIfSignedInLoader}.
  *
  * @example
  * ```ts
@@ -255,20 +255,20 @@ export type RedirectIfSignedInLoaderOptions = {
 };
 
 /**
- * The loader that `redirectIfSignedIn(auth)` makes. It reads `redirectTo`
+ * The loader that {@link redirectIfSignedInLoader} makes. It reads `redirectTo`
  * from the request's URL, and resolves `null` for a signed-out user.
  *
  * @example
  * ```ts
  * import type { AuthClient } from "@monarcode/session-kit";
  * import {
- * 	redirectIfSignedIn,
+ * 	redirectIfSignedInLoader,
  * 	type RedirectIfSignedInLoader,
  * } from "@monarcode/session-kit/react-router";
  *
  * declare const auth: AuthClient<{ name: string }, { name: string }>;
  *
- * export const loader: RedirectIfSignedInLoader = redirectIfSignedIn(auth);
+ * export const loader: RedirectIfSignedInLoader = redirectIfSignedInLoader(auth);
  * ```
  *
  * @since 0.1.0
@@ -278,61 +278,61 @@ export type RedirectIfSignedInLoader = (args: {
 }) => Promise<null>;
 
 /**
- * Guards your sign-in page in its loader, so a signed-in user goes straight
- * to `redirectTo`, made safe with `safeReturnTo`. `redirectIfSignedIn(auth)`
- * is the loader itself, and reads `redirectTo` from the URL's search.
+ * Sends a signed-in user from your sign-in page straight to `redirectTo`,
+ * made safe with `safeReturnTo`, inside a loader of your own. When the loader
+ * does nothing else, use {@link redirectIfSignedInLoader} instead.
  *
  * If the session can't be read, such as after a failed refresh or while
  * locked, the sign-in page shows, so the user can sign in again.
  *
  * @example
  * ```ts
+ * import type { LoaderFunctionArgs } from "react-router";
  * import type { AuthClient } from "@monarcode/session-kit";
  * import { redirectIfSignedIn } from "@monarcode/session-kit/react-router";
  *
  * declare const auth: AuthClient<{ name: string }, { name: string }>;
  *
- * // The sign-in route.
- * export const clientLoader = redirectIfSignedIn(auth);
+ * export async function loader({ request }: LoaderFunctionArgs) {
+ * 	const search = new URL(request.url).searchParams;
+ * 	await redirectIfSignedIn(auth, { redirectTo: search.get("next") });
+ * 	return { invited: search.has("invite") };
+ * }
  * ```
  *
  * @since 0.1.0
  */
-export function redirectIfSignedIn(
+export async function redirectIfSignedIn(
 	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInOptions,
-): Promise<void>;
+): Promise<void> {
+	await sendOn(auth, options.redirectTo, options.loginPath);
+}
+
 /**
- * The guard as a loader of its own, for `loader` or `clientLoader`, with
- * `redirectTo` read from the URL's search.
- *
- * It returns the loader, so pass it as one. Inside a loader of your own,
- * call the form that takes `redirectTo`: awaiting this one checks nothing.
+ * Makes the loader for your sign-in page, for `loader` or `clientLoader`.
+ * It reads `?redirectTo=` from the URL and works as
+ * {@link redirectIfSignedIn} does.
  *
  * @example
  * ```ts
  * import type { AuthClient } from "@monarcode/session-kit";
- * import { redirectIfSignedIn } from "@monarcode/session-kit/react-router";
+ * import { redirectIfSignedInLoader } from "@monarcode/session-kit/react-router";
  *
  * declare const auth: AuthClient<{ name: string }, { name: string }>;
  *
- * export const loader = redirectIfSignedIn(auth, {
+ * // The sign-in route. A sign-up page never returns to either one.
+ * export const clientLoader = redirectIfSignedInLoader(auth, {
  * 	loginPath: ["/login", "/sign-up"],
  * });
  * ```
  *
  * @since 0.1.0
  */
-export function redirectIfSignedIn(
+export function redirectIfSignedInLoader(
 	auth: GuardClient<unknown>,
-	options?: RedirectIfSignedInLoaderOptions,
-): RedirectIfSignedInLoader;
-export function redirectIfSignedIn(
-	auth: GuardClient<unknown>,
-	options: Partial<RedirectIfSignedInOptions> = {},
-): RedirectIfSignedInLoader | Promise<void> {
-	if ("redirectTo" in options)
-		return sendOn(auth, options.redirectTo, options.loginPath);
+	options: RedirectIfSignedInLoaderOptions = {},
+): RedirectIfSignedInLoader {
 	return async ({ request }) => {
 		const redirectTo = new URL(request.url).searchParams.get("redirectTo");
 		await sendOn(auth, redirectTo, options.loginPath);

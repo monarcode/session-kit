@@ -47,7 +47,7 @@ function Root() {
 }
 
 /** A sign-in route loader that sends a signed-in user on to `redirectTo`. */
-const loginLoader = (auth: Client) => binding.redirectIfSignedIn(auth);
+const loginLoader = (auth: Client) => binding.redirectIfSignedInLoader(auth);
 
 /** A home page that counts its mounts and shows the user's email. */
 const homePage = (
@@ -410,11 +410,11 @@ test("data mode: loaders guard routes and re-run when auth changes", async () =>
 	assert.equal(view.container.textContent, "home:alice@example.com");
 });
 
-test("requireSession(auth) and redirectIfSignedIn(auth) are loaders themselves", async () => {
+test("requireSessionLoader and redirectIfSignedInLoader make the loaders", async () => {
 	const auth = newClient();
 	await auth.getSession();
 	const request = new Request("https://auth.test/app/private?tab=2");
-	const guard = binding.requireSession(auth, { basename: "/app" });
+	const guard = binding.requireSessionLoader(auth, { basename: "/app" });
 	const redirected = await guard({ request }).then(
 		() => assert.fail("Expected a redirect"),
 		(response: Response) => response,
@@ -428,7 +428,7 @@ test("requireSession(auth) and redirectIfSignedIn(auth) are loaders themselves",
 		(await guard({ request })).session,
 		await auth.getSession(),
 	);
-	const signInPage = binding.redirectIfSignedIn(auth, {
+	const signInPage = binding.redirectIfSignedInLoader(auth, {
 		loginPath: ["/login", "/sign-up"],
 	});
 	for (const [redirectTo, to] of [
@@ -450,14 +450,20 @@ test("requireSession(auth) and redirectIfSignedIn(auth) are loaders themselves",
 		await signInPage({ request: new Request("https://auth.test/login") }),
 		null,
 	);
-	assert.throws(() => binding.requireSession(auth, { loginPath: "login" }), {
-		code: "INVALID_OPTIONS",
-	});
-	assert.throws(() => binding.requireSession(auth, { basename: "app" }), {
-		code: "INVALID_OPTIONS",
-	});
+	assert.throws(
+		() => binding.requireSessionLoader(auth, { loginPath: "login" }),
+		{
+			code: "INVALID_OPTIONS",
+		},
+	);
+	assert.throws(
+		() => binding.requireSessionLoader(auth, { basename: "app" }),
+		{
+			code: "INVALID_OPTIONS",
+		},
+	);
 	const elsewhere = await binding
-		.requireSession(auth, { loginPath: "/sign-in" })({ request })
+		.requireSessionLoader(auth, { loginPath: "/sign-in" })({ request })
 		.then(
 			() => assert.fail("Expected a redirect"),
 			(response: Response) => response,

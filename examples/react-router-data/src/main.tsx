@@ -11,8 +11,8 @@ import {
 import { safeReturnTo } from "@monarcode/session-kit";
 import { AuthProvider } from "@monarcode/session-kit/react";
 import {
-	redirectIfSignedIn,
-	requireSession,
+	redirectIfSignedInLoader,
+	requireSessionLoader,
 	SessionOutlet,
 	useAuthRevalidation,
 } from "@monarcode/session-kit/react-router";
@@ -62,11 +62,11 @@ const router = createBrowserRouter([
 		children: [
 			{
 				path: "/login",
-				loader: redirectIfSignedIn(auth),
+				loader: redirectIfSignedInLoader(auth),
 				element: <Login />,
 			},
 			{
-				loader: requireSession(auth),
+				loader: requireSessionLoader(auth),
 				errorElement: <RouteError />,
 				element: <SessionOutlet pending={<Pending />} />,
 				children: [{ index: true, element: <Profile /> }],

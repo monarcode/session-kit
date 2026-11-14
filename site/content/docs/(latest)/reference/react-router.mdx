@@ -13,11 +13,19 @@ Guide: [React Router](/docs/setups/react-router).
 
 ### redirectIfSignedIn
 
-Guards your sign-in page in its loader, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`. `redirectIfSignedIn(auth)` is the loader itself, and reads `redirectTo` from the URL's search.
+Sends a signed-in user from your sign-in page straight to `redirectTo`, made safe with `safeReturnTo`, inside a loader of your own. When the loader does nothing else, use [`redirectIfSignedInLoader`](#redirectifsignedinloader) instead.
+
+### redirectIfSignedInLoader
+
+Makes the loader for your sign-in page, for `loader` or `clientLoader`. It reads `?redirectTo=` from the URL and works as [`redirectIfSignedIn`](#redirectifsignedin) does.
 
 ### requireSession
 
-Guards a route in its loader, in data or framework mode, so only signed-in users get through. They get `{ session }`, which holds no tokens. `requireSession(auth)` is the loader itself.
+Checks for a signed-in user inside a loader of your own, in data or framework mode, and resolves `{ session }`, which holds no tokens. When the loader does nothing else, use [`requireSessionLoader`](#requiresessionloader) as the loader instead.
+
+### requireSessionLoader
+
+Makes the loader that guards a route, for `loader` or `clientLoader`, so only signed-in users get through. It resolves `{ session }`, typed with the client's user, and works as [`requireSession`](#requiresession) does.
 
 ### useAuthRevalidation
 
@@ -33,11 +41,11 @@ Renders child routes only while someone is signed in, in any mode. It needs an `
 
 ### RedirectIfSignedInLoader
 
-The loader that `redirectIfSignedIn(auth)` makes. It reads `redirectTo` from the request's URL, and resolves `null` for a signed-out user.
+The loader that [`redirectIfSignedInLoader`](#redirectifsignedinloader) makes. It reads `redirectTo` from the request's URL, and resolves `null` for a signed-out user.
 
 ### RedirectIfSignedInLoaderOptions
 
-Options for the loader that `redirectIfSignedIn(auth, options)` makes.
+Options for [`redirectIfSignedInLoader`](#redirectifsignedinloader).
 
 <auto-type-table
   cwd
@@ -57,11 +65,11 @@ Options for [`redirectIfSignedIn`](#redirectifsignedin).
 
 ### RequireSessionLoader
 
-The loader that `requireSession(auth)` makes. It resolves `{ session }`, typed with the client's user.
+The loader that [`requireSessionLoader`](#requiresessionloader) makes. It resolves `{ session }`, typed with the client's user.
 
 ### RequireSessionLoaderOptions
 
-Options for the loader that `requireSession(auth, options)` makes.
+Options for [`requireSessionLoader`](#requiresessionloader).
 
 <auto-type-table
   cwd
