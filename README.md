@@ -15,7 +15,7 @@
 [![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://session-kit.pages.dev/docs/setups/expo)
 [![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](https://session-kit.pages.dev/docs/effect)
 
-**Your backend signs users in. Session kit handles everything after.**
+**Every sign-in ends in a session. Make yours type-safe and predictable.**
 
 Session kit is the session layer for React apps that have their own backend.
 Hand it the tokens your sign-in endpoint returns, and it saves the session,

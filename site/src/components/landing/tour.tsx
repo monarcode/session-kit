@@ -27,9 +27,9 @@ export function Tour({ steps }: { steps: TourStep[] }) {
 		<section className={`${COLUMN} pt-20 sm:pt-28`}>
 			<SectionHead title="The whole idea in three files">
 				A client that knows your backend, a route only signed-in users
-				reach, and a page that reads the session. One TanStack Router app,
-				type-checked against the published package. Each setup's guide has
-				its own version.
+				reach, and a page that reads the session. This is the TanStack
+				Router guide's own code, type-checked with every other example in
+				the docs. Each setup's guide has its own version.
 			</SectionHead>
 			{/* One surface, the code block: the tabs sit on the page, not on a card. */}
 			<Tabs

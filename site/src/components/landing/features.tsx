@@ -2,24 +2,28 @@ import { COLUMN, SectionHead } from "./buffer";
 
 const FEATURES = [
 	[
-		"Schema-driven users",
-		"Any Standard Schema library, such as Zod, Valibot or ArkType, checks the user at sign-in, refresh, restore and in other tabs, and types it.",
+		"One refresh at a time",
+		"Open tabs take turns, so only one spends the refresh token and the rest reuse the tokens it saved. A sign-out in one tab signs out them all.",
+	],
+	[
+		"A user you can trust",
+		"Your schema, from Zod, Valibot, ArkType or any Standard Schema library, types the user and checks it wherever it arrives: at sign-in, on refresh, on reload and from another tab.",
 	],
 	[
 		"Tokens kept out of state",
 		"The auth state holds no tokens, so it's safe to render and to put in route context. Only the code that sends your requests reads them.",
 	],
 	[
-		"Guards for every router",
+		"Guards for your router",
 		"TanStack Router, React Router in all three modes, Expo Router and Next.js send signed-out users to sign in, then back to the page they asked for.",
 	],
 	[
 		"Server rendering",
-		"With TanStack Start, Next.js or React Router, the session lives in an encrypted httpOnly cookie.",
+		"With TanStack Start, Next.js or React Router, the session lives in an encrypted httpOnly cookie, so the first render is already signed in.",
 	],
 	[
 		"Native apps",
-		"The iOS keychain and Android Keystore, a splash screen held while restoring, and biometric locking.",
+		"The session is saved in the iOS keychain or Android Keystore, the splash screen holds until it's restored, and it can lock behind biometrics.",
 	],
 	[
 		"Made to be debugged",
@@ -30,7 +34,7 @@ const FEATURES = [
 export function Features() {
 	return (
 		<section className={`${COLUMN} pt-20 sm:pt-28`}>
-			<SectionHead title="What you get" />
+			<SectionHead title="What it handles" />
 			<dl className="mt-8 border-t border-buffer-line">
 				{FEATURES.map(([title, text]) => (
 					<div

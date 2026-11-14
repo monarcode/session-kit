@@ -142,8 +142,8 @@ components:
 The page is a code buffer at stage scale. The buffer is set in Geist Mono,
 numbered down a line-number gutter, and divided by hairline rules; only the
 plain-prose leads under section heads switch to Geist, the family's sans. Headings are comments, with a dim `//` in front. Copy is
-comments. The hero opens with the pitch, a lead comment and the install
-prompt at the column's edge, unnumbered; the line numbers start with the
+comments. The hero opens with the pitch, two lead comments (what it is, and the
+setups it supports) and the install prompt at the column's edge, unnumbered; the line numbers start with the
 code: the real `createAuth` call from Getting started, lines 01 to 06,
 whose `refresh` line (05) is live. Under it, one illustrative hour plays as
 five lanes (signed in, refresh, storage, other tabs, route guard).
@@ -308,8 +308,8 @@ code starts to the right of it, so it reads as a block set into the page. A live
 left of its number, so the numbers stay in one column.
 
 The hero runs as three groups set apart by space, with tight spacing
-inside each: the pitch (the H1, then the lead 12–16px under it, at most
-72ch), the actions 20–24px below (the package-manager switch, the install
+inside each: the pitch (the H1, then the two lead comments 12–16px under it, at
+most 72ch), the actions 20–24px below (the package-manager switch, the install
 row, Get started, GitHub), and the demo 28–32px below that (the config,
 then a hairline with 20px either side, then the lanes). The hero opens
 32px (40px from 640px) under the navbar. Sections
@@ -322,9 +322,9 @@ is its own link, to that setup's app in the repository.
 
 Below the hero the page runs: the tour, the "What it doesn't do" block
 comment 48px (64px from 640px) under it, the setups, the features, and a
-closing section that repeats the hero's shape: a comment headline, two
-comment lines of evidence (npm provenance, the bundle size), then the install
-prompt and Get started.
+closing section that repeats the hero's shape: a comment headline, three
+comment lines of evidence (npm provenance, the tests, the bundle size), then
+the install prompt and Get started.
 
 The hour's lanes are a two-column grid: lane names (5.5rem, 8rem from
 640px), then 68 equal cells with a 1px gap (3px from 640px): two for the
