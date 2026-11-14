@@ -62,11 +62,12 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   saved session.
 - **TanStack Start with Effect** is the SPA app written with Effect,
   [effetch](https://github.com/monarcode/effetch) and
-  [effetch-query](https://github.com/monarcode/effetch-query). `src/auth.ts`
-  describes the user with an Effect Schema and refreshes through effetch.
-  `src/api-client.ts` is the API client, a service whose `sessionBearer`
-  plugin sends the access token, and `src/runtime.ts` composes the app's
-  layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
+  [effetch-query](https://github.com/monarcode/effetch-query), laid out as
+  the guide is. `src/backend.ts` describes DummyJSON with Effect Schemas,
+  `src/refresh.ts` refreshes through effetch, and `src/auth.ts` reads the
+  user from the access token. `src/api.ts` is the API client, a service whose
+  `sessionBearer` plugin sends the access token, and `src/runtime.ts`
+  composes the app's layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
   and the profile query, which `src/ui.tsx` uses with `useMutation` and
   `useQuery`, and the root route gives each session its own query cache. The
   hooks and the guards are the SPA app's. See

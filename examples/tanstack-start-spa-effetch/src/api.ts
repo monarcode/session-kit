@@ -1,24 +1,24 @@
 import * as Fetch from "@monarcode/effetch";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 
-import { API_BASE_URL } from "./auth";
-
-/** DummyJSON explains an error in its body: `{ "message": "…" }`. */
-export const ApiErrorBody = Schema.Struct({ message: Schema.String });
-export type ApiErrorBody = Schema.Schema.Type<typeof ApiErrorBody>;
+import { API_BASE_URL, ApiError } from "./backend";
 
 const make = Fetch.make({
 	baseUrl: API_BASE_URL,
-	defaultError: ApiErrorBody,
+	defaultError: ApiError,
 	// Sends the access token to DummyJSON only. After a 401 it refreshes, then
-	// replays a GET or HEAD once. `optional`: a call made while signed out,
-	// such as the sign-in itself, goes without a token.
+	// sends a GET or HEAD again once. `optional`: a call made while signed out
+	// goes without a token.
 	plugins: [sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
-});
+}).pipe(
+	// Effect adds tracing headers to every request, which fail the preflight
+	// of an API that doesn't allow them.
+	Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+);
 
 /** The app's API client: effetch's `get`, `post` and the rest, for DummyJSON. */
 export class ApiClient extends Context.Service<
@@ -26,4 +26,5 @@ export class ApiClient extends Context.Service<
 	Effect.Success<typeof make>
 >()("ApiClient") {}
 
+/** The API client, over whichever `Auth` is provided. */
 export const ApiClientLive = Layer.effect(ApiClient, make);

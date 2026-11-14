@@ -288,6 +288,13 @@
   calls your backend and trusts its input, and which errors `signIn` and
   `updateUser` reject with. `getSession`, `signOut` and `credentials.get` say
   where to use them.
+- The `tanstack-start-spa-effetch` example is laid out as the Effect guide
+  is, in `backend.ts`, `refresh.ts`, `auth.ts`, `layer.ts`, `api.ts` and
+  `runtime.ts`. Its `FetchLive` layer is gone: the API client and the
+  refresh client each turn off Effect's tracing headers themselves, and the
+  runtime provides plain `FetchHttpClient.layer`. The guide's refresh client
+  now turns them off too. It sent them, which fails the preflight of an API
+  that doesn't allow them.
 - The React Router guide's Guards in loaders section says when to use
   `requireSessionLoader` (the whole loader, usually a layout's) and
   `requireSession` (inside a loader that loads data too). A page's loader that

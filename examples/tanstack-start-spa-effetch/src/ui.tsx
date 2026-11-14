@@ -5,7 +5,7 @@ import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
 import * as Exit from "effect/Exit";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 
-import { expiresInMins } from "./auth";
+import { expiresInMins } from "./backend";
 import { profileQuery, signInMutation } from "./endpoints";
 import { apiErrorMessage } from "./error-message";
 

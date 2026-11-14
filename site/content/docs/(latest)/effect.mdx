@@ -106,11 +106,15 @@ explains. The server uses it too:
 import * as Fetch from "@monarcode/effetch";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 
 import { API_BASE_URL, SessionTokens } from "./backend.js";
 
 // Not the app's API client: its session plugin waits for this refresh.
-const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL });
+const makeRefreshClient = Fetch.make({ baseUrl: API_BASE_URL }).pipe(
+  // No tracing headers, as for the API client in step 6.
+  Effect.provideService(HttpClient.TracerPropagationEnabled, false),
+);
 
 /** New tokens. `null` signs out; a failure keeps the session for a retry. */
 export const refreshSession = (refreshToken: string, signal: AbortSignal) =>
