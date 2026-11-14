@@ -1,6 +1,5 @@
 import { redirect } from "react-router";
 
-import { AuthError } from "../core/errors.js";
 import {
 	guardSession,
 	sessionOrNull,
@@ -8,6 +7,7 @@ import {
 } from "../core/guard.js";
 import { loginHref, safeReturnTo } from "../core/return-to.js";
 import type { Session } from "../core/types.js";
+import { stripBasename } from "./basename.js";
 
 /**
  * Options for {@link requireSession}.
@@ -44,25 +44,6 @@ export type RequireSessionOptions = {
 	 */
 	basename?: string | undefined;
 };
-
-/**
- * `pathname` without `basename`, matched ignoring case as React Router does.
- */
-function stripBasename(pathname: string, basename = "/"): string {
-	if (!basename.startsWith("/"))
-		throw new AuthError(
-			"INVALID_OPTIONS",
-			`basename must start with "/": ${basename}`,
-		);
-	const base = basename.replace(/\/+$/, "");
-	if (!base) return pathname;
-	const lower = pathname.toLowerCase();
-	const prefix = base.toLowerCase();
-	if (lower === prefix) return "/";
-	return lower.startsWith(`${prefix}/`)
-		? pathname.slice(base.length)
-		: pathname;
-}
 
 /**
  * Guards a route in its loader, in data or framework mode, so only

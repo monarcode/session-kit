@@ -172,6 +172,66 @@ export type RefreshIfDueOptions = {
 	within?: number | undefined;
 };
 
+/**
+ * Options for the middleware that refreshes before each request:
+ * `refreshSession` from `@monarcode/session-kit/tanstack-start/server` and
+ * `sessionMiddleware` from `@monarcode/session-kit/react-router/server`.
+ *
+ * @example
+ * ```ts
+ * import type { SessionMiddlewareOptions } from "@monarcode/session-kit/server";
+ *
+ * // Tokens that live five minutes: refresh in their last two.
+ * export const options: SessionMiddlewareOptions = {
+ * 	within: 120,
+ * 	cacheControl: "private, no-store",
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type SessionMiddlewareOptions = {
+	/**
+	 * Refreshes when the access token expires within this many seconds, as
+	 * {@link RefreshIfDueOptions} explains.
+	 * @default 60
+	 */
+	within?: number | undefined;
+	/**
+	 * The `Cache-Control` header for every response that doesn't set its own,
+	 * as each one depends on who is signed in. `false` leaves every response
+	 * as it is.
+	 * @default "private, no-store"
+	 */
+	cacheControl?: string | false | undefined;
+};
+
+/**
+ * Refreshes before rendering, for the adapters' middleware. A failure is
+ * left for the routes, which read the session as usual.
+ */
+export async function refreshBeforeRendering<U, I>(
+	serverAuth: ServerAuth<U, I>,
+	jar: CookieJar,
+	within: number,
+): Promise<void> {
+	await serverAuth.refreshIfDue(jar, { within }).catch(() => {});
+}
+
+/**
+ * The middleware's options, checked when it's made: a bad `within` would
+ * otherwise reject on every request, where the middleware swallows it.
+ */
+export function middlewareOptions({
+	within,
+	cacheControl = "private, no-store",
+}: SessionMiddlewareOptions = {}): {
+	within: number;
+	cacheControl: string | false;
+} {
+	return { within: refreshWithin({ within }), cacheControl };
+}
+
 declare const requestAuth: unique symbol;
 
 type RequestAuthBase<U, I> = {
@@ -433,8 +493,15 @@ export type ServerAuth<U, I> = ServerAuthBase<U, I> &
 				) => Promise<Session<U>>;
 			});
 
-/** `refreshIfDue`'s default `within`, in seconds. */
-const DEFAULT_WITHIN = 60;
+/** `refreshIfDue`'s `within`, in seconds. */
+export function refreshWithin({ within = 60 }: RefreshIfDueOptions): number {
+	if (!Number.isFinite(within) || within < 0)
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"within must be zero or more seconds",
+		);
+	return within;
+}
 
 /**
  * Creates the server side of Session kit ({@link ServerAuth}). It keeps both
@@ -804,12 +871,7 @@ export function createServerAuth<Src extends UserSource>(
 		},
 		async refreshIfDue(jar, refreshOptions = {}) {
 			requireWritable(jar, "refreshIfDue");
-			const within = refreshOptions.within ?? DEFAULT_WITHIN;
-			if (!Number.isFinite(within) || within < 0)
-				throw new AuthError(
-					"INVALID_OPTIONS",
-					"within must be zero or more seconds",
-				);
+			const within = refreshWithin(refreshOptions);
 			const client = clientOf(jar);
 			const credentials = await client.credentials.get();
 			if (!credentials) return null;

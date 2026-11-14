@@ -1,14 +1,23 @@
+import type {
+	LoaderFunction,
+	LoaderFunctionArgs,
+	MiddlewareFunction,
+} from "react-router";
+
 import * as Fetch from "@monarcode/effetch";
 import {
 	createRootRouteWithContext,
 	createRouter,
 } from "@tanstack/react-router";
+import { createMiddleware, createStart } from "@tanstack/react-start";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
+import { cookies } from "next/headers.js";
+import { redirect } from "next/navigation.js";
 import { NextResponse, type NextRequest } from "next/server.js";
 import { z } from "zod";
 
@@ -45,12 +54,21 @@ import {
 	type UserInput,
 	type UserOf,
 } from "../dist/index.js";
-import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
+import {
+	nextJar,
+	nextSession,
+	proxyJar,
+	type NextCookies,
+	type NextSession,
+} from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import {
 	cookieJarMiddleware,
+	redirectIfSignedIn,
+	requireSession as requireServerSession,
 	routerAuth,
 	routerJar,
+	sessionMiddleware,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
 import * as react from "../dist/react/index.js";
@@ -73,7 +91,11 @@ import {
 	type RouterAuth,
 } from "../dist/tanstack-router/index.js";
 import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
-import { startAuth, startJar } from "../dist/tanstack-start/server.js";
+import {
+	refreshSession,
+	startAuth,
+	startJar,
+} from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -579,6 +601,62 @@ const sessionOf = routerAuth(serverAuth);
 declare const routerContext: RouterContextLike;
 const routerSession: RequestAuth<AppUser, AppUser> = sessionOf(routerContext);
 void routerSession;
+
+// The adapters' middleware and guards fit the frameworks' own types.
+const rootMiddleware: MiddlewareFunction<Response>[] =
+	sessionMiddleware(serverAuth);
+const signedIn = requireServerSession(serverAuth, {
+	loginPath: "/login",
+	basename: "/app",
+});
+const guardMiddleware: MiddlewareFunction<Response>[] = [signedIn];
+const loginLoader: LoaderFunction = redirectIfSignedIn(serverAuth, {
+	loginPath: ["/login", "/sign-up"],
+});
+void [rootMiddleware, guardMiddleware, loginLoader];
+export function guardedLoader({ context }: LoaderFunctionArgs) {
+	const email: string = signedIn.session(context).user.email;
+	return email;
+}
+// @ts-expect-error The middleware takes no list of paths.
+sessionMiddleware(serverAuth, { paths: ["/"] });
+void sessionMiddleware(serverAuth, { within: 15, cacheControl: false });
+// @ts-expect-error The guard's session is never null.
+const guardedNull: null = signedIn.session(routerContext);
+void guardedNull;
+
+const startSessionMiddleware = createMiddleware({ type: "request" }).server(
+	refreshSession(serverAuth, { within: 15, cacheControl: "private" }),
+);
+void createStart(() => ({ requestMiddleware: [startSessionMiddleware] }));
+// After middleware that adds context.
+const withRequestId = createMiddleware({ type: "request" }).server(({ next }) =>
+	next({ context: { requestId: "r1" } }),
+);
+void createMiddleware({ type: "request" })
+	.middleware([withRequestId])
+	.server(refreshSession(serverAuth));
+
+const appSessionNext: NextSession<AppUser, AppUser> = nextSession(serverAuth, {
+	cookies,
+	redirect,
+});
+export async function guardedPage() {
+	const { user } = await appSessionNext.require("/orders");
+	const current: AppUser | undefined = (await appSessionNext.get())?.user;
+	await appSessionNext.redirectIfSignedIn(null);
+	const writable: RequestAuth<AppUser, AppUser> =
+		await appSessionNext.writable();
+	return [user.email, current, writable];
+}
+declare const proxyRequest: NextRequest;
+const proxied: Promise<NextResponse> = appSessionNext.refresh(
+	proxyRequest,
+	NextResponse.next(),
+);
+void proxied;
+// @ts-expect-error nextSession needs Next's cookies and redirect.
+nextSession(serverAuth, { cookies });
 
 // The session and user types of any client.
 const appSession: SessionOf<typeof serverAuth> = {

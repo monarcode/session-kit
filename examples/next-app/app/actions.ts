@@ -2,20 +2,14 @@
 
 // Server Functions the browser calls. Each is a public endpoint: Next checks
 // that calls come from this site, and each one checks its own input.
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
 import { z } from "zod";
 
 import { login } from "../lib/auth/backend";
-import { serverAuth } from "../lib/auth/server";
-
-async function jar() {
-	return nextJar(await cookies(), { writable: true });
-}
+import { session } from "../lib/auth/session";
 
 /** Who is signed in, from the cookie. Holds no tokens. */
 export async function getSessionAction() {
-	return serverAuth.getSession(await jar());
+	return (await session.writable()).getSession();
 }
 
 const credentials = z.object({ username: z.string(), password: z.string() });
@@ -29,10 +23,9 @@ export async function signInAction(input: unknown) {
 	const { username, password } = credentials.parse(input);
 	try {
 		return {
-			session: await serverAuth.signIn(
-				await jar(),
-				await login(username, password),
-			),
+			session: await (
+				await session.writable()
+			).signIn(await login(username, password)),
 		};
 	} catch (error) {
 		return {
@@ -43,5 +36,5 @@ export async function signInAction(input: unknown) {
 
 /** Clears the cookie. */
 export async function signOutAction() {
-	await serverAuth.signOut(await jar());
+	await (await session.writable()).signOut();
 }

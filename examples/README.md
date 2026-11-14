@@ -90,12 +90,12 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `SESSION_SECRET` and Safari work as for TanStack Start, with `next start`
   and `next dev`. See [the guide](https://session-kit.pages.dev/docs/setups/next).
 - **React Router with server rendering** keeps the session the same way.
-  Root middleware (`app/auth/middleware.server.ts`) gives each request a
-  cookie jar and refreshes, the root loader reads the session, and the sign-in
-  route's action signs in with a plain form that works before scripts load.
+  The root route's `sessionMiddleware` gives each request a cookie jar and
+  refreshes, the root loader reads the session, and the sign-in route's
+  action signs in with a plain form that works before scripts load.
   `useMirrorAuth` in `app/root.tsx` gives the components the client and runs
   the loaders again when the session changes in the browser, so the
-  protected route's middleware redirects. The browser signs out, revalidates
+  protected route's `requireSession` guard redirects. The browser signs out, revalidates
   and gets the access token through the resource routes in
   `app/routes/auth.*.ts`. `SESSION_SECRET` and Safari work as for TanStack
   Start, with `pnpm start` (after `pnpm build`) and `react-router dev`. See

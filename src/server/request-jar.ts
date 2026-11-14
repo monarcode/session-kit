@@ -54,17 +54,29 @@ function parseCookies(header: string | null): Map<string, string> {
 	return cookies;
 }
 
-/** `response` with `lines` as `Set-Cookie` headers. */
-function withCookies(response: Response, lines: string[]): Response {
+/**
+ * `response` after `change` to its headers, or a copy when they can't
+ * change, as on `Response.redirect()` or a `fetch` response.
+ */
+export function withHeaders(
+	response: Response,
+	change: (headers: Headers) => void,
+): Response {
 	try {
-		for (const line of lines) response.headers.append("Set-Cookie", line);
+		change(response.headers);
 		return response;
 	} catch {
-		// Immutable headers, as on `Response.redirect()` or a `fetch` response.
 		const copy = new Response(response.body, response);
-		for (const line of lines) copy.headers.append("Set-Cookie", line);
+		change(copy.headers);
 		return copy;
 	}
+}
+
+/** `response` with `lines` as `Set-Cookie` headers. */
+function withCookies(response: Response, lines: string[]): Response {
+	return withHeaders(response, (headers) => {
+		for (const line of lines) headers.append("Set-Cookie", line);
+	});
 }
 
 /**

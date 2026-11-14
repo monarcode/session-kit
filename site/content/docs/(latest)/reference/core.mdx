@@ -23,6 +23,10 @@ Creates a browser client ([`MirrorAuth`](#mirrorauth)) for a session your server
 
 Reads the user from the access token, rather than from what `signIn` is given. Pass the result as `createAuth`'s `user` option.
 
+### loginHref
+
+Builds the sign-in page's URL, with `?redirectTo=` set to `returnTo`, so the user comes back after signing in. The guards use it. Use it in a guard of your own, such as in a route handler.
+
 ### memoryStorage
 
 Keeps the session in memory only. It ends when the page unloads, and other tabs never see it. Use it in tests, or where tokens must never be written to disk. Each call has its own entries.

@@ -49,7 +49,7 @@ const API = "https://api.example.com";
 const userSchema = z.object({ id: z.number(), firstName: z.string() });
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
 
-const serverAuth = createServerAuth({
+export const serverAuth = createServerAuth({
   name: "app",
   user: userSchema,
   secret: process.env.SESSION_SECRET!,
@@ -131,23 +131,26 @@ Request middleware refreshes access that is about to expire before any route
 or server function reads it, while the response can still set the cookie.
 Once Start starts streaming a page, a cookie set later is lost, so a refresh
 then, such as in a deferred loader's promise, would spend the refresh token
-and drop the new one:
+and drop the new one.
+
+`refreshSession` from `@monarcode/session-kit/tanstack-start/server` does
+the refresh, and marks each response private unless it sets its own
+`Cache-Control`. Pass it to Start's own `createMiddleware().server()`. Start
+bundles `src/start.ts` for the browser too, and leaves out only what's
+inside `.server()`, `serverAuth` included:
 
 ```ts title="src/start.ts"
+import { refreshSession } from "@monarcode/session-kit/tanstack-start/server";
 import {
   createCsrfMiddleware,
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
 
-import { session } from "./auth/server";
+import { serverAuth } from "./auth/server";
 
 const sessionMiddleware = createMiddleware({ type: "request" }).server(
-  async ({ next }) => {
-    // A failed refresh shows up when a route reads the session.
-    await session.refreshIfDue().catch(() => {});
-    return next();
-  },
+  refreshSession(serverAuth),
 );
 
 export const startInstance = createStart(() => ({
@@ -159,6 +162,9 @@ export const startInstance = createStart(() => ({
   ],
 }));
 ```
+
+A failed refresh doesn't fail the request. Routes read the session as
+usual, and an error there reaches the route's error component.
 
 An app that defines `createStart` has no CSRF protection for its server
 functions until it adds `createCsrfMiddleware`. Its `filter` keeps the check
@@ -341,11 +347,9 @@ does this.
   one refresh. Outside a request, such as in the browser, they reject with
   `INVALID_OPTIONS`.
 - **Caching.** Pages and server functions that read the session differ per
-  user, and Start sends no `Cache-Control` for them. Behind a CDN or proxy
-  that caches responses, mark them private, for example with
-  `setResponseHeader("Cache-Control", "private, no-store")` from
-  `@tanstack/react-start/server` in request middleware, as the example app
-  does.
+  user. `refreshSession` sends `Cache-Control: private, no-store` with each
+  response that doesn't set its own, so a CDN or proxy doesn't cache them.
+  To leave every response as it is, pass `{ cacheControl: false }`.
 - **Prerendering.** A prerendered page renders at build time, without a
   cookie, so it shows the signed-out state. Don't prerender pages that read
   the session.

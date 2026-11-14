@@ -110,8 +110,28 @@ export function safeReturnTo(
 }
 
 /**
- * The sign-in URL for `loginPath`, with `?redirectTo=` set to `returnTo` so
- * the user comes back after signing in.
+ * Builds the sign-in page's URL, with `?redirectTo=` set to `returnTo`, so
+ * the user comes back after signing in. The guards use it. Use it in a guard
+ * of your own, such as in a route handler.
+ *
+ * `returnTo` is encoded as is. Pass a path you read from the request through
+ * {@link safeReturnTo} first. Throws `INVALID_OPTIONS` when `loginPath`
+ * doesn't start with `/`.
+ *
+ * @example
+ * ```ts
+ * import { loginHref, safeReturnTo } from "@monarcode/session-kit";
+ *
+ * loginHref("/login", "/orders?page=2"); // "/login?redirectTo=%2Forders%3Fpage%3D2"
+ *
+ * export function signInFirst(request: Request) {
+ * 	const url = new URL(request.url);
+ * 	const location = loginHref("/login", safeReturnTo(url.pathname + url.search));
+ * 	return new Response(null, { status: 302, headers: { location } });
+ * }
+ * ```
+ *
+ * @since 0.1.0
  */
 export function loginHref(loginPath: string, returnTo: string): string {
 	if (!loginPath.startsWith("/"))

@@ -12,10 +12,10 @@ import {
 } from "react-router";
 
 import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
+import { sessionMiddleware } from "@monarcode/session-kit/react-router/server";
 
 import { createAppAuth, type AppAuth } from "./auth/client";
-import { sessionMiddleware } from "./auth/middleware.server";
-import { auth } from "./auth/session.server";
+import { auth, serverAuth } from "./auth/session.server";
 
 // Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
 // with this client.
@@ -25,7 +25,16 @@ declare module "@monarcode/session-kit" {
 	}
 }
 
-export const middleware = sessionMiddleware;
+/**
+ * Gives each request its cookies, then refreshes access that is about to
+ * expire before loaders and actions read it, while the response can still
+ * set the cookie. Every response is marked private, as each one depends on
+ * who is signed in.
+ */
+export const middleware = sessionMiddleware(serverAuth, {
+	// The example's tokens live a minute: refresh in their last 15 seconds.
+	within: 15,
+});
 
 /** Who is signed in, from the cookie. Holds no tokens. */
 export async function loader({ context }: LoaderFunctionArgs) {

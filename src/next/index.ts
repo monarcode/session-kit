@@ -1,3 +1,12 @@
+import { AuthError } from "../core/errors.js";
+import { loginHref, safeReturnTo } from "../core/return-to.js";
+import type { Session } from "../core/types.js";
+import {
+	refreshBeforeRendering,
+	refreshWithin,
+	type RequestAuth,
+	type ServerAuth,
+} from "../server/auth.js";
 import {
 	pairJars,
 	type CookieJar,
@@ -215,4 +224,178 @@ export function proxyJar(
 		proxyJars.set(response, jar);
 	}
 	return jar;
+}
+
+/**
+ * Options for {@link nextSession}. Pass Next's own `cookies` and `redirect`,
+ * as this entry point doesn't import `next`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionOptions } from "@monarcode/session-kit/next";
+ * import { cookies } from "next/headers";
+ * import { redirect } from "next/navigation";
+ *
+ * export const options: NextSessionOptions = {
+ * 	cookies,
+ * 	redirect,
+ * 	loginPath: "/sign-in",
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionOptions = {
+	/** `cookies` from `next/headers`. */
+	cookies: () => Promise<NextCookies>;
+	/** `redirect` from `next/navigation`. */
+	redirect: (url: string) => never;
+	/**
+	 * Your sign-in page's path, starting with `/`.
+	 * @default "/login"
+	 */
+	loginPath?: string | undefined;
+	/**
+	 * How soon before the access token expires `refresh` refreshes it, in
+	 * seconds, as `serverAuth.refreshIfDue` explains.
+	 * @default 60
+	 */
+	within?: number | undefined;
+};
+
+/**
+ * The session in a Next.js app, made by {@link nextSession}: reads and
+ * guards for Server Components, the request's session for Server Functions
+ * and Route Handlers, and the refresh for Proxy.
+ *
+ * @example
+ * ```ts
+ * import type { NextSession } from "@monarcode/session-kit/next";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const session: NextSession<User, User>;
+ *
+ * // app/orders/page.tsx: the user, or the sign-in page.
+ * export default async function Orders() {
+ * 	const { user } = await session.require("/orders");
+ * 	return user.firstName;
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSession<U, I> = {
+	/**
+	 * Resolves who is signed in, from the cookie, or `null`. It doesn't set
+	 * cookies, so it works in Server Components. Proxy refreshes first.
+	 */
+	get: () => Promise<Session<U> | null>;
+	/**
+	 * Resolves the session, or redirects to the sign-in page with
+	 * `?redirectTo=` set to `path`, the page's own path, as Server Components
+	 * don't know their URL.
+	 */
+	require: (path: string) => Promise<Session<U>>;
+	/**
+	 * For your sign-in page: redirects a signed-in user to `redirectTo`,
+	 * usually the `redirectTo` search param, made safe with `safeReturnTo`.
+	 * It resolves for a signed-out user, or when the session can't be read.
+	 */
+	redirectIfSignedIn: (redirectTo: unknown) => Promise<void>;
+	/**
+	 * The request's session for Server Components, which doesn't set
+	 * cookies. Read its `credentials` to call your API while rendering.
+	 */
+	readOnly: () => Promise<RequestAuth<U, I>>;
+	/**
+	 * The request's session for Server Functions and Route Handlers, which
+	 * sets cookies. Sign in and out with it, and renew the access token.
+	 */
+	writable: () => Promise<RequestAuth<U, I>>;
+	/**
+	 * For Proxy: refreshes access that expires within `within` seconds,
+	 * setting the new cookie on `response`, and resolves `response`. A
+	 * failed refresh is left for the page, which reads the session as it is.
+	 */
+	refresh: <R extends ProxyResponse>(
+		request: ProxyRequest,
+		response: R,
+	) => Promise<R>;
+};
+
+/**
+ * Gives a Next.js app its session ({@link NextSession}), over {@link nextJar}
+ * and {@link proxyJar}. Make it once, beside `serverAuth`, in a module only
+ * server code imports.
+ *
+ * Server Components read it with `get` and guard pages with `require`.
+ * Server Functions and Route Handlers sign in and out through `writable()`.
+ * `proxy.ts` refreshes with `refresh`, as rendering can't set cookies.
+ *
+ * Throws `INVALID_OPTIONS` without `cookies` and `redirect`, when
+ * `loginPath` doesn't start with `/`, or when `within` is negative.
+ *
+ * @example
+ * ```ts
+ * import { nextSession } from "@monarcode/session-kit/next";
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { cookies } from "next/headers";
+ * import { redirect } from "next/navigation";
+ * import { NextResponse, type NextRequest } from "next/server";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const serverAuth: ServerAuth<User, User>;
+ *
+ * export const session = nextSession(serverAuth, { cookies, redirect });
+ *
+ * // proxy.ts
+ * export function proxy(request: NextRequest) {
+ * 	return session.refresh(request, NextResponse.next());
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function nextSession<U, I>(
+	serverAuth: ServerAuth<U, I>,
+	options: NextSessionOptions,
+): NextSession<U, I> {
+	const { cookies, redirect } = options;
+	if (typeof cookies !== "function" || typeof redirect !== "function")
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass cookies from next/headers and redirect from next/navigation",
+		);
+	const loginPath = options.loginPath ?? "/login";
+	// Fails fast on bad options, before any request.
+	loginHref(loginPath, "/");
+	const within = refreshWithin({ within: options.within });
+	const jar = async (writable: boolean) =>
+		nextJar(await cookies(), { writable });
+	const get = async () => serverAuth.getSession(await jar(false));
+	return {
+		get,
+		async require(path) {
+			const session = await get();
+			if (session) return session;
+			return redirect(
+				loginHref(loginPath, safeReturnTo(path, { loginPath })),
+			);
+		},
+		async redirectIfSignedIn(redirectTo) {
+			// Outside the catch: Next's `redirect` throws to redirect.
+			if (await get().catch(() => null))
+				redirect(safeReturnTo(redirectTo, { loginPath }));
+		},
+		readOnly: async () => serverAuth.forRequest(await jar(false)),
+		writable: async () => serverAuth.forRequest(await jar(true)),
+		async refresh(request, response) {
+			await refreshBeforeRendering(
+				serverAuth,
+				proxyJar(request, response),
+				within,
+			);
+			return response;
+		},
+	};
 }

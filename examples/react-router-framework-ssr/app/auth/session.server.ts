@@ -1,6 +1,9 @@
 // Holds the secret and the tokens: the `.server` name keeps it out of the
 // browser's bundle, and the build fails if browser code imports it.
-import { routerAuth } from "@monarcode/session-kit/react-router/server";
+import {
+	requireSession,
+	routerAuth,
+} from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 
 import { refresh, userSchema } from "./backend";
@@ -38,3 +41,11 @@ export const serverAuth = createServerAuth({
  * `auth(context).getSession()` in a loader, action or middleware.
  */
 export const auth = routerAuth(serverAuth);
+
+/**
+ * Lets only signed-in users through to the routes it guards, as middleware:
+ * it runs on the server before their loaders and actions, for page loads and
+ * navigation alike. Signed-out users go to the sign-in page, which brings
+ * them back. `signedIn.session(context)` gives those loaders the session.
+ */
+export const signedIn = requireSession(serverAuth);

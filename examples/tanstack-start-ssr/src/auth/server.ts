@@ -22,7 +22,7 @@ function sessionSecret(): string {
  * `clientCredentials`, the browser can ask for the access token too, through
  * the server functions in `functions.ts`; the refresh token stays here.
  */
-const serverAuth = createServerAuth({
+export const serverAuth = createServerAuth({
 	name: "session-kit-example",
 	user: userSchema,
 	secret: sessionSecret(),

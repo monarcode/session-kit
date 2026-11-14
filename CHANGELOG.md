@@ -58,6 +58,39 @@
   type AppSession = SessionOf<typeof serverAuth>; // { sessionId, user }
   ```
 
+- Middleware and server guards for the server-rendered setups, in place of
+  the code the guides had you copy. Each refreshes before rendering, while a
+  cookie can still be set, and ignores a failed refresh. The TanStack Start
+  and React Router middleware also mark each response that doesn't set its
+  own `Cache-Control` as `private, no-store` (`cacheControl` changes or
+  skips it). Next.js marks pages that read cookies `no-store` itself.
+  - TanStack Start: `refreshSession(serverAuth, options?)` in
+    `@monarcode/session-kit/tanstack-start/server`, a handler for Start's
+    `createMiddleware({ type: "request" }).server()`. Start strips what's in
+    `.server()` from the browser bundle, `serverAuth` included.
+  - React Router: `sessionMiddleware(serverAuth, options?)` for the root
+    route, `requireSession(serverAuth, { loginPath, basename })` for guarded
+    routes, whose `session(context)` gives their loaders a session that's
+    never `null`, and `redirectIfSignedIn(serverAuth, options?)` as the
+    sign-in page's loader, in `@monarcode/session-kit/react-router/server`.
+  - Next.js: `nextSession(serverAuth, { cookies, redirect })` in
+    `@monarcode/session-kit/next`, with `get()`, `require(path)` and
+    `redirectIfSignedIn(redirectTo)` for Server Components, `readOnly()` and
+    `writable()` for the request's session, and `refresh(request, response)`
+    for `proxy.ts`. You pass Next's own `cookies` and `redirect`.
+
+  ```ts
+  // app/root.tsx
+  export const middleware = sessionMiddleware(serverAuth);
+  // app/routes/protected.tsx
+  export const middleware = [signedIn]; // signedIn = requireSession(serverAuth)
+  ```
+
+- `loginHref(loginPath, returnTo)` in `@monarcode/session-kit` builds the
+  sign-in page's URL with `?redirectTo=`, for a guard of your own.
+- `SessionMiddlewareOptions` in `@monarcode/session-kit/server`: `within`
+  and `cacheControl`, for `refreshSession` and `sessionMiddleware`.
+
 ### Changed
 
 - **Breaking:** `createAuthFetch` takes the base URL as an option, as

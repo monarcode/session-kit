@@ -12,21 +12,21 @@ exports, with their options and types.
 Import from these paths only. Internal `dist` paths aren't part of the public
 API.
 
-| Import                                                                                  | Exports                                                                                                                |
-| --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| [`@monarcode/session-kit`](/docs/reference/core)                                        | `createAuth`, `createMirrorAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `AuthError`, types |
-| [`@monarcode/session-kit/react`](/docs/reference/react)                                 | `AuthProvider`, `useAuth`, `useAuthClient`, `createAuthHooks`, `useMirrorAuth`, types                                  |
-| [`@monarcode/session-kit/tanstack-router`](/docs/reference/tanstack-router)             | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useAuth`, `useAuthClient`, types              |
-| [`@monarcode/session-kit/react-router`](/docs/reference/react-router)                   | `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useAuthRevalidation`, types                                  |
-| [`@monarcode/session-kit/react-router/server`](/docs/reference/react-router-server)     | `routerAuth`, `cookieJarMiddleware`, `routerJar`, types                                                                |
-| [`@monarcode/session-kit/http`](/docs/reference/http)                                   | `createAuthFetch`, types                                                                                               |
-| [`@monarcode/session-kit/server`](/docs/reference/server)                               | `createServerAuth`, types                                                                                              |
-| [`@monarcode/session-kit/tanstack-start`](/docs/reference/tanstack-start)               | `connectSession`, `loadSession`                                                                                        |
-| [`@monarcode/session-kit/tanstack-start/server`](/docs/reference/tanstack-start-server) | `startAuth`, `startJar`                                                                                                |
-| [`@monarcode/session-kit/next`](/docs/reference/next)                                   | `nextJar`, `proxyJar`, types                                                                                           |
-| [`@monarcode/session-kit/expo`](/docs/reference/expo)                                   | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                              |
-| [`@monarcode/session-kit/effect`](/docs/reference/effect)                               | `Auth`, `AuthFailure`, types                                                                                           |
-| [`@monarcode/session-kit/effetch`](/docs/reference/effetch)                             | `sessionBearer`, types                                                                                                 |
+| Import                                                                                  | Exports                                                                                                                             |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [`@monarcode/session-kit`](/docs/reference/core)                                        | `createAuth`, `createMirrorAuth`, `fromAccessToken`, `webStorage`, `memoryStorage`, `safeReturnTo`, `loginHref`, `AuthError`, types |
+| [`@monarcode/session-kit/react`](/docs/reference/react)                                 | `AuthProvider`, `useAuth`, `useAuthClient`, `createAuthHooks`, `useMirrorAuth`, types                                               |
+| [`@monarcode/session-kit/tanstack-router`](/docs/reference/tanstack-router)             | `connectAuth`, `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useAuth`, `useAuthClient`, types                           |
+| [`@monarcode/session-kit/react-router`](/docs/reference/react-router)                   | `requireSession`, `redirectIfSignedIn`, `SessionOutlet`, `useAuthRevalidation`, types                                               |
+| [`@monarcode/session-kit/react-router/server`](/docs/reference/react-router-server)     | `sessionMiddleware`, `requireSession`, `redirectIfSignedIn`, `routerAuth`, `cookieJarMiddleware`, `routerJar`, types                |
+| [`@monarcode/session-kit/http`](/docs/reference/http)                                   | `createAuthFetch`, types                                                                                                            |
+| [`@monarcode/session-kit/server`](/docs/reference/server)                               | `createServerAuth`, types                                                                                                           |
+| [`@monarcode/session-kit/tanstack-start`](/docs/reference/tanstack-start)               | `connectSession`, `loadSession`                                                                                                     |
+| [`@monarcode/session-kit/tanstack-start/server`](/docs/reference/tanstack-start-server) | `startAuth`, `refreshSession`, `startJar`                                                                                           |
+| [`@monarcode/session-kit/next`](/docs/reference/next)                                   | `nextSession`, `nextJar`, `proxyJar`, types                                                                                         |
+| [`@monarcode/session-kit/expo`](/docs/reference/expo)                                   | `secureStorage`, `SessionGate`, `rememberDeepLink`, types                                                                           |
+| [`@monarcode/session-kit/effect`](/docs/reference/effect)                               | `Auth`, `AuthFailure`, types                                                                                                        |
+| [`@monarcode/session-kit/effetch`](/docs/reference/effetch)                             | `sessionBearer`, types                                                                                                              |
 
 ## Bundle size
 

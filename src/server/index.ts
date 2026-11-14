@@ -7,5 +7,6 @@ export type {
 	ServerAuth,
 	ServerAuthOptions,
 	SessionCookieOptions,
+	SessionMiddlewareOptions,
 } from "./auth.js";
 export type { CookieJar, CookieOptions } from "./cookies.js";

@@ -1,8 +1,6 @@
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { serverAuth } from "../../../../lib/auth/server";
+import { session } from "../../../../lib/auth/session";
 
 const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
 
@@ -16,11 +14,11 @@ export async function POST(request: Request) {
 	// Route handlers get no CSRF check from Next: accept this site only.
 	if (request.headers.get("sec-fetch-site") !== "same-origin")
 		return new Response(null, { status: 403 });
-	const jar = nextJar(await cookies(), { writable: true });
+	const auth = await session.writable();
 	const body = rejected.safeParse(await request.json().catch(() => null));
 	const credentials = body.success
-		? await serverAuth.clientCredentials.renew(jar, body.data)
-		: await serverAuth.clientCredentials.get(jar);
+		? await auth.clientCredentials.renew(body.data)
+		: await auth.clientCredentials.get();
 	return Response.json(credentials, {
 		headers: { "Cache-Control": "no-store" },
 	});

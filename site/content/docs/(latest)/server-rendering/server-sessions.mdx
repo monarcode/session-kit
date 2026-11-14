@@ -59,8 +59,11 @@ request's cookie jar to pass:
   Each call finds the request Start is handling.
 - **React Router:** `routerAuth(serverAuth)` makes a function you call with
   a loader's, action's or middleware's `context`.
-- **Next.js, and servers without an adapter:**
-  `serverAuth.forRequest(jar)`, over the request's cookie jar.
+- **Next.js:** `nextSession(serverAuth, { cookies, redirect })`, whose
+  `writable()` gives it in Server Functions and Route Handlers, and
+  `readOnly()` in Server Components.
+- **Servers without an adapter:** `serverAuth.forRequest(jar)`, over the
+  request's cookie jar.
 
 It's shaped like a client, so code written for one works on the server with
 it. `createAuthFetch(session, { baseUrl })` sends the cookie's token and saves
@@ -72,8 +75,10 @@ React Router loader once its response has left the middleware. There,
 nothing is saved, so `signIn`, `signOut` and `refreshIfDue` reject with
 `INVALID_OPTIONS`, and an expired access token rejects with
 `REFRESH_FAILED`. TanStack Start can't tell once a page has started
-streaming, so a cookie set then is lost. Refresh before rendering, in
-middleware or a proxy, with `refreshIfDue`.
+streaming, so a cookie set then is lost. Refresh before rendering, with the
+middleware each setup guide adds: `refreshSession` in TanStack Start,
+`sessionMiddleware` in React Router, and `nextSession`'s `refresh` in
+Next.js's Proxy.
 
 ## Servers without an adapter
 

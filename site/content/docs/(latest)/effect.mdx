@@ -573,8 +573,8 @@ import type { ServerSession } from "./auth.js";
 import { runRequest } from "./run.js";
 
 // TanStack Start: startAuth(serverAuth). React Router:
-// routerAuth(serverAuth)(context). Next.js:
-// serverAuth.forRequest(nextJar(await cookies(), { writable: true })).
+// routerAuth(serverAuth)(context). Next.js: await session.writable(),
+// from nextSession(serverAuth, { cookies, redirect }).
 export const profileFor = (session: ServerSession) =>
   runRequest(session, currentUser);
 ```
@@ -661,7 +661,7 @@ the mirror client.
   `Auth.credentials` and `sessionBearer` fail with `REFRESH_FAILED` once
   access has expired, and after a 401, which can't be renewed there unless
   the same request already renewed it where it could. Refresh in middleware
-  or a proxy first, with `refreshIfDue`, as the framework guides do. Sign
+  or Proxy first, as the framework guides do. Sign
   out in an action or route handler.
 - **Only `Auth`'s Effects.** A request's session isn't your browser client,
   so don't reach for client methods through `Auth.use` there.

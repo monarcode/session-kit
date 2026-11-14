@@ -6,9 +6,14 @@ import * as reactRouter from "react-router";
 import type { Credentials, Session } from "@monarcode/session-kit";
 import {
 	cookieJarMiddleware,
+	redirectIfSignedIn,
+	requireSession,
 	routerAuth,
 	routerJar,
+	sessionMiddleware,
+	type RouterArgs,
 	type RouterContextLike,
+	type RouterMiddleware,
 } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
 
@@ -293,7 +298,8 @@ const middlewareSupported = "RouterContextProvider" in reactRouter;
  * documents answer with the loaders' data. `/` is guarded, `/login` signs in
  * and `/session` is a resource route.
  */
-function requestHandler() {
+function requestHandler({ basename }: { basename?: string } = {}) {
+	const guard = basename ? requireSession(serverAuth, { basename }) : signedIn;
 	const component = () => null;
 	const routes = {
 		root: {
@@ -301,14 +307,7 @@ function requestHandler() {
 			path: "",
 			module: {
 				default: component,
-				middleware: [
-					cookieJarMiddleware,
-					async ({ context }: { context: RouterContextLike }) => {
-						await serverAuth
-							.refreshIfDue(routerJar(context))
-							.catch(() => {});
-					},
-				],
+				middleware: sessionMiddleware(serverAuth),
 				loader: async ({ context }: { context: RouterContextLike }) => ({
 					session: await serverAuth.getSession(routerJar(context)),
 				}),
@@ -320,6 +319,7 @@ function requestHandler() {
 			path: "login",
 			module: {
 				default: component,
+				loader: redirectIfSignedIn(serverAuth),
 				action: async ({ context }: { context: RouterContextLike }) => {
 					await serverAuth.signIn(routerJar(context), tokens());
 					throw reactRouter.redirect("/");
@@ -331,12 +331,8 @@ function requestHandler() {
 			parentId: "root",
 			module: {
 				default: component,
-				middleware: [
-					async ({ context }: { context: RouterContextLike }) => {
-						if (!(await serverAuth.getSession(routerJar(context))))
-							throw reactRouter.redirect("/login");
-					},
-				],
+				middleware: [guard],
+				loader: () => null,
 			},
 		},
 		"routes/home": {
@@ -345,9 +341,12 @@ function requestHandler() {
 			index: true,
 			module: {
 				default: component,
-				loader: async ({ context }: { context: RouterContextLike }) =>
-					(await serverAuth.credentials.get(routerJar(context)))
-						?.accessToken,
+				loader: async ({ context }: { context: RouterContextLike }) => ({
+					accessToken: (
+						await serverAuth.credentials.get(routerJar(context))
+					)?.accessToken,
+					user: guard.session(context).user,
+				}),
 			},
 		},
 		"routes/session": {
@@ -385,6 +384,7 @@ function requestHandler() {
 		publicPath: "/",
 		assetsBuildDirectory: "build/client",
 		future: { v8_middleware: true },
+		...(basename && { basename }),
 		ssr: true,
 		isSpaMode: false,
 		prerender: [],
@@ -406,6 +406,289 @@ const expiring = async () =>
 		),
 	);
 
+/** Runs `middleware` in order around `respond`, as React Router does. */
+function run(
+	middleware: readonly RouterMiddleware[],
+	args: RouterArgs,
+	respond: () => Promise<Response> = async () => new Response("ok"),
+): Promise<Response> {
+	const [first, ...rest] = middleware;
+	return first ? first(args, () => run(rest, args, respond)) : respond();
+}
+
+/** Calls the redirect a guard throws, or fails. */
+async function thrown(promise: Promise<unknown>): Promise<Response> {
+	try {
+		await promise;
+	} catch (error) {
+		if (error instanceof Response) return error;
+		throw error;
+	}
+	assert.fail("Expected a redirect");
+}
+
+const signedIn = requireSession(serverAuth);
+
+test("sessionMiddleware gives the request a jar, refreshes, and marks the response private", async () => {
+	const cookie = await expiring();
+	refreshes = 0;
+	const context = newContext();
+	const response = await run(
+		sessionMiddleware(serverAuth),
+		{ request: request(cookie), context },
+		async () => {
+			assert.equal(
+				(await serverAuth.credentials.get(routerJar(context)))?.accessToken,
+				"access-2",
+			);
+			return Response.json({ ok: true });
+		},
+	);
+	assert.equal(refreshes, 1);
+	assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	assert.deepEqual(await response.json(), { ok: true });
+});
+
+test("sessionMiddleware takes the header's value, or leaves it alone", async () => {
+	const custom = await run(
+		sessionMiddleware(serverAuth, { cacheControl: "private, max-age=0" }),
+		{ request: request(), context: newContext() },
+	);
+	assert.equal(custom.headers.get("Cache-Control"), "private, max-age=0");
+
+	const own = await run(
+		sessionMiddleware(serverAuth, { cacheControl: false }),
+		{ request: request(), context: newContext() },
+		async () =>
+			new Response("ok", { headers: { "Cache-Control": "max-age=60" } }),
+	);
+	assert.equal(own.headers.get("Cache-Control"), "max-age=60");
+});
+
+test("sessionMiddleware refreshes within `within`, and a failed refresh doesn't fail the request", async (t) => {
+	t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+	const cookie = await expiring();
+	refreshes = 0;
+	await run(sessionMiddleware(serverAuth, { within: 10 }), {
+		request: request(cookie),
+		context: newContext(),
+	});
+	assert.equal(refreshes, 0);
+
+	// Expired, and the backend can't refresh it.
+	t.mock.timers.tick(31_000);
+	const down = Promise.reject(new Error("backend down"));
+	down.catch(() => {});
+	refreshAnswer = down;
+	const context = newContext();
+	const response = await run(
+		sessionMiddleware(serverAuth),
+		{ request: request(cookie), context },
+		async () => {
+			await assert.rejects(
+				serverAuth.credentials.get(routerJar(context)),
+				code("REFRESH_FAILED"),
+			);
+			return new Response("ok");
+		},
+	);
+	assert.equal(refreshes, 1);
+	assert.equal(response.status, 200);
+});
+
+test("sessionMiddleware, requireSession and redirectIfSignedIn check their options when made", () => {
+	assert.throws(
+		() => sessionMiddleware(serverAuth, { within: -1 }),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() => requireSession(serverAuth, { loginPath: "login" }),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() =>
+			redirectIfSignedIn(serverAuth, { loginPath: ["/login", "sign-in"] }),
+		code("INVALID_OPTIONS"),
+	);
+});
+
+test("requireSession sends a signed-out request to sign in, and back", async () => {
+	const context = newContext();
+	const response = await thrown(
+		run([cookieJarMiddleware, signedIn], {
+			request: request("", "https://app.test/orders.data?page=2"),
+			url: new URL("https://app.test/orders?page=2"),
+			context,
+		}),
+	);
+	assert.equal(response.status, 302);
+	assert.equal(
+		response.headers.get("Location"),
+		"/login?redirectTo=%2Forders%3Fpage%3D2",
+	);
+	assert.throws(() => signedIn.session(context), code("INVALID_OPTIONS"));
+
+	// React Router 7 passes no `url`, and a path that leaves the site comes back home.
+	const home = await thrown(
+		run(
+			[
+				cookieJarMiddleware,
+				requireSession(serverAuth, { loginPath: "/sign-in" }),
+			],
+			{
+				request: request("", "https://app.test//evil.test/"),
+				context: newContext(),
+			},
+		),
+	);
+	assert.equal(home.headers.get("Location"), "/sign-in?redirectTo=%2F");
+});
+
+test("requireSession adds the basename to its redirect, and leaves it out of redirectTo", async () => {
+	const response = await thrown(
+		run(
+			[
+				cookieJarMiddleware,
+				requireSession(serverAuth, { basename: "/app/" }),
+			],
+			{
+				request: request("", "https://app.test/app/orders?page=2"),
+				url: new URL("https://app.test/app/orders?page=2"),
+				context: newContext(),
+			},
+		),
+	);
+	assert.equal(
+		response.headers.get("Location"),
+		"/app/login?redirectTo=%2Forders%3Fpage%3D2",
+	);
+	assert.throws(
+		() => requireSession(serverAuth, { basename: "app" }),
+		code("INVALID_OPTIONS"),
+	);
+});
+
+test("requireSession leaves React Router 7's _routes param out of redirectTo", async () => {
+	const response = await thrown(
+		run([cookieJarMiddleware, signedIn], {
+			request: request(
+				"",
+				"https://app.test/orders?page=2&_routes=routes%2Forders",
+			),
+			context: newContext(),
+		}),
+	);
+	assert.equal(
+		response.headers.get("Location"),
+		"/login?redirectTo=%2Forders%3Fpage%3D2",
+	);
+});
+
+test("requireSession's session follows an action's changes in the same request", async () => {
+	const cookie = cookieHeader(
+		await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+	);
+	const context = newContext();
+	await run(
+		[cookieJarMiddleware, signedIn],
+		{ request: request(cookie), context },
+		async () => {
+			const session = routerAuth(serverAuth)(context);
+			await session.updateUser({ ...user, role: "admin" });
+			assert.equal(signedIn.session(context).user.role, "admin");
+			assert.ok(Object.isFrozen(signedIn.session(context)));
+			await session.signOut();
+			assert.throws(
+				() => signedIn.session(context),
+				code("UNAUTHENTICATED"),
+			);
+			return new Response("ok");
+		},
+	);
+});
+
+test("sessionMiddleware sets Cache-Control on a response that can't change, and leaves a response's own alone", async () => {
+	const response = await run(
+		sessionMiddleware(serverAuth),
+		{ request: request(), context: newContext() },
+		async () => Response.redirect("https://app.test/public", 302),
+	);
+	assert.equal(response.headers.get("Cache-Control"), "private, no-store");
+	const own = await run(
+		sessionMiddleware(serverAuth),
+		{ request: request(), context: newContext() },
+		async () =>
+			new Response("ok", {
+				headers: { "Cache-Control": "public, max-age=60" },
+			}),
+	);
+	assert.equal(own.headers.get("Cache-Control"), "public, max-age=60");
+});
+
+test("requireSession lets a signed-in request through, with its session for the loaders", async () => {
+	const cookie = cookieHeader(
+		await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+	);
+	const context = newContext();
+	const response = await run(
+		[cookieJarMiddleware, signedIn],
+		{ request: request(cookie), context },
+		async () => Response.json(signedIn.session(context).user),
+	);
+	assert.deepEqual(await response.json(), user);
+	assert.throws(
+		() => requireSession(serverAuth).session(context),
+		code("INVALID_OPTIONS"),
+	);
+
+	// A context reused for another request doesn't keep the session.
+	await run([cookieJarMiddleware], { request: request(), context });
+	assert.throws(() => signedIn.session(context), code("INVALID_OPTIONS"));
+});
+
+test("redirectIfSignedIn sends a signed-in user on to a safe redirectTo", async () => {
+	const cookie = cookieHeader(
+		await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+	);
+	const loader = redirectIfSignedIn(serverAuth);
+
+	const at = async (cookie: string, url: string) => {
+		const context = newContext();
+		let result: unknown;
+		await run(
+			[cookieJarMiddleware],
+			{ request: request(cookie, url), context },
+			async () => {
+				result = await loader({
+					request: request(cookie, url),
+					context,
+				}).catch((error: unknown) => error);
+				return new Response("ok");
+			},
+		);
+		return result;
+	};
+
+	assert.equal(
+		await at("", "https://app.test/login?redirectTo=%2Forders"),
+		null,
+	);
+	const orders = await at(
+		cookie,
+		"https://app.test/login?redirectTo=%2Forders",
+	);
+	assert.ok(orders instanceof Response);
+	assert.equal(orders.headers.get("Location"), "/orders");
+	const unsafe = await at(
+		cookie,
+		"https://app.test/login?redirectTo=https%3A%2F%2Fevil.test",
+	);
+	assert.equal((unsafe as Response).headers.get("Location"), "/");
+	const back = await at(cookie, "https://app.test/login?redirectTo=%2Flogin");
+	assert.equal((back as Response).headers.get("Location"), "/");
+});
+
 test(
 	"React Router: a page refreshes in middleware, and its loaders and response get the new tokens",
 	{ skip: !middlewareSupported },
@@ -414,7 +697,8 @@ test(
 		assert.equal(response.status, 200);
 		assert.equal(refreshes, 1);
 		const data = (await response.json()) as Record<string, unknown>;
-		assert.equal(data["routes/home"], "access-2");
+		assert.deepEqual(data["routes/home"], { accessToken: "access-2", user });
+		assert.equal(response.headers.get("Cache-Control"), "private, no-store");
 		assert.deepEqual(
 			(data.root as { session: { user: unknown } }).session.user,
 			user,
@@ -458,7 +742,7 @@ test(
 		refreshAnswer = null;
 		const response = await requestHandler()(request(cookie));
 		assert.equal(response.status, 302);
-		assert.equal(response.headers.get("Location"), "/login");
+		assert.equal(response.headers.get("Location"), "/login?redirectTo=%2F");
 		assert.deepEqual(deleted(response), ["app.session"]);
 	},
 );
@@ -476,5 +760,55 @@ test(
 			user,
 		);
 		assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	},
+);
+
+test(
+	"React Router: the guards redirect page loads and navigation in the browser",
+	{ skip: !middlewareSupported },
+	async () => {
+		const handler = requestHandler();
+		// Single fetch: the redirect travels in the body, without `.data`.
+		const data = await handler(request("", "https://app.test/_.data"));
+		assert.equal(data.status, 202);
+		const body = await data.text();
+		assert.match(body, /\/login\?redirectTo=%2F/);
+		assert.doesNotMatch(body, /redirectTo=[^"]*\.data/);
+
+		const cookie = cookieHeader(
+			await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+		);
+		const login = await handler(
+			request(cookie, "https://app.test/login?redirectTo=%2Fsession"),
+		);
+		assert.equal(login.status, 302);
+		assert.equal(login.headers.get("Location"), "/session");
+		assert.equal(
+			(await handler(request("", "https://app.test/login"))).status,
+			200,
+		);
+	},
+);
+
+test(
+	"React Router: with a basename, the guards' redirects stay under it",
+	{ skip: !middlewareSupported },
+	async () => {
+		const handler = requestHandler({ basename: "/app" });
+		const guarded = await handler(request("", "https://app.test/app/"));
+		assert.equal(guarded.status, 302);
+		assert.equal(
+			guarded.headers.get("Location"),
+			"/app/login?redirectTo=%2F",
+		);
+
+		const cookie = cookieHeader(
+			await handle("", (jar) => serverAuth.signIn(jar, tokens())),
+		);
+		const login = await handler(
+			request(cookie, "https://app.test/app/login?redirectTo=%2Fsession"),
+		);
+		assert.equal(login.status, 302);
+		assert.equal(login.headers.get("Location"), "/app/session");
 	},
 );

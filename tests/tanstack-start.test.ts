@@ -16,12 +16,14 @@ import {
 	loadSession,
 } from "@monarcode/session-kit/tanstack-start";
 import {
+	refreshSession,
 	startAuth,
 	startJar,
 } from "@monarcode/session-kit/tanstack-start/server";
 import {
 	createServerEntry,
 	getResponseHeaders,
+	setResponseHeader,
 } from "@tanstack/react-start/server";
 import * as Effect from "effect/Effect";
 
@@ -159,6 +161,131 @@ test("startAuth finds each request's session, and rejects outside a request", as
 		session.signOut(),
 	);
 	assert.match(signedOut.setCookies[0]!, /^app\.session=; Max-Age=0/);
+});
+
+/** A server engine whose backend answers refreshes with `answer()`. */
+function refreshingAuth(answer: () => Promise<object>) {
+	let refreshes = 0;
+	const app = createServerAuth({
+		name: "app",
+		user: userSchema,
+		secret: SECRET,
+		refresh: async () => {
+			refreshes++;
+			return (await answer()) as never;
+		},
+	});
+	return { app, refreshes: () => refreshes };
+}
+
+/**
+ * Runs a request middleware's server function, as Start does for a page,
+ * with `respond` standing in for the routes after it.
+ */
+async function runMiddleware<T>(
+	middleware: ReturnType<typeof refreshSession>,
+	respond: () => Promise<T>,
+	response = new Response("ok"),
+) {
+	let value!: T;
+	const next = async () => {
+		value = await respond();
+		return { response };
+	};
+	const result = (await middleware({ next } as never)) as unknown as {
+		response: Response;
+	};
+	assert.equal(result.response, response);
+	return value;
+}
+
+test("refreshSession refreshes before the request and marks the response private", async () => {
+	const { app, refreshes } = refreshingAuth(async () => ({
+		accessToken: "access-2",
+		refreshToken: "refresh-2",
+		expiresIn: 900,
+	}));
+	const signedIn = await handle("", () =>
+		startAuth(app).signIn(tokens({ expiresIn: 30 })),
+	);
+	const middleware = refreshSession(app);
+	const { result, setCookies } = await handle(
+		cookieHeader(signedIn.setCookies),
+		async () => {
+			const next = await runMiddleware(middleware, async () => {
+				const credentials = await startAuth(app).credentials.get();
+				return credentials!.accessToken;
+			});
+			return {
+				next,
+				cacheControl: getResponseHeaders().get("cache-control"),
+			};
+		},
+	);
+	assert.deepEqual(result, {
+		next: "access-2",
+		cacheControl: "private, no-store",
+	});
+	assert.equal(refreshes(), 1);
+	assert.match(setCookies[0]!, /^app\.session=1\./);
+});
+
+test("refreshSession takes the header's value or leaves it alone, and a failed refresh doesn't fail the request", async () => {
+	const { app, refreshes } = refreshingAuth(() =>
+		Promise.reject(new Error("backend down")),
+	);
+	const signedIn = await handle("", () =>
+		startAuth(app).signIn(tokens({ expiresIn: 30 })),
+	);
+	const cookie = cookieHeader(signedIn.setCookies);
+	const header = (
+		middleware: ReturnType<typeof refreshSession>,
+		respond: () => Promise<void> = async () => {},
+		response?: Response,
+	) =>
+		handle(cookie, async () => {
+			await runMiddleware(middleware, respond, response);
+			return getResponseHeaders().get("cache-control");
+		});
+	assert.equal(
+		(
+			await header(
+				refreshSession(app, { cacheControl: "private, max-age=0" }),
+			)
+		).result,
+		"private, max-age=0",
+	);
+	assert.equal(refreshes(), 1);
+	assert.equal(
+		(await header(refreshSession(app, { cacheControl: false }))).result,
+		null,
+	);
+	assert.equal(
+		(await header(refreshSession(app, { within: 10 }))).result,
+		"private, no-store",
+	);
+
+	// A route's own header stays, from its response or Start's helpers.
+	const own = new Response("ok", {
+		headers: { "Cache-Control": "public, max-age=60" },
+	});
+	assert.equal(
+		(await header(refreshSession(app), async () => {}, own)).result,
+		null,
+	);
+	assert.equal(
+		(
+			await header(refreshSession(app), async () => {
+				setResponseHeader("Cache-Control", "public, max-age=60");
+			})
+		).result,
+		"public, max-age=60",
+	);
+
+	assert.throws(
+		() => refreshSession(app, { within: -1 }),
+		code("INVALID_OPTIONS"),
+	);
 });
 
 test("startAuth has every member a request's session has, passed through", async () => {

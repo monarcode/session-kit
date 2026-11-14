@@ -1,15 +1,21 @@
+import type { RequestServerFn } from "@tanstack/react-start";
 import {
 	deleteCookie,
 	getCookie,
 	getRequest,
+	getResponseHeader,
 	setCookie,
+	setResponseHeader,
 } from "@tanstack/react-start/server";
 
 import { AuthError } from "../core/errors.js";
 import {
 	lazyRequestAuth,
+	middlewareOptions,
+	refreshBeforeRendering,
 	type RequestAuth,
 	type ServerAuth,
+	type SessionMiddlewareOptions,
 } from "../server/auth.js";
 import type { CookieJar, CookieOptions } from "../server/cookies.js";
 
@@ -124,4 +130,61 @@ export function startAuth<U, I>(
 	serverAuth: ServerAuth<U, I>,
 ): RequestAuth<U, I> {
 	return lazyRequestAuth(serverAuth, startJar);
+}
+
+/**
+ * Refreshes the session before each request, while the response can still
+ * set the cookie. Pass it to Start's `createMiddleware().server()`, and list
+ * that middleware in `requestMiddleware` in `src/start.ts`.
+ *
+ * It refreshes access that expires within `within` seconds, so pages and
+ * server functions don't refresh while rendering, once a cookie can't be
+ * set. A failed refresh doesn't fail the request. Routes read the session
+ * as usual, and an error there reaches the route's error component.
+ *
+ * It sets `Cache-Control` to `private, no-store` on each response that
+ * doesn't set its own, unless you pass `cacheControl`.
+ *
+ * Start bundles `src/start.ts` for the browser too, and strips only what's
+ * inside `.server()` from it. Calling `refreshSession` there keeps
+ * `serverAuth` out of the browser bundle.
+ *
+ * Throws `INVALID_OPTIONS` when `within` is negative.
+ *
+ * @example
+ * ```ts
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { refreshSession } from "@monarcode/session-kit/tanstack-start/server";
+ * import { createMiddleware, createStart } from "@tanstack/react-start";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * const sessionMiddleware = createMiddleware({ type: "request" }).server(
+ * 	refreshSession(serverAuth),
+ * );
+ *
+ * export const startInstance = createStart(() => ({
+ * 	requestMiddleware: [sessionMiddleware],
+ * }));
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function refreshSession<U, I, TRegister = {}, TMiddlewares = undefined>(
+	serverAuth: ServerAuth<U, I>,
+	options?: SessionMiddlewareOptions,
+): RequestServerFn<TRegister, TMiddlewares, undefined> {
+	const { within, cacheControl } = middlewareOptions(options);
+	return async ({ next }) => {
+		await refreshBeforeRendering(serverAuth, startJar(), within);
+		const result = await next();
+		// Start applies helper headers over a response's own: check both.
+		if (
+			cacheControl !== false &&
+			!result.response.headers.has("Cache-Control") &&
+			getResponseHeader("Cache-Control") === undefined
+		)
+			setResponseHeader("Cache-Control", cacheControl);
+		return result;
+	};
 }

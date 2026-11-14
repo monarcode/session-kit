@@ -91,56 +91,39 @@ setup shares.
 
 ## 2. Read the session in Server Components
 
-Every `serverAuth` method takes a cookie jar. `nextJar(await cookies())`
-from `@monarcode/session-kit/next` gives one over Next's cookies, read-only
-by default, as Server Components can't set cookies. A data access layer
-reads the session once per render:
+`nextSession` from `@monarcode/session-kit/next` gives your app its session
+over Next's cookies. Pass it Next's own `cookies` and `redirect`, and create
+it in a server-only module too:
 
 ```ts title="lib/auth/session.ts"
 import "server-only";
-import { cache } from "react";
-
-import { safeReturnTo } from "@monarcode/session-kit";
-import { nextJar } from "@monarcode/session-kit/next";
+import { nextSession } from "@monarcode/session-kit/next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { serverAuth } from "./server";
 
-export const getSession = cache(async () =>
-  serverAuth.getSession(nextJar(await cookies())),
-);
-
-/** The session, or the sign-in page, which sends the user back to `path`. */
-export async function requireSession(path: string) {
-  const session = await getSession();
-  if (!session)
-    redirect(`/login?redirectTo=${encodeURIComponent(safeReturnTo(path))}`);
-  return session;
-}
+export const session = nextSession(serverAuth, { cookies, redirect });
 ```
 
-`getSession` resolves `{ sessionId, user }`, never tokens, so it's safe to
-pass to Client Components.
+In a Server Component, `await session.get()` resolves `{ sessionId, user }`,
+never tokens, so it's safe to pass to Client Components, or `null`. It
+doesn't set cookies, as Server Components can't. Proxy refreshes first.
 
 ## 3. Refresh in Proxy
 
-A read-only jar can't save refreshed tokens, so Proxy refreshes access that
-is about to expire before any page or Server Function reads it.
-`proxyJar(request, response)` sets the new cookie on the response, and Next
-passes it on to the Server Components rendering the same request:
+Proxy refreshes access that is about to expire before any page or Server
+Function reads it. `session.refresh(request, response)` sets the new cookie
+on the response, and Next passes it on to the Server Components rendering
+the same request:
 
 ```ts title="proxy.ts"
-import { proxyJar } from "@monarcode/session-kit/next";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { serverAuth } from "./lib/auth/server";
+import { session } from "./lib/auth/session";
 
-export async function proxy(request: NextRequest) {
-  const response = NextResponse.next();
-  // If the refresh fails, the page still renders with the cookie as it is.
-  await serverAuth.refreshIfDue(proxyJar(request, response)).catch(() => {});
-  return response;
+export function proxy(request: NextRequest) {
+  return session.refresh(request, NextResponse.next());
 }
 
 export const config = {
@@ -148,29 +131,26 @@ export const config = {
 };
 ```
 
+If the refresh fails, the page still renders with the cookie as it is.
 Server Functions are POST requests to the page that calls them, so keep the
 matcher wide enough to include those pages.
 
 ## 4. Add Server Functions
 
-Server Functions set cookies, so they pass `{ writable: true }`. They decide
-what the browser may ask for:
+Server Functions set cookies, so they use `session.writable()`, the
+request's session with every `serverAuth` method. They decide what the
+browser may ask for:
 
 ```ts title="app/actions.ts"
 "use server";
 
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { login, serverAuth } from "../lib/auth/server";
-
-async function jar() {
-  return nextJar(await cookies(), { writable: true });
-}
+import { login } from "../lib/auth/server";
+import { session } from "../lib/auth/session";
 
 export async function getSessionAction() {
-  return serverAuth.getSession(await jar());
+  return (await session.writable()).getSession();
 }
 
 const credentials = z.object({ username: z.string(), password: z.string() });
@@ -179,10 +159,9 @@ export async function signInAction(input: unknown) {
   const { username, password } = credentials.parse(input);
   try {
     return {
-      session: await serverAuth.signIn(
-        await jar(),
-        await login(username, password),
-      ),
+      session: await (
+        await session.writable()
+      ).signIn(await login(username, password)),
     };
   } catch (error) {
     return {
@@ -192,7 +171,7 @@ export async function signInAction(input: unknown) {
 }
 
 export async function signOutAction() {
-  await serverAuth.signOut(await jar());
+  await (await session.writable()).signOut();
 }
 ```
 
@@ -282,15 +261,15 @@ Render the providers in the root layout, with the session it reads:
 ```tsx title="app/layout.tsx"
 import type { ReactNode } from "react";
 
-import { getSession } from "../lib/auth/session";
+import { session } from "../lib/auth/session";
 import { Providers } from "./providers";
 
 export default async function RootLayout(props: { children: ReactNode }) {
-  const session = await getSession();
+  const current = await session.get();
   return (
     <html lang="en">
       <body>
-        <Providers session={session}>{props.children}</Providers>
+        <Providers session={current}>{props.children}</Providers>
       </body>
     </html>
   );
@@ -299,28 +278,28 @@ export default async function RootLayout(props: { children: ReactNode }) {
 
 ## 6. Protect pages
 
-Check the session in each page, or in the data access layer, rather than in
-a layout. Layouts don't render again on navigation:
+Check the session in each page with `session.require`, rather than in a
+layout. Layouts don't render again on navigation. It takes the page's own
+path, where the sign-in page sends the user back, as Server Components don't
+know their URL:
 
 ```tsx title="app/page.tsx"
-import { requireSession } from "../lib/auth/session";
+import { session } from "../lib/auth/session";
 
 export default async function Home() {
-  const session = await requireSession("/");
-  return <h1>Welcome, {session.user.firstName}</h1>;
+  const { user } = await session.require("/");
+  return <h1>Welcome, {user.firstName}</h1>;
 }
 ```
 
-The sign-in page sends a signed-in user back to `redirectTo`, and its form
-calls the client's `signIn`. When the session changes in the browser, after a
-sign-in or sign-out here or in another tab, `useMirrorAuth` renders the page
-again on the server, so these redirects run without code in the form:
+The sign-in page sends a signed-in user on to `redirectTo` with
+`session.redirectIfSignedIn`, and its form calls the client's `signIn`. When
+the session changes in the browser, after a sign-in or sign-out here or in
+another tab, `useMirrorAuth` renders the page again on the server, so these
+redirects run without code in the form:
 
 ```tsx title="app/login/page.tsx"
-import { safeReturnTo } from "@monarcode/session-kit";
-import { redirect } from "next/navigation";
-
-import { getSession } from "../../lib/auth/session";
+import { session } from "../../lib/auth/session";
 import { SignInForm } from "./sign-in-form";
 
 export default async function Login({
@@ -328,8 +307,7 @@ export default async function Login({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  if (await getSession())
-    redirect(safeReturnTo((await searchParams).redirectTo));
+  await session.redirectIfSignedIn((await searchParams).redirectTo);
   return <SignInForm />;
 }
 ```
@@ -391,24 +369,20 @@ with the access token.
 
 ## Call your API
 
-In Server Components, get the access token with a read-only jar. Proxy
-refreshed it before the render. A token that expired anyway rejects with
-`REFRESH_FAILED`, since the jar can't save a new one:
+In Server Components, get the access token from `session.readOnly()`, the
+request's session that doesn't set cookies. Proxy refreshed it before the
+render. A token that expired anyway rejects with `REFRESH_FAILED`, since
+nothing new can be saved:
 
 ```tsx title="app/orders/page.tsx"
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { serverAuth } from "../../lib/auth/server";
-import { requireSession } from "../../lib/auth/session";
+import { session } from "../../lib/auth/session";
 
 export default async function Orders() {
-  await requireSession("/orders");
-  const credentials = await serverAuth.credentials.get(
-    nextJar(await cookies()),
-  );
-  // requireSession has checked that someone is signed in.
+  await session.require("/orders");
+  const credentials = await (await session.readOnly()).credentials.get();
+  // require has checked that someone is signed in.
   const response = await fetch("https://api.example.com/orders", {
     headers: { Authorization: `Bearer ${credentials!.accessToken}` },
   });
@@ -420,35 +394,33 @@ export default async function Orders() {
 }
 ```
 
-In Server Functions and Route Handlers, a writable jar can also `renew`
-after a 401.
+In Server Functions and Route Handlers, `session.writable()` can also
+`renew` after a 401.
 
 To call the API from the browser too, with `createAuthFetch` or effetch's
 `sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-Expose `serverAuth.clientCredentials.get` and `.renew` through a Route
+Expose the request's `clientCredentials.get` and `.renew` through a Route
 Handler, and pass them as the client's `credentials`. A Route Handler rather
 than a Server Function, because Next dispatches Server Functions one at a
 time and renders the page again after one sets a cookie. Next doesn't check
 where a Route Handler's requests come from, so accept your own site only:
 
 ```ts title="app/api/auth/credentials/route.ts"
-import { nextJar } from "@monarcode/session-kit/next";
-import { cookies } from "next/headers";
 import { z } from "zod";
 
-import { serverAuth } from "../../../../lib/auth/server";
+import { session } from "../../../../lib/auth/session";
 
 const rejected = z.object({ sessionId: z.string(), accessToken: z.string() });
 
 export async function POST(request: Request) {
   if (request.headers.get("sec-fetch-site") !== "same-origin")
     return new Response(null, { status: 403 });
-  const jar = nextJar(await cookies(), { writable: true });
+  const auth = await session.writable();
   const body = rejected.safeParse(await request.json().catch(() => null));
   return Response.json(
     body.success
-      ? await serverAuth.clientCredentials.renew(jar, body.data)
-      : await serverAuth.clientCredentials.get(jar),
+      ? await auth.clientCredentials.renew(body.data)
+      : await auth.clientCredentials.get(),
   );
 }
 ```
@@ -462,13 +434,11 @@ The example app does this.
 - **Signing out ends the session only with `revoke`.** A copy of the cookie
   works again ten seconds after sign-out: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
-- **Writable jars only where Next allows writes.** Pass `{ writable: true }`
-  in Server Functions and Route Handlers only. In a Server Component, a
-  writable jar would refresh and then fail to save the new tokens, which
-  spends a rotating refresh token.
-- **One jar per request.** `nextJar` returns the same jar for the same store
-  and `writable`, and the read-only jar follows the writable one. `proxyJar`
-  returns the same jar for the same response.
+- **`writable()` only where Next allows writes.** Use it in Server Functions
+  and Route Handlers only. In a Server Component, it would refresh and then
+  fail to save the new tokens, which spends a rotating refresh token.
+- **One read per request.** Calls to `session` during one request read the
+  cookie once, and a sign-in through `writable()` shows in `get()`.
 - **Separate instances.** Next builds Proxy, Route Handlers, and pages with
   their Server Functions separately, so each has its own `serverAuth`, even
   on one server: they share no refresh. A matcher that covers every route
