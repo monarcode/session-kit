@@ -34,7 +34,11 @@ import {
 	type SessionBearerPlugin,
 } from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
-import { createAuthFetch, type AuthFetch } from "../dist/http/index.js";
+import {
+	createAuthFetch,
+	type AuthFetch,
+	type AuthFetchClient,
+} from "../dist/http/index.js";
 import {
 	createAuth,
 	createMirrorAuth,
@@ -54,6 +58,7 @@ import {
 	type RefreshFn,
 	type Session,
 	type SessionOf,
+	type SignInInput,
 	type UserInput,
 	type UserOf,
 } from "../dist/index.js";
@@ -610,6 +615,20 @@ void tokenServer.updateUser;
 // One request's session: every server method, without the jar.
 type AppUser = z.output<typeof userSchema>;
 const requestAuth: RequestAuth<AppUser, AppUser> = serverAuth.forRequest(jar);
+// Its members are read-only; a server's and Next's session's aren't.
+// @ts-expect-error RequestAuth's members are read-only.
+requestAuth.signIn = requestAuth.signIn;
+serverAuth.signIn = serverAuth.signIn;
+const anyRequestAuth: RequestAuth<AppUser, any> = requestAuth;
+// A request's session is a client for createAuthFetch, in generic code too.
+const fetchClient = <U, I>(session: RequestAuth<U, I>): AuthFetchClient =>
+	session;
+void [anyRequestAuth, fetchClient];
+// @ts-expect-error A browser client isn't a request's session.
+void ((): RequestAuth<unknown, unknown> => auth);
+// A schema user's session signs in with a user, so it isn't a token user's.
+// @ts-expect-error The signIn inputs differ.
+void ((): RequestAuth<AppUser, never> => requestAuth);
 async function requestSide() {
 	const session = await requestAuth.getSession();
 	const viewEmail: string | undefined = session?.user.email;
@@ -701,6 +720,16 @@ export async function guardedPage() {
 	const writable: RequestAuth<AppUser, AppUser> =
 		await appSessionNext.writable();
 	return [user.email, current, writable];
+}
+export async function nextActions(input: SignInInput<AppUser>) {
+	const signedIn: Session<AppUser> = await appSessionNext.signIn(input);
+	await appSessionNext.updateUser(signedIn.user);
+	await appSessionNext.signOut();
+	const tokenSession = nextSession(tokenServer, { cookies, redirect });
+	// @ts-expect-error A user read from the token has no updateUser.
+	void tokenSession.updateUser;
+	// @ts-expect-error signIn takes the tokens and the user.
+	await appSessionNext.signIn({ accessToken: "a" });
 }
 declare const proxyRequest: NextRequest;
 const proxied: Promise<NextResponse> = appSessionNext.refresh(

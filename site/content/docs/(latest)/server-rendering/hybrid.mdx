@@ -173,8 +173,8 @@ export const trustingSignInFn = createServerFn({ method: "POST" })
   .handler(({ data }) => session.signIn(data));
 ```
 
-The client passes on what your backend's sign-in returned, and the form calls
-`auth.signIn(await login(username, password))`:
+The client's `signIn` takes what your backend's sign-in returned, so the
+form passes it `login`'s result as it is:
 
 ```ts
 signIn: (result: Awaited<ReturnType<typeof login>>) =>

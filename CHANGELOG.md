@@ -139,6 +139,10 @@
   `rememberDeepLink` stays, for a `redirectSystemPath` that does more.
 - `AuthRouter` in `@monarcode/session-kit/tanstack-router`, the Router type
   `connectAuth` takes, for typing a function that takes your Router.
+- `NextSession` has `signIn`, `signOut` and, with a user schema,
+  `updateUser`, so a Server Function writes `await session.signIn(tokens)`
+  rather than `await (await session.writable()).signIn(tokens)`. The Next.js
+  guide and example use them.
 
 ### Changed
 
@@ -353,6 +357,14 @@
 
 ### Fixed
 
+- With a user read from the access token, `ServerAuth`, `RequestAuth` and
+  `NextSession` keep their names in editors and declaration files. Editors
+  showed internal names, and exporting such a value from a module that emits
+  declarations failed with TS4023. A session with a user schema is no longer
+  assignable to a token user's type, such as `RequestAuth<User, never>`,
+  since their `signIn` takes different input.
+- The guides and examples call `login` on its own line before `signIn`,
+  rather than nesting the `await`.
 - `signOut()` before the saved session is restored, such as with
   asynchronous storage or before the first `mount()`, revokes the saved
   tokens. It cleared them without revoking, so the refresh token stayed

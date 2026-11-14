@@ -1,6 +1,6 @@
 import { AuthError } from "../core/errors.js";
 import { LOGIN_PATH, loginHref, safeReturnTo } from "../core/return-to.js";
-import type { Session } from "../core/types.js";
+import type { Session, SignInInput } from "../core/types.js";
 import {
 	refreshBeforeRendering,
 	refreshWithin,
@@ -286,6 +286,26 @@ export type NextSessionOptions = {
  * @since 0.1.0
  */
 export type NextSession<U, I> = {
+	// One mapped type, as `RequestAuth` is.
+	[
+		K in keyof NextSessionMembers<U, I> as K extends "updateUser"
+			? [I] extends [never]
+				? never
+				: K
+			: K
+	]: NextSessionMembers<U, I>[K];
+};
+
+type NextSessionMembers<U, I> = NextSessionBase<U, I> & {
+	/**
+	 * Replaces the signed-in user in the cookie, such as after a profile
+	 * edit, as {@link RequestAuth}'s `updateUser` does over `writable()`. Use
+	 * it in Server Functions and Route Handlers.
+	 */
+	updateUser: (input: I | (() => Promise<I>)) => Promise<Session<U>>;
+};
+
+type NextSessionBase<U, I> = {
 	/**
 	 * Resolves who is signed in, from the cookie, or `null`. It doesn't set
 	 * cookies, so it works in Server Components. Proxy refreshes first.
@@ -314,9 +334,21 @@ export type NextSession<U, I> = {
 	readOnly: () => Promise<RequestAuth<U, I>>;
 	/**
 	 * The request's session for Server Functions and Route Handlers, which
-	 * sets cookies. Sign in and out with it, and renew the access token.
+	 * sets cookies. `signIn`, `signOut` and `updateUser` are shortcuts to
+	 * it. Use it for the rest, such as renewing the access token.
 	 */
 	writable: () => Promise<RequestAuth<U, I>>;
+	/**
+	 * Signs in with your backend's tokens, setting the cookie, as
+	 * {@link RequestAuth}'s `signIn` does over `writable()`. Use it in Server
+	 * Functions and Route Handlers.
+	 */
+	signIn: (input: SignInInput<I>) => Promise<Session<U>>;
+	/**
+	 * Signs out and clears the cookie, as {@link RequestAuth}'s `signOut`
+	 * does over `writable()`. Use it in Server Functions and Route Handlers.
+	 */
+	signOut: () => Promise<void>;
 	/**
 	 * For Proxy: refreshes access that expires within `within` seconds,
 	 * setting the new cookie on `response`, and resolves `response`. A
@@ -334,7 +366,8 @@ export type NextSession<U, I> = {
  * server code imports.
  *
  * Server Components read it with `get` and guard pages with `require`.
- * Server Functions and Route Handlers sign in and out through `writable()`.
+ * Server Functions and Route Handlers sign in and out with `signIn` and
+ * `signOut`.
  * `proxy.ts` refreshes with `refresh`, as rendering can't set cookies.
  *
  * Throws `INVALID_OPTIONS` without `cookies` or `redirect`, when
@@ -379,7 +412,9 @@ export function nextSession<U, I>(
 	const jar = async (writable: boolean) =>
 		nextJar(await cookies(), { writable });
 	const get = async () => serverAuth.getSession(await jar(false));
-	return {
+	const readOnly = async () => serverAuth.forRequest(await jar(false));
+	const writable = async () => serverAuth.forRequest(await jar(true));
+	const base: NextSessionBase<U, I> = {
 		get,
 		async require(path) {
 			const session = await get();
@@ -393,8 +428,10 @@ export function nextSession<U, I>(
 			if (await get().catch(() => null))
 				redirect(safeReturnTo(redirectTo, { loginPath }));
 		},
-		readOnly: async () => serverAuth.forRequest(await jar(false)),
-		writable: async () => serverAuth.forRequest(await jar(true)),
+		readOnly,
+		writable,
+		signIn: async (input) => (await writable()).signIn(input),
+		signOut: async () => (await writable()).signOut(),
 		async refresh(request, response) {
 			await refreshBeforeRendering(
 				serverAuth,
@@ -404,6 +441,15 @@ export function nextSession<U, I>(
 			return response;
 		},
 	};
+	if (!("updateUser" in serverAuth)) return base as NextSession<U, I>;
+	type Updating = {
+		updateUser: (input: unknown) => Promise<Session<U>>;
+	};
+	return {
+		...base,
+		updateUser: async (input: unknown) =>
+			((await writable()) as unknown as Updating).updateUser(input),
+	} as NextSession<U, I>;
 }
 
 /**

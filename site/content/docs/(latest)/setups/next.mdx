@@ -154,8 +154,7 @@ It answers your own site's pages only, so another site can't sign the user
 out: see [Security](/docs/security).
 
 Signing in is yours, as it takes your form's input. A Server Function sets
-the cookie with `session.writable()`, the request's session with every
-`serverAuth` method:
+the cookie with `session.signIn`:
 
 ```ts title="app/actions.ts"
 "use server";
@@ -170,11 +169,8 @@ const credentials = z.object({ username: z.string(), password: z.string() });
 export async function signInAction(input: unknown) {
   const { username, password } = credentials.parse(input);
   try {
-    return {
-      session: await (
-        await session.writable()
-      ).signIn(await login(username, password)),
-    };
+    const tokens = await login(username, password);
+    return { session: await session.signIn(tokens) };
   } catch (error) {
     return {
       error: error instanceof Error ? error.message : "Sign-in failed",
@@ -398,7 +394,7 @@ export default async function Orders() {
 ```
 
 In Server Functions and Route Handlers, pass `await session.writable()`
-instead. After a 401, it renews the token, saves it in the cookie, and sends a
+instead, the request's session that can set cookies. After a 401, it renews the token, saves it in the cookie, and sends a
 `GET` again. With an HTTP client of your own, read the token with
 `credentials.get()`.
 
@@ -416,11 +412,13 @@ The example app does this.
 - **Signing out ends the session only with `revoke`.** Without it, a copy of
   the cookie made before sign-out still works: see
   [Sign-out](/docs/server-rendering/server-sessions#sign-out).
-- **`writable()` only where Next allows writes.** Use it in Server Functions
-  and Route Handlers only. In a Server Component, it would refresh and then
-  fail to save the new tokens, which spends a rotating refresh token.
+- **Writes only where Next allows them.** Use `signIn`, `signOut`,
+  `updateUser` and `writable()` in Server Functions and Route Handlers only.
+  In a Server Component they can't set the cookie, and `writable()` would
+  refresh and then fail to save the new tokens, which spends a rotating
+  refresh token.
 - **One read per request.** Calls to `session` during one request read the
-  cookie once, and a sign-in through `writable()` shows in `get()`.
+  cookie once, and a sign-in through `signIn` shows in `get()`.
 - **Separate instances.** Next builds Proxy, Route Handlers, and pages with
   their Server Functions separately, so each has its own `serverAuth`, even
   on one server. They share no refresh. A matcher that covers every route

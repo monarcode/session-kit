@@ -19,9 +19,10 @@ export const getSessionFn = createServerFn().handler(() =>
 /** Signs in with DummyJSON on the server and sets the cookie. */
 export const signInFn = createServerFn({ method: "POST" })
 	.validator(z.object({ username: z.string(), password: z.string() }))
-	.handler(async ({ data }) =>
-		session.signIn(await login(data.username, data.password)),
-	);
+	.handler(async ({ data }) => {
+		const tokens = await login(data.username, data.password);
+		return session.signIn(tokens);
+	});
 
 /** Calls DummyJSON's `auth/me` from the server, with the cookie's token. */
 export const getProfileFn = createServerFn().handler(async () => {

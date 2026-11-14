@@ -18,11 +18,8 @@ const credentials = z.object({ username: z.string(), password: z.string() });
 export async function signInAction(input: unknown) {
 	const { username, password } = credentials.parse(input);
 	try {
-		return {
-			session: await (
-				await session.writable()
-			).signIn(await login(username, password)),
-		};
+		const tokens = await login(username, password);
+		return { session: await session.signIn(tokens) };
 	} catch (error) {
 		return {
 			error: error instanceof Error ? error.message : "Could not sign in",

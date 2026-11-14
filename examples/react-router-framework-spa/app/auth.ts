@@ -31,9 +31,8 @@ export const auth = createAuth({
 
 /** Signs in with DummyJSON, then saves the tokens and the user it returned. */
 export async function signInWithPassword(username: string, password: string) {
-	const { accessToken, refreshToken, ...user } = loginResponse.parse(
-		await login(username, password),
-	);
+	const response = await login(username, password);
+	const { accessToken, refreshToken, ...user } = loginResponse.parse(response);
 	await auth.signIn({ accessToken, refreshToken, user });
 }
 

@@ -305,6 +305,26 @@ test("nextSession reads and guards for Server Components, and writes for Server 
 	await assert.rejects(session.redirectIfSignedIn("/login"), redirected("/"));
 });
 
+test("nextSession's signIn, updateUser and signOut write the cookie", async () => {
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(), response);
+	const session = nextSession(serverAuth, {
+		cookies: async () => store,
+		redirect,
+	});
+	const signedIn = await session.signIn(tokens());
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	assert.deepEqual(await session.get(), signedIn);
+	const updated = await session.updateUser({
+		...signedIn.user,
+		email: "new@example.com",
+	});
+	assert.equal(updated.sessionId, signedIn.sessionId);
+	assert.equal((await session.get())?.user.email, "new@example.com");
+	await session.signOut();
+	assert.equal(await session.get(), null);
+});
+
 test("nextSession's guards use loginPath, and bad options throw", async () => {
 	const store = actionStore(nextRequest(), NextResponse.next());
 	const cookies = async () => store;

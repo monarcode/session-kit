@@ -97,7 +97,8 @@ export const auth = createAuth({
 
 /** Signs in with the backend, then hands the result to Session kit. */
 export async function signInWithPassword(username: string, password: string) {
-  await auth.signIn(await login(username, password));
+  const tokens = await login(username, password);
+  await auth.signIn(tokens);
 }
 
 export type AppAuth = typeof auth;

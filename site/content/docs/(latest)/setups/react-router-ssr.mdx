@@ -244,9 +244,11 @@ export const loader = redirectIfSignedIn(serverAuth);
 export async function action({ request, context, url }: ActionFunctionArgs) {
   const form = await request.formData();
   try {
-    await auth(context).signIn(
-      await login(String(form.get("username")), String(form.get("password"))),
+    const tokens = await login(
+      String(form.get("username")),
+      String(form.get("password")),
     );
+    await auth(context).signIn(tokens);
   } catch (error) {
     return data(
       { error: error instanceof Error ? error.message : "Sign-in failed" },

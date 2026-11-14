@@ -294,7 +294,8 @@ type RequestAuthBase<U, I> = {
 	 *
 	 * // Your backend checks the password, and signIn keeps the result.
 	 * export async function signIn(username: string, password: string) {
-	 * 	return session.signIn(await login(username, password));
+	 * 	const tokens = await login(username, password);
+	 * 	return session.signIn(tokens);
 	 * }
 	 * ```
 	 */
@@ -411,22 +412,31 @@ type Members<U, I> = Omit<RequestAuthBase<U, I>, typeof requestAuth> & {
  *
  * @since 0.1.0
  */
-export type RequestAuth<U, I> = Readonly<RequestAuthBase<U, I>> &
-	([I] extends [never]
-		? unknown
-		: Readonly<{
-				/**
-				 * Replaces the signed-in user in the cookie, such as after a
-				 * profile edit, and resolves the session. Pass the user, or an
-				 * async function that fetches it. The session ID stays.
-				 *
-				 * Rejects with `UNAUTHENTICATED` when signed out, and with
-				 * `USER_VALIDATION_FAILED` for a user your schema rejects, or when
-				 * the function rejects or times out. Rejects with
-				 * `INVALID_OPTIONS` where the request can't set cookies.
-				 */
-				updateUser: (input: I | (() => Promise<I>)) => Promise<Session<U>>;
-			}>);
+export type RequestAuth<U, I> = {
+	// One mapped type rather than an intersection, so editors and declaration
+	// files name it `RequestAuth` even without `updateUser`.
+	readonly [
+		K in keyof RequestAuthMembers<U, I> as K extends "updateUser"
+			? [I] extends [never]
+				? never
+				: K
+			: K
+	]: RequestAuthMembers<U, I>[K];
+};
+
+type RequestAuthMembers<U, I> = RequestAuthBase<U, I> & {
+	/**
+	 * Replaces the signed-in user in the cookie, such as after a profile
+	 * edit, and resolves the session. Pass the user, or an async function
+	 * that fetches it. The session ID stays.
+	 *
+	 * Rejects with `UNAUTHENTICATED` when signed out, and with
+	 * `USER_VALIDATION_FAILED` for a user your schema rejects, or when the
+	 * function rejects or times out. Rejects with `INVALID_OPTIONS` where the
+	 * request can't set cookies.
+	 */
+	updateUser: (input: I | (() => Promise<I>)) => Promise<Session<U>>;
+};
 
 type ServerAuthBase<U, I> = {
 	/** {@link RequestAuth}'s `getSession`, for `jar`. */
@@ -527,16 +537,24 @@ type ServerAuthBase<U, I> = {
  *
  * @since 0.1.0
  */
-export type ServerAuth<U, I> = ServerAuthBase<U, I> &
-	([I] extends [never]
-		? unknown
-		: {
-				/** {@link RequestAuth}'s `updateUser`, for `jar`. */
-				updateUser: (
-					jar: CookieJar,
-					input: I | (() => Promise<I>),
-				) => Promise<Session<U>>;
-			});
+export type ServerAuth<U, I> = {
+	// One mapped type, as `RequestAuth` is.
+	[
+		K in keyof ServerAuthMembers<U, I> as K extends "updateUser"
+			? [I] extends [never]
+				? never
+				: K
+			: K
+	]: ServerAuthMembers<U, I>[K];
+};
+
+type ServerAuthMembers<U, I> = ServerAuthBase<U, I> & {
+	/** {@link RequestAuth}'s `updateUser`, for `jar`. */
+	updateUser: (
+		jar: CookieJar,
+		input: I | (() => Promise<I>),
+	) => Promise<Session<U>>;
+};
 
 /** `refreshIfDue`'s `within`, in seconds. */
 export function refreshWithin({ within = 60 }: RefreshIfDueOptions): number {

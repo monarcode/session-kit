@@ -134,9 +134,10 @@ export const getSessionFn = createServerFn().handler(() =>
 
 export const signInFn = createServerFn({ method: "POST" })
   .validator(z.object({ username: z.string(), password: z.string() }))
-  .handler(async ({ data }) =>
-    session.signIn(await login(data.username, data.password)),
-  );
+  .handler(async ({ data }) => {
+    const tokens = await login(data.username, data.password);
+    return session.signIn(tokens);
+  });
 ```
 
 `getSession` and `signIn` resolve `{ sessionId, user }`, never tokens, so
