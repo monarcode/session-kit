@@ -31,10 +31,23 @@ test("release notes contain only the selected version, including subsections", (
 	);
 });
 
-test("release rejects invalid alpha versions and a package version mismatch", () => {
+test("release accepts a release candidate", () => {
+	const rc = { ...manifest, version: "0.1.0-rc.0" };
+	assert.equal(
+		prepareRelease(
+			rc,
+			"# Changelog\n\n## 0.1.0-rc.0\n\nFrozen.\n",
+			"0.1.0-rc.0",
+		).tag,
+		"v0.1.0-rc.0",
+	);
+});
+
+test("release rejects invalid prerelease versions and a package version mismatch", () => {
 	for (const version of [
 		"0.1.0",
 		"0.1.0-beta.1",
+		"0.1.0-rc.01",
 		"v0.1.0-alpha.1",
 		"0.1.0-alpha.01",
 		"01.1.0-alpha.1",
@@ -44,7 +57,7 @@ test("release rejects invalid alpha versions and a package version mismatch", ()
 	]) {
 		assert.throws(
 			() => prepareRelease(manifest, changelog, version),
-			/alpha version/,
+			/prerelease version/,
 		);
 	}
 	assert.throws(

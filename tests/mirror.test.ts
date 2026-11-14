@@ -31,6 +31,16 @@ const settle = async () => {
 		await new Promise((resolve) => setImmediate(resolve));
 };
 
+/**
+ * Waits up to a second for `done`. For work that leaves the event loop, such
+ * as Web Crypto unsealing a cookie, which a fixed number of turns can miss on
+ * a slow machine.
+ */
+const until = async (done: () => boolean) => {
+	for (let i = 0; i < 200 && !done(); i++)
+		await new Promise((resolve) => setTimeout(resolve, 5));
+};
+
 function mirror(
 	options: Partial<MirrorAuthOptions<User, { name: string }>> = {},
 ) {
@@ -693,7 +703,7 @@ test("endpoint: when the server holds another account, renew follows it", async 
 		auth.credentials.renew(credentials!),
 		code("SESSION_CHANGED"),
 	);
-	await settle();
+	await until(() => auth.state.get().sessionId === second.sessionId);
 	assert.equal(auth.state.get().sessionId, second.sessionId);
 	assert.equal((await auth.credentials.get())?.accessToken, "access-9");
 });

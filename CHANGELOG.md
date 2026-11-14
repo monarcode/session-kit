@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.0
+
+The first release candidate for `0.1.0`. The public API is now frozen, and
+later `0.1` releases only add to it.
 
 ### Added
 
