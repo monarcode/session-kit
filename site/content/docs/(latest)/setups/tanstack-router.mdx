@@ -132,7 +132,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: ({ context, location }) =>
-    requireSession(context.auth, { location, loginPath: "/login" }),
+    requireSession(context.auth, { location }),
   errorComponent: SessionError,
   component: () => <SessionOutlet pending={<p>Checking session…</p>} />,
 });
@@ -149,8 +149,9 @@ function SessionError({ error }: ErrorComponentProps) {
 }
 ```
 
-`requireSession` redirects signed-out users to `loginPath` with `redirectTo`
-set to where they were going, and puts `{ session }` in route context. A
+`requireSession` redirects signed-out users to `/login`, or the `loginPath`
+you pass, with `redirectTo` set to where they were going, and puts
+`{ session }` in route context. A
 failed refresh reaches the error component instead of a redirect, because the
 user is still signed in.
 

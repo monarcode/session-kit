@@ -289,8 +289,9 @@ const guardedRouter = async (
 	const privateRoute = createRoute({
 		getParentRoute: () => root,
 		path: "/private",
+		// No loginPath: it defaults to "/login".
 		beforeLoad: ({ context, location }) =>
-			requireSession(context.auth, { location, loginPath: "/login" }),
+			requireSession(context.auth, { location }),
 	});
 	const router = createRouter({
 		routeTree: root.addChildren([login, privateRoute]),

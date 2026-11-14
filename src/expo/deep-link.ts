@@ -148,6 +148,67 @@ export function rememberDeepLink(
 }
 
 /**
+ * The `redirectSystemPath` that {@link deepLinkHandler} makes, for
+ * `app/+native-intent.tsx`.
+ *
+ * @example
+ * ```ts
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import {
+ * 	deepLinkHandler,
+ * 	type DeepLinkHandler,
+ * } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * export const redirectSystemPath: DeepLinkHandler = deepLinkHandler(auth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type DeepLinkHandler = (event: {
+	path: string;
+	initial: boolean;
+}) => string;
+
+/**
+ * Makes `redirectSystemPath` for `app/+native-intent.tsx`. It keeps each
+ * incoming link with {@link rememberDeepLink}, so `SessionGate` opens it
+ * after sign-in, and returns the path unchanged.
+ *
+ * Use `rememberDeepLink` itself when your `redirectSystemPath` does more,
+ * such as rewriting old links.
+ *
+ * Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`.
+ * It throws when it's made, so a link never meets the error.
+ *
+ * @example
+ * ```ts
+ * // app/+native-intent.tsx
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { deepLinkHandler } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * export const redirectSystemPath = deepLinkHandler(auth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function deepLinkHandler(
+	auth: AuthSource,
+	options: RememberDeepLinkOptions = {},
+): DeepLinkHandler {
+	// Checked now: Expo Router warns that a throw on a link can crash the app,
+	// and with good options, remembering a link doesn't throw.
+	safeReturnTo("/", options);
+	return ({ path }) => {
+		rememberDeepLink(auth, path, options);
+		return path;
+	};
+}
+
+/**
  * What a change of status or screen does to a remembered link. A sign-in opens
  * a waiting link, and while signed out or locked the link waits. Restoring and
  * unavailable access leave it as it is.

@@ -1,5 +1,8 @@
 import { AuthError } from "./errors.js";
 
+/** The sign-in page's path when a guard or `safeReturnTo` isn't told. */
+export const LOGIN_PATH = "/login";
+
 /**
  * Options for {@link safeReturnTo}.
  *
@@ -72,7 +75,7 @@ export function safeReturnTo(
 	value: unknown,
 	options: SafeReturnToOptions = {},
 ): string {
-	const loginPaths = [options.loginPath ?? "/login"].flat();
+	const loginPaths = [options.loginPath ?? LOGIN_PATH].flat();
 	for (const path of loginPaths) {
 		if (!path.startsWith("/"))
 			throw new AuthError(

@@ -8,6 +8,7 @@ import type {
 import * as Fetch from "@monarcode/effetch";
 import {
 	createRootRouteWithContext,
+	createRoute,
 	createRouter,
 } from "@tanstack/react-router";
 import { createMiddleware, createStart } from "@tanstack/react-start";
@@ -38,6 +39,7 @@ import {
 	createAuth,
 	createMirrorAuth,
 	fromAccessToken,
+	isSignedIn,
 	memoryStorage,
 	webStorage,
 	type AuthClient,
@@ -203,6 +205,24 @@ async function guard() {
 }
 void guard;
 
+// A route's guard: loginPath defaults to "/login".
+createRoute({
+	getParentRoute: () => root,
+	id: "guarded",
+	beforeLoad: ({ context, location }) =>
+		requireSession(context.auth, { location }),
+	component: SessionOutlet,
+});
+
+// isSignedIn narrows the state, and is a selector as it is.
+const signedInNow: boolean = useAuth(isSignedIn);
+void signedInNow;
+const someState = auth.state.get();
+if (isSignedIn(someState)) {
+	const email: string = someState.user.email;
+	void email;
+}
+
 function Component() {
 	const email: string | undefined = useAuth((state) => state.user?.email);
 	const client = useAuthClient();
@@ -357,11 +377,28 @@ async function loader({ request }: { request: Request }) {
 	return email;
 }
 void loader;
+// loginPath defaults to "/login" in the immediate form too.
+export async function defaultLoader({ request }: { request: Request }) {
+	const { session } = await reactRouter.requireSession(auth, { request });
+	const email: string = session.user.email;
+	return email;
+}
+// The loader forms, typed by the client.
+const guardLoader: LoaderFunction = reactRouter.requireSession(auth);
+void guardLoader;
+const shortLoader = reactRouter.requireSession(auth, { basename: "/app" });
+export async function useShortLoader(request: Request) {
+	const email: string = (await shortLoader({ request })).session.user.email;
+	return email;
+}
+const signInLoader: LoaderFunction = reactRouter.redirectIfSignedIn(auth);
+void signInLoader;
+// @ts-expect-error The immediate form needs redirectTo.
+void reactRouter.redirectIfSignedIn(auth, { loginPath: "/x" }).then(() => {});
 reactRouter.SessionOutlet({
 	loginPath: "/login",
 	unavailable: ({ error, retry }) => `${error?.code}${String(retry)}`,
 });
-// @ts-expect-error The outlet needs the sign-in path.
 reactRouter.SessionOutlet({});
 
 // `AuthClient` needs both the user and its input, so `updateUser` is never
@@ -409,6 +446,10 @@ expo.SessionGate({ client: { state: expoAuth.state, mount: expoAuth.mount } });
 expo.rememberDeepLink(expoAuth, "myapp://orders/42", { loginPath: "/sign-in" });
 // @ts-expect-error The deep link is kept for one client.
 expo.rememberDeepLink("myapp://orders/42");
+export const redirectSystemPath: (event: {
+	path: string;
+	initial: boolean;
+}) => Promise<string | null> | string | null = expo.deepLinkHandler(expoAuth);
 
 // Locking: `true`, or the app's `seal` and `open`, which may be async.
 createAuth({ ...debugBase, locking: true });

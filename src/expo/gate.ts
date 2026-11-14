@@ -167,7 +167,7 @@ function useAccountKey(sessionId: string | null): number {
  * @example
  * ```tsx
  * // Rendered inside `AuthProvider` in app/_layout.tsx.
- * import type { AuthClient } from "@monarcode/session-kit";
+ * import { isSignedIn, type AuthClient } from "@monarcode/session-kit";
  * import { SessionGate } from "@monarcode/session-kit/expo";
  * import { createAuthHooks } from "@monarcode/session-kit/react";
  * import { SplashScreen, Stack } from "expo-router";
@@ -178,10 +178,7 @@ function useAccountKey(sessionId: string | null): number {
  * void SplashScreen.preventAutoHideAsync();
  *
  * export function RootNavigator() {
- * 	// `status`, not `user`: a locked session keeps its user.
- * 	const signedIn = useAuth(
- * 		({ status }) => status === "authenticated" || status === "refreshing",
- * 	);
+ * 	const signedIn = useAuth(isSignedIn);
  * 	return (
  * 		<SessionGate>
  * 			<Stack>

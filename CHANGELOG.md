@@ -116,6 +116,26 @@
   createMirrorAuth({ name: "app", session, endpoint: "/api/session", signIn });
   ```
 
+- `isSignedIn(state)` in `@monarcode/session-kit`: `true` while
+  `authenticated` or `refreshing`, and `false` while `locked`. It narrows
+  `user`, and works as a selector: `useAuth(isSignedIn)`.
+- React Router's guards are loaders of their own: `requireSession(auth)` and
+  `redirectIfSignedIn(auth)` read the request, and the second reads
+  `redirectTo` from its URL. They take `RequireSessionLoaderOptions` and
+  `RedirectIfSignedInLoaderOptions`, and return `RequireSessionLoader` and
+  `RedirectIfSignedInLoader`. The forms that take `request` or `redirectTo`
+  stay, for a loader of your own: awaiting a loader form checks nothing.
+
+  ```ts
+  export const clientLoader = requireSession(auth);
+  ```
+
+- `loginPath` defaults to `"/login"` in `requireSession` for TanStack Router
+  and React Router, and in React Router's `SessionOutlet`.
+- `deepLinkHandler(auth, options?)` in `@monarcode/session-kit/expo` makes
+  `redirectSystemPath` for `app/+native-intent.tsx` (`DeepLinkHandler`).
+  `rememberDeepLink` stays, for a `redirectSystemPath` that does more.
+
 ### Changed
 
 - **Breaking:** `createAuthFetch` takes the base URL as an option, as

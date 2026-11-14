@@ -122,6 +122,7 @@ everyone else sees `login`. Register the client's type here too, so the hooks
 from `@monarcode/session-kit/react` carry your user:
 
 ```tsx title="app/_layout.tsx"
+import { isSignedIn } from "@monarcode/session-kit";
 import { SessionGate } from "@monarcode/session-kit/expo";
 import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SplashScreen, Stack } from "expo-router";
@@ -150,9 +151,8 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  // `status`, not `user`: a locked session keeps its user. See Locking.
-  const status = useAuth((state) => state.status);
-  const signedIn = status === "authenticated" || status === "refreshing";
+  // Not signed in while locked, though a locked session keeps its user.
+  const signedIn = useAuth(isSignedIn);
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={signedIn}>
@@ -188,28 +188,22 @@ const [fontsLoaded] = useFonts(fonts);
 
 `Stack.Protected` sends a link to a guarded screen to the first screen the
 user may see, so a signed-out user who opens `myapp://profile` lands on the
-sign-in screen and the link is lost. `rememberDeepLink` keeps it, and
+sign-in screen and the link is lost. `deepLinkHandler` keeps it, and
 `SessionGate` opens it after the sign-in. Expo Router calls
 `redirectSystemPath` with every URL that opens the app, before routing:
 
 ```tsx title="app/+native-intent.tsx"
-import { rememberDeepLink } from "@monarcode/session-kit/expo";
+import { deepLinkHandler } from "@monarcode/session-kit/expo";
 
 import { auth } from "../src/auth";
 
-export function redirectSystemPath({
-  path,
-}: {
-  path: string;
-  initial: boolean;
-}) {
-  rememberDeepLink(auth, path);
-  return path;
-}
+export const redirectSystemPath = deepLinkHandler(auth);
 ```
 
-Return `path` unchanged: the link still goes to Expo Router, which shows it
-right away when the user is signed in.
+It returns the path unchanged: the link still goes to Expo Router, which
+shows it right away when the user is signed in. If your `redirectSystemPath`
+does more, such as rewriting old links, call `rememberDeepLink(auth, path)`
+in it instead.
 
 ## 4. Add the sign-in screen
 
@@ -435,8 +429,12 @@ decides what to do with it:
 
 Links are checked with `safeReturnTo`, so the root, the sign-in path, and
 anything that could leave the app are ignored. Pass
-`rememberDeepLink(auth, path, { loginPath: "/sign-in" })` if your sign-in
-screen isn't `/login`. A newer link replaces an older one.
+`deepLinkHandler(auth, { loginPath: "/sign-in" })` if your sign-in screen
+isn't `/login`. A newer link replaces an older one.
+
+`Stack.Protected`'s `redirectTo` only chooses the screen a turned-away link
+goes to, such as `/login`. It doesn't keep the link, so `deepLinkHandler` is
+still what opens it after the sign-in.
 
 There is no `?redirectTo=` parameter on Expo: the link waits in memory, not in
 the URL, and an app restart forgets it.
@@ -618,20 +616,23 @@ export async function signInWithPassword(username: string, password: string) {
 }
 ```
 
-Guard the screens by `status`, since a locked session keeps its user. The
-unlock screen comes before the sign-in screen, so a locked app opens on it,
-and the sign-in screen stays open to a locked user for the password path:
+Guard the screens with `isSignedIn` and `status`, since a locked session
+keeps its user. The unlock screen comes before the sign-in screen, so a
+locked app opens on it, and the sign-in screen stays open to a locked user
+for the password path:
 
 ```tsx
+import { isSignedIn } from "@monarcode/session-kit";
+
 function RootStack() {
-  const status = useAuth((state) => state.status);
-  const signedIn = status === "authenticated" || status === "refreshing";
+  const signedIn = useAuth(isSignedIn);
+  const locked = useAuth((state) => state.status === "locked");
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(app)" />
       </Stack.Protected>
-      <Stack.Protected guard={status === "locked"}>
+      <Stack.Protected guard={locked}>
         <Stack.Screen name="welcome-back" />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>

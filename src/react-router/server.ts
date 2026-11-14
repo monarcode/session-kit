@@ -1,9 +1,11 @@
 import { AuthError } from "../core/errors.js";
 import {
+	LOGIN_PATH,
 	loginHref,
 	safeReturnTo,
 	type SafeReturnToOptions,
 } from "../core/return-to.js";
+import { isSignedIn } from "../core/signed-in.js";
 import type { Session } from "../core/types.js";
 import {
 	middlewareOptions,
@@ -414,7 +416,7 @@ export function requireSession<U, I>(
 	serverAuth: ServerAuth<U, I>,
 	options: SessionGuardOptions = {},
 ): SessionGuard<U> {
-	const { loginPath = "/login", basename } = options;
+	const { loginPath = LOGIN_PATH, basename } = options;
 	// Fails fast on bad paths, before any request.
 	loginHref(loginPath, "/");
 	stripBasename("/", basename);
@@ -444,7 +446,7 @@ export function requireSession<U, I>(
 					"Read the session where requireSession guards the route: list it in the middleware of this route or a route above it",
 				);
 			const state = serverAuth.forRequest(jar).state.get();
-			if (state.status === "authenticated" || state.status === "refreshing")
+			if (isSignedIn(state))
 				return Object.freeze({
 					sessionId: state.sessionId,
 					user: state.user,

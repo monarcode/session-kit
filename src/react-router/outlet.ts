@@ -13,7 +13,7 @@ import {
 	useLocation,
 } from "react-router";
 
-import { loginHref } from "../core/return-to.js";
+import { LOGIN_PATH, loginHref } from "../core/return-to.js";
 import {
 	renderUnavailable,
 	useAdapterClient,
@@ -31,7 +31,7 @@ import {
  *
  * export const layout = (
  * 	<SessionOutlet
- * 		loginPath="/login"
+ * 		loginPath="/sign-in"
  * 		pending={<p>Restoring session…</p>}
  * 		unavailable={({ error, retry }) => (
  * 			<div role="alert">
@@ -46,8 +46,12 @@ import {
  * @since 0.1.0
  */
 export type SessionOutletProps = {
-	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
-	loginPath: string;
+	/**
+	 * Your sign-in page's path, starting with `/`. Use the same one as
+	 * `requireSession`'s.
+	 * @default "/login"
+	 */
+	loginPath?: string | undefined;
 	/**
 	 * Shown while the saved session is read and, in data mode, until the
 	 * loader has accepted a new session.
@@ -109,7 +113,7 @@ function useGuardedSessionId(): string | undefined {
  * // Declarative mode, inside `AuthProvider` and `BrowserRouter`.
  * export const routes = (
  * 	<Routes>
- * 		<Route element={<SessionOutlet loginPath="/login" />}>
+ * 		<Route element={<SessionOutlet />}>
  * 			<Route index element={<p>Signed in</p>} />
  * 		</Route>
  * 		<Route path="/login" element={<p>Sign in</p>} />
@@ -120,7 +124,7 @@ function useGuardedSessionId(): string | undefined {
  * @since 0.1.0
  */
 export function SessionOutlet({
-	loginPath,
+	loginPath = LOGIN_PATH,
 	pending = null,
 	unavailable,
 	client,

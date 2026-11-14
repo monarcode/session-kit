@@ -75,7 +75,7 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
+import { isSignedIn, safeReturnTo } from "@monarcode/session-kit";
 import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
@@ -95,7 +95,6 @@ declare module "@monarcode/session-kit" {
 function Private() {
   return (
     <SessionOutlet
-      loginPath="/login"
       pending={<p>Checking session…</p>}
       unavailable={({ error, retry }) => (
         <div role="alert">
@@ -109,10 +108,7 @@ function Private() {
 
 /** Signing in changes the state, which renders this again and redirects. */
 function Login() {
-  const signedIn = useAuth(
-    (state) =>
-      state.status === "authenticated" || state.status === "refreshing",
-  );
+  const signedIn = useAuth(isSignedIn);
   const [search] = useSearchParams();
   if (signedIn)
     return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;
@@ -136,9 +132,11 @@ createRoot(document.getElementById("root")!).render(
 ```
 
 `SessionOutlet` shows `pending` while the saved session is restored, sends
-signed-out users to `loginPath` with `redirectTo` set to where they were
-going, and renders `unavailable` after a failed refresh. Without
-`unavailable`, the error is thrown to the nearest error boundary.
+signed-out users to `loginPath` (`/login` unless you pass another) with
+`redirectTo` set to where they were going, and renders `unavailable` after a
+failed refresh. Without `unavailable`, the error is thrown to the nearest
+error boundary. With another sign-in page, pass the same `loginPath` to
+`SessionOutlet` and `requireSession`.
 
 `safeReturnTo` accepts only same-origin paths and returns `/` for anything
 else, including the sign-in page itself, so a stale `redirectTo` can't loop.
@@ -210,25 +208,13 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/login",
-        loader: async ({ request }) => {
-          const redirectTo = new URL(request.url).searchParams.get(
-            "redirectTo",
-          );
-          await redirectIfSignedIn(auth, { redirectTo });
-          return null;
-        },
+        loader: redirectIfSignedIn(auth),
         element: <Login />,
       },
       {
-        loader: ({ request }) =>
-          requireSession(auth, { request, loginPath: "/login" }),
+        loader: requireSession(auth),
         errorElement: <SessionError />,
-        element: (
-          <SessionOutlet
-            loginPath="/login"
-            pending={<p>Checking session…</p>}
-          />
-        ),
+        element: <SessionOutlet pending={<p>Checking session…</p>} />,
         children: [{ index: true, element: <Home /> }],
       },
     ],
@@ -266,8 +252,9 @@ createRoot(document.getElementById("root")!).render(
 
 Three pieces work together:
 
-- **`requireSession`** redirects signed-out users to `loginPath` with
-  `redirectTo`, and returns `{ session }` as the route's loader data. A failed
+- **`requireSession(auth)`** is the route's loader. It redirects signed-out
+  users to `/login` with `redirectTo`, and returns `{ session }` as the
+  route's loader data. Pass `{ loginPath }` for another sign-in page. A failed
   refresh is rethrown for the route's error element instead: the user is still
   signed in.
 - **`useAuthRevalidation`** runs the loaders again after a sign-in, a
@@ -363,14 +350,10 @@ import {
 
 import { auth } from "../auth.js";
 
-export function clientLoader({ request }: { request: Request }) {
-  return requireSession(auth, { request, loginPath: "/login" });
-}
+export const clientLoader = requireSession(auth);
 
 export default function Protected() {
-  return (
-    <SessionOutlet loginPath="/login" pending={<p>Checking session…</p>} />
-  );
+  return <SessionOutlet pending={<p>Checking session…</p>} />;
 }
 
 /** Shown after a failed refresh; a repeated failure shows here again. */
@@ -397,11 +380,7 @@ import { redirectIfSignedIn } from "@monarcode/session-kit/react-router";
 import { auth } from "../auth.js";
 import { SignIn } from "../sign-in.js";
 
-export async function clientLoader({ request }: { request: Request }) {
-  const redirectTo = new URL(request.url).searchParams.get("redirectTo");
-  await redirectIfSignedIn(auth, { redirectTo });
-  return null;
-}
+export const clientLoader = redirectIfSignedIn(auth);
 
 export default function Login() {
   const navigate = useNavigate();
@@ -462,7 +441,7 @@ export function Dashboard() {
       {/* Keyed by session, so one account's choices never show for the next. */}
       <nav key={sessionId}>…</nav>
       <main>
-        <SessionOutlet loginPath="/login" pending={<p>Checking session…</p>} />
+        <SessionOutlet pending={<p>Checking session…</p>} />
       </main>
     </div>
   );

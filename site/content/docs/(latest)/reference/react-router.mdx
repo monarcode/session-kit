@@ -13,11 +13,11 @@ Guide: [React Router](/docs/setups/react-router).
 
 ### redirectIfSignedIn
 
-Guards your sign-in page in its loader, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`.
+Guards your sign-in page in its loader, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`. `redirectIfSignedIn(auth)` is the loader itself, and reads `redirectTo` from the URL's search.
 
 ### requireSession
 
-Guards a route in its loader, in data or framework mode, so only signed-in users get through. They get `{ session }`, which holds no tokens.
+Guards a route in its loader, in data or framework mode, so only signed-in users get through. They get `{ session }`, which holds no tokens. `requireSession(auth)` is the loader itself.
 
 ### useAuthRevalidation
 
@@ -31,6 +31,20 @@ Renders child routes only while someone is signed in, in any mode. It needs an `
 
 ## Types
 
+### RedirectIfSignedInLoader
+
+The loader that `redirectIfSignedIn(auth)` makes. It reads `redirectTo` from the request's URL, and resolves `null` for a signed-out user.
+
+### RedirectIfSignedInLoaderOptions
+
+Options for the loader that `redirectIfSignedIn(auth, options)` makes.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="RedirectIfSignedInLoaderOptions"
+/>
+
 ### RedirectIfSignedInOptions
 
 Options for [`redirectIfSignedIn`](#redirectifsignedin).
@@ -39,6 +53,20 @@ Options for [`redirectIfSignedIn`](#redirectifsignedin).
   cwd
   path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
   name="RedirectIfSignedInOptions"
+/>
+
+### RequireSessionLoader
+
+The loader that `requireSession(auth)` makes. It resolves `{ session }`, typed with the client's user.
+
+### RequireSessionLoaderOptions
+
+Options for the loader that `requireSession(auth, options)` makes.
+
+<auto-type-table
+  cwd
+  path="node_modules/@monarcode/session-kit/dist/react-router/index.d.ts"
+  name="RequireSessionLoaderOptions"
 />
 
 ### RequireSessionOptions

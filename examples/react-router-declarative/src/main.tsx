@@ -7,7 +7,7 @@ import {
 	useSearchParams,
 } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
+import { isSignedIn, safeReturnTo } from "@monarcode/session-kit";
 import { AuthProvider, useAuth } from "@monarcode/session-kit/react";
 import { SessionOutlet } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
@@ -28,10 +28,7 @@ declare module "@monarcode/session-kit" {
  * which then redirects.
  */
 function Login() {
-	const signedIn = useAuth(
-		(state) =>
-			state.status === "authenticated" || state.status === "refreshing",
-	);
+	const signedIn = useAuth(isSignedIn);
 	const [search] = useSearchParams();
 	if (signedIn)
 		return <Navigate to={safeReturnTo(search.get("redirectTo"))} replace />;
@@ -47,7 +44,6 @@ createRoot(document.getElementById("root")!).render(
 					<Route
 						element={
 							<SessionOutlet
-								loginPath="/login"
 								pending={<Pending />}
 								unavailable={({ error }) => (
 									<Unavailable error={error} />

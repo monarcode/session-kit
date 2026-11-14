@@ -62,20 +62,13 @@ const router = createBrowserRouter([
 		children: [
 			{
 				path: "/login",
-				loader: async ({ request }) => {
-					const redirectTo = new URL(request.url).searchParams.get(
-						"redirectTo",
-					);
-					await redirectIfSignedIn(auth, { redirectTo });
-					return null;
-				},
+				loader: redirectIfSignedIn(auth),
 				element: <Login />,
 			},
 			{
-				loader: ({ request }) =>
-					requireSession(auth, { request, loginPath: "/login" }),
+				loader: requireSession(auth),
 				errorElement: <RouteError />,
-				element: <SessionOutlet loginPath="/login" pending={<Pending />} />,
+				element: <SessionOutlet pending={<Pending />} />,
 				children: [{ index: true, element: <Profile /> }],
 			},
 		],

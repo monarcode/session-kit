@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createAuth, webStorage, type AuthError } from "@monarcode/session-kit";
+import {
+	createAuth,
+	isSignedIn,
+	webStorage,
+	type AuthError,
+	type AuthState,
+	type AuthStatus,
+} from "@monarcode/session-kit";
 import { z } from "zod";
 
 import {
@@ -642,4 +649,29 @@ test("mounting signs out of an invalid saved session at once, then discards it",
 	await flush();
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);
+});
+
+test("isSignedIn is true while authenticated or refreshing, not locked", async () => {
+	const expected: Record<AuthStatus, boolean> = {
+		initializing: false,
+		authenticated: true,
+		refreshing: true,
+		locked: false,
+		unauthenticated: false,
+		unavailable: false,
+	};
+	for (const [status, signedIn] of Object.entries(expected))
+		assert.equal(
+			isSignedIn({ status } as AuthState<unknown>),
+			signedIn,
+			status,
+		);
+	const auth = client();
+	await auth.signIn(input());
+	const state = auth.state.get();
+	assert.ok(isSignedIn(state));
+	// Narrowed: the user is set.
+	assert.equal(state.user.email, user.email);
+	await auth.signOut();
+	assert.equal(isSignedIn(auth.state.get()), false);
 });

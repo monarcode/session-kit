@@ -1,5 +1,5 @@
 import { AuthError } from "../core/errors.js";
-import { loginHref, safeReturnTo } from "../core/return-to.js";
+import { LOGIN_PATH, loginHref, safeReturnTo } from "../core/return-to.js";
 import type { Session } from "../core/types.js";
 import {
 	refreshBeforeRendering,
@@ -367,7 +367,7 @@ export function nextSession<U, I>(
 			"INVALID_OPTIONS",
 			"Pass cookies from next/headers and redirect from next/navigation",
 		);
-	const loginPath = options.loginPath ?? "/login";
+	const loginPath = options.loginPath ?? LOGIN_PATH;
 	// Fails fast on bad options, before any request.
 	loginHref(loginPath, "/");
 	const within = refreshWithin({ within: options.within });

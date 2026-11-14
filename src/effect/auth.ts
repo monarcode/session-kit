@@ -108,10 +108,11 @@ export type RegisteredSession = SessionOf<RegisteredAuth>;
  *
  * @example
  * ```ts
+ * import { isSignedIn } from "@monarcode/session-kit";
  * import type { RegisteredState } from "@monarcode/session-kit/effect";
  *
- * export const signedIn = (state: RegisteredState) =>
- * 	state.status === "authenticated" || state.status === "refreshing";
+ * export const signedInUser = (state: RegisteredState) =>
+ * 	isSignedIn(state) ? state.user : null;
  * ```
  *
  * @since 0.1.0

@@ -38,4 +38,6 @@ Two habits follow from these fields:
 - **Scope private cached data to `sessionId`**, such as TanStack Query
   results, so one account never sees another's.
 - **Check `status`, not `user`, to know whether access is usable.** A
-  [locked](/docs/client/locking) session keeps its user.
+  [locked](/docs/client/locking) session keeps its user. `isSignedIn(state)`
+  is the check: `true` while `authenticated` or `refreshing`, and it narrows
+  `user`. `useAuth(isSignedIn)` reads it in a component.
