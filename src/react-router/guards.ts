@@ -104,9 +104,10 @@ export type RequireSessionLoader<U> = (args: {
  * layout. React Router runs nested routes' loaders at the same time, so the
  * page's doesn't wait for the layout's guard.
  *
- * Signed-out users go to `loginPath`, with `?redirectTo=` set to the URL they
- * asked for. A locked session counts as signed out, as locking is for native
- * apps and the router adapters don't unlock.
+ * Signed-out users go to `loginPath`, with `?redirectTo=` set to the path and
+ * query they asked for. React Router leaves the `#fragment` out of a loader's
+ * request, so it isn't kept. A locked session counts as signed out, as
+ * locking is for native apps and the router adapters don't unlock.
  *
  * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
  * rethrown to the route's error element, which can offer `auth.retry()`.
@@ -287,7 +288,8 @@ export type RedirectIfSignedInLoader = (args: {
  * does nothing else, use {@link redirectIfSignedInLoader} instead.
  *
  * If the session can't be read, such as after a failed refresh or while
- * locked, the sign-in page shows, so the user can sign in again.
+ * locked, the sign-in page shows, so the user can sign in again. A
+ * `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
  *
  * @example
  * ```ts
@@ -316,7 +318,8 @@ export async function redirectIfSignedIn(
 /**
  * Makes the loader for your sign-in page, for `loader` or `clientLoader`.
  * It reads `?redirectTo=` from the URL and works as
- * {@link redirectIfSignedIn} does.
+ * {@link redirectIfSignedIn} does. A `loginPath` that doesn't start with `/`
+ * throws `INVALID_OPTIONS` when the loader is made.
  *
  * @example
  * ```ts
@@ -337,6 +340,7 @@ export function redirectIfSignedInLoader(
 	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInLoaderOptions = {},
 ): RedirectIfSignedInLoader {
+	checkLoginPaths(options.loginPath);
 	return async ({ request }) => {
 		const redirectTo = new URL(request.url).searchParams.get("redirectTo");
 		await sendOn(auth, redirectTo, options.loginPath);
@@ -344,11 +348,17 @@ export function redirectIfSignedInLoader(
 	};
 }
 
+/** Fails fast on a bad path, even for a visitor who isn't signed in. */
+function checkLoginPaths(loginPath: string | readonly string[] | undefined) {
+	safeReturnTo(undefined, { loginPath });
+}
+
 async function sendOn(
 	auth: GuardClient<unknown>,
 	redirectTo: unknown,
 	loginPath: string | readonly string[] | undefined,
 ): Promise<void> {
+	checkLoginPaths(loginPath);
 	if (await sessionOrNull(auth))
 		throw redirect(safeReturnTo(redirectTo, { loginPath }));
 }

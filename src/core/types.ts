@@ -550,7 +550,8 @@ type AuthClientBase<U, I> = {
 	 * it rejects with `PERSISTENCE_FAILED`, and the session stays locked too.
 	 *
 	 * If the saved session can't be used, it signs out and rejects with
-	 * `INVALID_SESSION`. If it's gone, it signs out and resolves `null`.
+	 * `INVALID_SESSION`. If it's gone, or past `maxAge`, it signs out and
+	 * resolves `null`.
 	 *
 	 * An expired access token is refreshed at once. If your backend rejects the
 	 * refresh token, it signs out and resolves `null`. If the refresh fails
@@ -734,8 +735,8 @@ export type AuthOptions<Src extends UserSource> = {
 	/**
 	 * How long a saved session lasts, in whole seconds. Each save, such as
 	 * after a refresh, starts it again. A session saved longer ago isn't
-	 * restored: the user is signed out, with `INVALID_SESSION` in
-	 * `state.error`. Default: 30 days.
+	 * restored, and the user is signed out without an error. So is a session
+	 * saved by another version of session-kit. Default: 30 days.
 	 */
 	maxAge?: number | undefined;
 	/**

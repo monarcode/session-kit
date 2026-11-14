@@ -477,7 +477,7 @@ test("a request's server session is the Auth service", async (t) => {
 	assert.deepEqual(await runOn(request(), Auth.sessionOption), Option.none());
 });
 
-test("on a request's server session, signIn and updateUser die, and a read-only jar can't refresh", async (t) => {
+test("on a request's server session, signIn and updateUser die, and a read-only jar can't sign out or refresh", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	const { serverAuth, request } = serverSide("effect-server");
 	const signedIn = await serverAuth.signIn(request(), tokens());
@@ -494,6 +494,13 @@ test("on a request's server session, signIn and updateUser die, and a read-only 
 		assert.equal(died.code, "INVALID_OPTIONS");
 		assert.match(died.message, /request's session/);
 	}
+	// A read-only jar can't clear the cookie.
+	const signOutDied = await defect(
+		serverAuth.forRequest(request(false)) as never,
+		Auth.signOut,
+	);
+	assert.ok(signOutDied instanceof AuthError);
+	assert.equal(signOutDied.code, "INVALID_OPTIONS");
 	const updated = signedIn;
 
 	t.mock.timers.tick(901_000);

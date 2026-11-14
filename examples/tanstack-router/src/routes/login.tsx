@@ -8,7 +8,7 @@ export const Route = createFileRoute("/login")({
 	validateSearch: (search: Record<string, unknown>) => ({
 		redirectTo: safeReturnTo(search.redirectTo),
 	}),
-	// Runs again after a sign-in, as connectAuth runs the guards again.
+	// Runs again after a sign-in, which runs the guards again.
 	beforeLoad: ({ context, search }) =>
 		redirectIfSignedIn(context.auth, { redirectTo: search.redirectTo }),
 	component: LoginForm,

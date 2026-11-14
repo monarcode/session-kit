@@ -93,7 +93,7 @@ test("sessionRoute without the middleware answers with the code the client reads
 		}),
 		context: newContext(),
 	} as never);
-	assert.equal(response.status, 400);
+	assert.equal(response.status, 500);
 	const body = (await response.json()) as any;
 	assert.equal(body.error.code, "INVALID_OPTIONS");
 	assert.match(body.error.message, /cookieJarMiddleware/);

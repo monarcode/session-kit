@@ -66,6 +66,16 @@ export function isAuthName(name: unknown): name is string {
 	return typeof name === "string" && /^[a-zA-Z0-9_-]{1,64}$/.test(name);
 }
 
+/**
+ * The cause of an `INVALID_SESSION` for a saved session past `maxAge`, or
+ * saved by another version of the library. Ending it is routine, so it
+ * signs out without an error.
+ */
+class Outdated extends Error {}
+
+/** Whether `error` is about a saved session that only ran out. */
+export const isOutdated = (error: AuthError) => error.cause instanceof Outdated;
+
 /** Checks the `name` and `maxAge` options, which every engine shares. */
 export function checkOptions(name: unknown, maxAge: unknown): void {
 	if (
@@ -158,22 +168,29 @@ export function createPersistence(
 
 	/**
 	 * Parses a saved entry, rejecting other formats and expired entries,
-	 * without opening sealed tokens.
+	 * without opening sealed tokens. An expired entry, or one in another
+	 * format, fails with an {@link Outdated} cause.
 	 */
 	function parse(text: string | null): SavedEntry | null {
 		if (!text) return null;
 		try {
 			const saved: unknown = JSON.parse(text);
 			if (
+				isRecord(saved) &&
+				typeof saved.v === "number" &&
+				(saved.v !== STORAGE_VERSION ||
+					(typeof saved.persistUntil === "number" &&
+						saved.persistUntil <= Date.now()))
+			)
+				throw new Outdated("Saved session expired or in another format");
+			if (
 				!isRecord(saved) ||
-				saved.v !== STORAGE_VERSION ||
 				typeof saved.id !== "string" ||
 				!saved.id ||
 				typeof saved.persistUntil !== "number" ||
-				!Number.isFinite(saved.persistUntil) ||
-				saved.persistUntil <= Date.now()
+				!Number.isFinite(saved.persistUntil)
 			) {
-				throw new Error("Missing, expired, or malformed auth data");
+				throw new Error("Missing or malformed auth data");
 			}
 			if (typeof saved.sealed === "string")
 				return { id: saved.id, user: saved.user, sealed: saved.sealed };

@@ -1,4 +1,5 @@
 import * as Fetch from "@monarcode/effetch";
+import { retry } from "@monarcode/effetch/plugins";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -10,10 +11,12 @@ import { API_BASE_URL, ApiError } from "./backend";
 const make = Fetch.make({
 	baseUrl: API_BASE_URL,
 	defaultError: ApiError,
-	// Sends the access token to DummyJSON only. After a 401 it refreshes, then
+	// `retry` resends a GET after a network error or a status such as 503.
+	// `sessionBearer` comes after it, so each attempt reads the current token.
+	// It sends the token to DummyJSON only. After a 401 it refreshes, then
 	// sends a GET or HEAD again once. `optional`: a call made while signed out
 	// goes without a token.
-	plugins: [sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
+	plugins: [retry(), sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
 }).pipe(
 	// Effect adds tracing headers to every request, which fail the preflight
 	// of an API that doesn't allow them.

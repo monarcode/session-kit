@@ -1,6 +1,7 @@
 import { ENDPOINT_VERSION } from "../core/endpoint.js";
 import { AuthError, type AuthErrorCode } from "../core/errors.js";
 import { isRecord } from "../core/json.js";
+import { readRejected } from "../core/wire.js";
 import type { ServerAuth } from "./auth.js";
 import type { CookieJar } from "./cookies.js";
 
@@ -25,8 +26,10 @@ export type SessionHandler = (
 	jar: CookieJar,
 ) => Promise<Response>;
 
+// A request the route can't read is refused with 400 where it's read. An
+// `INVALID_OPTIONS` from the server's own calls comes from its setup, so it's
+// a 500.
 const STATUS: Partial<Record<AuthErrorCode, number>> = {
-	INVALID_OPTIONS: 400,
 	UNAUTHENTICATED: 401,
 	SESSION_CHANGED: 409,
 };
@@ -96,9 +99,11 @@ async function readAction(request: Request) {
  * browser client rejects with. Anything that isn't an `AuthError` is thrown,
  * for your framework to log.
  *
- * A failure's status is 400 for `INVALID_OPTIONS`, 401 for `UNAUTHENTICATED`,
- * 409 for `SESSION_CHANGED` and 500 for any other code. A method other than
- * `GET` or `POST` answers 405.
+ * A request it can't read answers 400 with `INVALID_OPTIONS`. Otherwise a
+ * failure's status is 401 for `UNAUTHENTICATED`, 409 for `SESSION_CHANGED`
+ * and 500 for any other code. That includes `INVALID_OPTIONS` from the
+ * server's setup, such as a missing secret or middleware, so your
+ * monitoring sees it. A method other than `GET` or `POST` answers 405.
  *
  * Each framework's `sessionRoute` wraps it in a route. Use it directly on a
  * server without an adapter, with the request's cookie jar.
@@ -161,7 +166,7 @@ export function handleSession<U, I>(serverAuth: ServerAuth<U, I>) {
 			if (request.method === "GET")
 				return answer(200, { session: await session.getSession() });
 			const body = await readAction(request);
-			if (body instanceof AuthError) return refuse(body);
+			if (body instanceof AuthError) return refuse(body, 400);
 			switch (body.action) {
 				case "signOut":
 					await session.signOut();
@@ -170,18 +175,25 @@ export function handleSession<U, I>(serverAuth: ServerAuth<U, I>) {
 					return answer(200, {
 						credentials: await session.clientCredentials.get(),
 					});
-				case "renew":
+				case "renew": {
+					let rejected;
+					try {
+						rejected = readRejected(body.rejected);
+					} catch (error) {
+						if (error instanceof AuthError) return refuse(error, 400);
+						throw error;
+					}
 					return answer(200, {
-						credentials: await session.clientCredentials.renew(
-							body.rejected as never,
-						),
+						credentials: await session.clientCredentials.renew(rejected),
 					});
+				}
 				default:
 					return refuse(
 						new AuthError(
 							"INVALID_OPTIONS",
 							"Ask for signOut, credentials or renew",
 						),
+						400,
 					);
 			}
 		} catch (error) {

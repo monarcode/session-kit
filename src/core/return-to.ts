@@ -18,8 +18,8 @@ export const LOGIN_PATH = "/login";
 export type SafeReturnToOptions = {
 	/**
 	 * Your sign-in page's path, or several. A path to it is replaced with
-	 * `"/"`, so signing in never sends the user back to sign in. Matched
-	 * ignoring case, percent-encoding and trailing slashes.
+	 * `"/"`, so signing in never sends the user back to sign in. Matched by
+	 * path, ignoring case, percent-encoding, trailing slashes and any query.
 	 * @default "/login"
 	 */
 	loginPath?: string | readonly string[] | undefined;
@@ -103,7 +103,7 @@ export function safeReturnTo(
 			// Dot segments can resolve to `//host`, which browsers and routers
 			// read as another origin: `/.//evil.com` becomes `//evil.com`.
 			url.pathname.startsWith("//") ||
-			loginPaths.some((path) => routeKey(path) === key)
+			loginPaths.some((path) => routeKey(pathnameOf(path)) === key)
 		)
 			return "/";
 		return url.pathname + url.search + url.hash;

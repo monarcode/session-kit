@@ -106,6 +106,43 @@ test("a failed refresh after a 401 releases the 401 response body", async () => 
 	assert.equal(body.cancelled, true);
 });
 
+test("an expired token whose refresh fails rejects before sending", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	const auth = client({
+		refresh: async () => {
+			throw new Error("offline");
+		},
+	});
+	await auth.signIn(input({ expiresAt: 1_060_000 }));
+	t.mock.timers.tick(120_000);
+	let sent = 0;
+	setGlobal("fetch", async () => {
+		sent++;
+		return new Response(null);
+	});
+	const request = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
+	await assert.rejects(request("/me"), code("REFRESH_FAILED"));
+	assert.equal(sent, 0);
+});
+
+test("a Request from another realm is refused, not sent as a path", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	let sent = 0;
+	setGlobal("fetch", async () => {
+		sent++;
+		return new Response(null);
+	});
+	const request = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
+	const foreign = { url: "https://api.example.com/me", method: "GET" };
+	await assert.rejects(request(foreign as never), code("INVALID_OPTIONS"));
+	assert.equal(sent, 0);
+});
+
 test("a session change during a request releases its response body", async () => {
 	const auth = client();
 	await auth.signIn(input());

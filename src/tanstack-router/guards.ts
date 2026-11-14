@@ -137,7 +137,8 @@ export type RedirectIfSignedInOptions = {
  * to `redirectTo`, made safe with `safeReturnTo`.
  *
  * If the session can't be read, such as after a failed refresh or while
- * locked, the sign-in page shows, so the user can sign in again.
+ * locked, the sign-in page shows, so the user can sign in again. A
+ * `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
  *
  * @example
  * ```ts
@@ -170,6 +171,8 @@ export async function redirectIfSignedIn(
 	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInOptions,
 ): Promise<void> {
+	// Fails fast on a bad path, even for a visitor who isn't signed in.
+	safeReturnTo(undefined, { loginPath: options.loginPath });
 	const session = await sessionOrNull(auth);
 	if (session) {
 		throw redirect({

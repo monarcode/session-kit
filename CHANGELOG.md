@@ -137,8 +137,21 @@
 - `deepLinkHandler(auth, options?)` in `@monarcode/session-kit/expo` makes
   `redirectSystemPath` for `app/+native-intent.tsx` (`DeepLinkHandler`).
   `rememberDeepLink` stays, for a `redirectSystemPath` that does more.
+- `AuthRouter` in `@monarcode/session-kit/tanstack-router`, the Router type
+  `connectAuth` takes, for typing a function that takes your Router.
 
 ### Changed
+
+- **Breaking:** the session route answers 500, not 400, for an
+  `INVALID_OPTIONS` that comes from the server's setup, such as a missing
+  secret, `clientCredentials` not turned on, or React Router's middleware
+  not added. A request it can't read still answers 400.
+- A saved session past `maxAge`, or saved by another version, signs out
+  without an error, and `unlock()` resolves `null` for one. It set
+  `INVALID_SESSION` in `state.error`, which an app showing errors showed
+  after 30 idle days or an upgrade. A malformed saved session still does.
+- The Server sessions page says how to read the secret on Cloudflare
+  Workers.
 
 - **Breaking:** `createAuthFetch` takes the base URL as an option, as
   `sessionBearer` does. A missing `baseUrl` throws `INVALID_OPTIONS`.
@@ -337,6 +350,34 @@
   throws when a change to the device's biometrics made the key unreadable,
   as its comment says, where it made a new key. The Effect guide's sign-in
   button awaits `auth.signIn`, where a failed sign-in went unhandled.
+
+### Fixed
+
+- `signOut()` before the saved session is restored, such as with
+  asynchronous storage or before the first `mount()`, revokes the saved
+  tokens. It cleared them without revoking, so the refresh token stayed
+  valid at the backend. A locked session still isn't revoked.
+- `safeReturnTo` matches a `loginPath` that has a query, such as
+  `"/login?tab=1"`, by its path. It returned the sign-in page as safe.
+- `redirectIfSignedIn` (both routers) rejects a `loginPath` that doesn't start
+  with `/` for every visitor, and `redirectIfSignedInLoader` when the loader
+  is made. It failed only once someone signed in.
+- `connectAuth` throws `INVALID_OPTIONS` when the Router's context has no
+  client as `auth`, and `nextSession` when called without options, where
+  each threw a `TypeError`.
+- `authFetch` rejects a `Request` from another realm or a polyfill with
+  `INVALID_OPTIONS`. It was sent as the path `"[object Request]"` under
+  `baseUrl`.
+- The docs say that React Router's loader guards can't keep a `#fragment`,
+  and that a Next.js Route Handler should answer 401 rather than call
+  `require` under a `basePath`.
+- The example apps match their guides. React Router's data mode imports
+  `RouterProvider` from `react-router/dom`, and the framework apps generate
+  route types. The effetch app retries before `sessionBearer` and resets
+  per account. The TanStack apps read the user from the guarded route's
+  context and keep `disconnectAuth`. A failed sign-in in React Router with
+  server rendering returns status 400, in the example and the guide, so the
+  loaders don't run again. Stale comments are corrected.
 
 ## 0.1.0-alpha.8
 

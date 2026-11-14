@@ -295,6 +295,10 @@ export type NextSession<U, I> = {
 	 * Resolves the session, or redirects to the sign-in page with
 	 * `?redirectTo=` set to `path`, the page's own path, as Server Components
 	 * don't know their URL.
+	 *
+	 * Next adds a `basePath` to redirects from pages and Server Functions,
+	 * but not from Route Handlers. With a `basePath`, a Route Handler should
+	 * read the session with `get` and answer 401 instead.
 	 */
 	require: (path: string) => Promise<Session<U>>;
 	/**
@@ -361,7 +365,8 @@ export function nextSession<U, I>(
 	serverAuth: ServerAuth<U, I>,
 	options: NextSessionOptions,
 ): NextSession<U, I> {
-	const { cookies, redirect } = options;
+	const cookies = options?.cookies;
+	const redirect = options?.redirect;
 	if (typeof cookies !== "function" || typeof redirect !== "function")
 		throw new AuthError(
 			"INVALID_OPTIONS",

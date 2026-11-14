@@ -11,6 +11,7 @@ export { connectAuth } from "./connect.js";
 export { redirectIfSignedIn, requireSession } from "./guards.js";
 export { SessionOutlet } from "./outlet.js";
 
+export type { AuthRouter } from "./connect.js";
 export type {
 	RedirectIfSignedInOptions,
 	RequireSessionOptions,

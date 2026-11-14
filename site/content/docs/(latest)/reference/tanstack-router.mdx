@@ -39,6 +39,10 @@ Renders the child routes of a route guarded by `requireSession`, but only while 
 
 ## Types
 
+### AuthRouter
+
+What [`connectAuth`](#connectauth) needs from a TanStack Router: the client in its context as `auth`, and the methods that run guards again and clear cached route data. A Router made by `createRouter` with `context: { auth }` fits.
+
 ### RedirectIfSignedInOptions
 
 Options for [`redirectIfSignedIn`](#redirectifsignedin).

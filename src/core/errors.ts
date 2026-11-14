@@ -26,7 +26,7 @@ export type AuthErrorCode =
 	| "USER_VALIDATION_FAILED"
 	/**
 	 * Tokens or a saved session that can't be used, such as an access token
-	 * that already expired at sign-in, or a saved session older than `maxAge`.
+	 * that already expired at sign-in, or a saved session that's malformed.
 	 * In the browser of a server-rendered app, your server answered with
 	 * something other than a session or an access token.
 	 */

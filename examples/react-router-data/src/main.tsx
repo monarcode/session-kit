@@ -1,10 +1,5 @@
 import { StrictMode } from "react";
-import {
-	createBrowserRouter,
-	Outlet,
-	RouterProvider,
-	useRouteError,
-} from "react-router";
+import { createBrowserRouter, Outlet, useRouteError } from "react-router";
 
 import { AuthProvider } from "@monarcode/session-kit/react";
 import {
@@ -14,6 +9,7 @@ import {
 	useAuthRevalidation,
 } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router/dom";
 
 import { auth } from "./auth";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";

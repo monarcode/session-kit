@@ -94,6 +94,7 @@ import {
 	SessionOutlet,
 	useAuth,
 	useAuthClient,
+	type AuthRouter,
 	type RouterAuth,
 } from "../dist/tanstack-router/index.js";
 import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
@@ -130,6 +131,9 @@ declare module "../dist/index.js" {
 }
 
 connectAuth(router);
+// A Router made with `context: { auth }` is an `AuthRouter`.
+const authRouter: AuthRouter = router;
+connectAuth(authRouter);
 const baseUrl = "https://api.example.com";
 createAuthFetch(auth, { baseUrl });
 createAuthFetch(auth, { baseUrl, optional: true });

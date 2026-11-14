@@ -28,6 +28,12 @@ run `openssl rand -base64 32`. `createServerAuth` checks the secret on first
 use, not when the module loads, so build steps that import the module without
 the secret still work.
 
+Your module still reads `process.env.SESSION_SECRET` when it loads. On
+Cloudflare Workers, `process.env` has the secret at that point when Node.js
+compatibility is on, the default from compatibility date 2025-04-01. Without
+Node.js compatibility, read it with `import { env } from "cloudflare:workers"`,
+which also works at the top of a module.
+
 To rotate the secret, pass a list. The first secret seals new cookies, and
 any of them opens one, so sessions survive the change. For example, to read
 the old secret from `OLD_SESSION_SECRET` only while it's set:

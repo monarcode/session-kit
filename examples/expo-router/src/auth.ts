@@ -28,9 +28,10 @@ export const auth = createAuth({
 	name: "expo-example",
 	user: userSchema,
 	// The iOS keychain, or Keystore-encrypted storage on Android. Two JWTs and
-	// a user exceed SecureStore's 2048-byte value limit, so the value is split
-	// across keys. The defaults are `clearOnReinstall: true` and SecureStore's
-	// own `keychainAccessible` (`WHEN_UNLOCKED`).
+	// a user can pass 2048 bytes, which some iOS releases refuse to store in
+	// one value, so the value is split across keys. The defaults are
+	// `clearOnReinstall: true` and SecureStore's own `keychainAccessible`
+	// (`WHEN_UNLOCKED`).
 	storage: secureStorage(),
 	// Logs restores, refreshes, timers, and the gate's decisions to Metro in
 	// development. Tokens and user fields stay out of the log.

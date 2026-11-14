@@ -322,6 +322,10 @@ test("nextSession's guards use loginPath, and bad options throw", async () => {
 		code("INVALID_OPTIONS"),
 	);
 	assert.throws(
+		() => nextSession(serverAuth, undefined as never),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
 		() => nextSession(serverAuth, { cookies, redirect, loginPath: "login" }),
 		code("INVALID_OPTIONS"),
 	);

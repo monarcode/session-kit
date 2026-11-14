@@ -428,6 +428,10 @@ test("requireSessionLoader and redirectIfSignedInLoader make the loaders", async
 		(await guard({ request })).session,
 		await auth.getSession(),
 	);
+	assert.throws(
+		() => binding.redirectIfSignedInLoader(auth, { loginPath: "login" }),
+		{ code: "INVALID_OPTIONS" },
+	);
 	const signInPage = binding.redirectIfSignedInLoader(auth, {
 		loginPath: ["/login", "/sign-up"],
 	});
@@ -486,6 +490,10 @@ test("loader guards redirect with the requested URL and never leave the site", a
 	assert.equal(
 		redirected.headers.get("Location"),
 		"/login?redirectTo=%2Fprivate%3Ftab%3D2%23top",
+	);
+	await assert.rejects(
+		binding.redirectIfSignedIn(auth, { redirectTo: "/", loginPath: "login" }),
+		{ code: "INVALID_OPTIONS" },
 	);
 	await signIn(auth);
 	const { session } = await binding.requireSession(auth, {

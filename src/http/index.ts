@@ -125,7 +125,8 @@ async function discard(response: Response) {
  *
  * The token never leaves your API. A request for another origin, with a
  * username or password in its URL, or with an invalid URL rejects with
- * `INVALID_OPTIONS`. A redirect rejects rather than being followed. A
+ * `INVALID_OPTIONS`, as does a `Request` from another realm or a polyfill.
+ * A redirect rejects rather than being followed. A
  * missing or invalid `baseUrl` throws `INVALID_OPTIONS`. While signed in, a
  * request's own `Authorization` header is replaced.
  *
@@ -179,8 +180,15 @@ export function createAuthFetch(
 				"Pass authFetch a path, a URL or a Request",
 			);
 		// Anything but this runtime's own `Request` becomes a string, as `fetch`
-		// makes it, so the URL checked here is the URL that is sent.
+		// makes it, so the URL checked here is the URL that is sent. A
+		// `Request` from another realm or a polyfill would become
+		// "[object Request]", a path under `baseUrl`.
 		const given = input instanceof Request ? input : null;
+		if (!given && typeof input === "object" && "method" in input)
+			throw new AuthError(
+				"INVALID_OPTIONS",
+				"Pass authFetch a Request made with this runtime's Request",
+			);
 		const url = parseUrl(given ? given.url : String(input), base);
 		if (url.origin !== base.origin || url.username || url.password) {
 			throw new AuthError(

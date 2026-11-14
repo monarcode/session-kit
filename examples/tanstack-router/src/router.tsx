@@ -11,8 +11,9 @@ export const router = createRouter({
 	defaultPendingComponent: Pending,
 });
 
-// Restores the session, runs expiry timers and tab sync, and re-runs guards.
-connectAuth(router);
+// Restores the session, runs expiry timers and tab sync, and re-runs guards
+// when auth changes. Call it once, beside the Router.
+export const disconnectAuth = connectAuth(router);
 
 declare module "@tanstack/react-router" {
 	interface Register {

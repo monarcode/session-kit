@@ -427,7 +427,9 @@ The example app does this.
   that reads the session lets Proxy refresh first, so Route Handlers and
   Server Functions rarely need to.
 - **A `basePath`.** Next doesn't add it to `fetch`, so the client's
-  `endpoint` includes it: `"/app/api/session"`.
+  `endpoint` includes it: `"/app/api/session"`. Nor does it add it to a
+  Route Handler's redirects, so a Route Handler reads the session with
+  `get` and answers 401, rather than calling `require`.
 - **Rendering.** Reading cookies makes a page dynamic, and the root layout
   reads the session, so every page is dynamic. Next sends such pages with
   `Cache-Control: no-store`, and plain `use cache` can't read cookies.

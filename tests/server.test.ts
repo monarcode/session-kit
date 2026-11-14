@@ -993,8 +993,13 @@ test("sessionHandler refuses other sites, other versions and requests it can't r
 	);
 	const put = await refused(toRoute("PUT", { v: 1 }), 405);
 	assert.equal(put.response.headers.get("Allow"), "GET, POST");
-	// Without clientCredentials, the token stays on the server.
-	await refused(toRoute("POST", { v: 1, action: "credentials" }), 400);
+	// The server's own setup is a 500, so monitoring sees it. Without
+	// clientCredentials, the token stays on the server.
+	await refused(toRoute("POST", { v: 1, action: "credentials" }), 500);
+	const unsealed = sessionHandler(server({ secret: "short" }));
+	const missingSecret = await unsealed(toRoute("GET"), cookies.request());
+	assert.equal(missingSecret.status, 500);
+	assert.equal((await answerOf(missingSecret)).error.code, "INVALID_OPTIONS");
 });
 
 test("sessionHandler answers this site's pages on plain http by their Origin", async () => {

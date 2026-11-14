@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 
-import { useAuth, useAuthClient } from "@monarcode/session-kit/tanstack-router";
+import { useAuthClient } from "@monarcode/session-kit/tanstack-router";
+import { getRouteApi } from "@tanstack/react-router";
 
 import { authFetch, signInWithPassword } from "./auth";
 
@@ -65,9 +66,14 @@ const emailOf = (value: unknown) =>
 		? String(value.email)
 		: "";
 
-/** The signed-in user, a request using the access token, and sign-out. */
+const authenticated = getRouteApi("/_authenticated");
+
+/**
+ * The signed-in user, a request using the access token, and sign-out. It
+ * renders under the guarded layout, whose route context holds the session.
+ */
 export function Profile() {
-	const user = useAuth((state) => state.user);
+	const { user } = authenticated.useRouteContext().session;
 	const auth = useAuthClient();
 	const [fromApi, setFromApi] = useState("");
 
@@ -82,8 +88,8 @@ export function Profile() {
 
 	return (
 		<main>
-			<h1>Welcome, {user?.firstName}</h1>
-			<p>Signed in as {user?.username}</p>
+			<h1>Welcome, {user.firstName}</h1>
+			<p>Signed in as {user.username}</p>
 			<button
 				onClick={() =>
 					void loadProfile().catch((error: Error) =>

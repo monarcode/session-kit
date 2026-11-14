@@ -17,7 +17,7 @@ Sends a signed-in user from your sign-in page straight to `redirectTo`, made saf
 
 ### redirectIfSignedInLoader
 
-Makes the loader for your sign-in page, for `loader` or `clientLoader`. It reads `?redirectTo=` from the URL and works as [`redirectIfSignedIn`](#redirectifsignedin) does.
+Makes the loader for your sign-in page, for `loader` or `clientLoader`. It reads `?redirectTo=` from the URL and works as [`redirectIfSignedIn`](#redirectifsignedin) does. A `loginPath` that doesn't start with `/` throws `INVALID_OPTIONS` when the loader is made.
 
 ### requireSession
 
