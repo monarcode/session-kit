@@ -195,6 +195,16 @@ const clientPage = (slug) => ({
  */
 export const documents = [
 	{
+		// The README's quick start: a small app of its own, not an excerpt.
+		path: "README.md",
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {
+			"src/sign-in-form.tsx":
+				"export function SignInForm() { return null; }",
+		},
+	},
+	{
 		path: page("getting-started"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,

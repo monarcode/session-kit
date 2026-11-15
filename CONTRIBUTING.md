@@ -25,8 +25,10 @@ example:
 - **The reference.** The API reference pages are generated from the JSDoc
   by `pnpm run docs:reference`, and the check fails when they're out of
   date. Run it after changing a public export or its JSDoc.
-- **The README.** A block marked with a `from:` comment is an excerpt of a
-  page's examples, and must match it.
+- **The README.** Its quick start is a small app of its own: each block
+  marked `<!-- file: path -->` is a file, and they compile together. A block
+  marked with a `from:` comment is an excerpt of a page's examples instead,
+  and must match it.
 
 `pnpm test` runs the runtime tests twice: with synchronous storage, and with
 storage that settles every operation late, removals last, to catch ordering

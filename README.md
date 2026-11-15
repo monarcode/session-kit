@@ -35,86 +35,55 @@ server with TanStack Start, Next.js, and React Router, and comes with an
 
 ## Installation
 
-To install the package, run the following command:
-
 ```sh
-npm install @monarcode/session-kit
+npm install @monarcode/session-kit zod
 ```
-
-Release candidates are published to the `latest` distribution tag, so pin an
-exact version and read the [release notes](./CHANGELOG.md) before upgrading.
 
 Any [Standard Schema](https://standardschema.dev) library describes users.
-The examples use Zod:
-
-```sh
-npm install zod
-```
-
-Peer dependencies are optional. Install the ones your setup uses, such as
-React and your router.
+The examples use Zod. Peer dependencies such as React and your router are
+optional: install the ones your setup uses.
 [Compatibility](https://session-kit.pages.dev/docs/reference/compatibility)
 lists the supported versions.
 
+Release candidates are published to the `latest` tag, so pin an exact version
+and read the [release notes](./CHANGELOG.md) before upgrading.
+
 ## Quick start
 
-Session kit never calls your backend. The snippets here are excerpts, without
-their imports and schemas: [Getting started](https://session-kit.pages.dev/docs/getting-started)
-has the full files.
+Your backend keeps its sign-in and refresh endpoints. Session kit takes the
+tokens they return and manages the session from there. A React app needs
+three files.
 
-Write the two requests you'd write anyway, one that signs in and one that
-exchanges a refresh token for new tokens:
+**1. Create the client.** It checks every user against your schema, saves the
+session, and calls your `refresh` before the access token expires:
 
-<!-- from: site/content/docs/(latest)/getting-started.mdx -->
-
-```ts
-/** Checks the password, and resolves the tokens and the user. */
-export async function login(username: string, password: string) {
-  const response = await post("/auth/login", { username, password });
-  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
-  // DummyJSON returns the user's fields beside the tokens.
-  const body: unknown = await response.json();
-  return { ...tokensSchema.parse(body), user: userSchema.parse(body) };
-}
-
-/**
- * Exchanges a refresh token for new tokens. Resolves `null` when the backend
- * rejects the token, and throws for any other failure.
- */
-export async function refresh(refreshToken: string, signal: AbortSignal) {
-  const response = await post("/auth/refresh", { refreshToken }, { signal });
-  // DummyJSON answers 403 for an invalid token and 401 for a missing one.
-  if (response.status === 401 || response.status === 403) return null;
-  if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
-  return tokensSchema.parse(await response.json());
-}
-```
-
-Then create the client. It saves the session, restores it on reload, and
-refreshes the tokens with your `refresh`:
-
-<!-- from: site/content/docs/(latest)/getting-started.mdx -->
+<!-- file: src/auth.ts -->
 
 ```ts
+import { createAuth, webStorage } from "@monarcode/session-kit";
+import { z } from "zod";
+
 export const auth = createAuth({
-  // Keeps this app's saved session apart from any other on the same origin.
+  // Keeps this app's saved session apart from others on the same origin.
   name: "my-app",
   // Every user is checked against this schema, and typed by it.
-  user: userSchema,
-  // Where the session is saved: `localStorage`.
+  user: z.object({ id: z.string(), name: z.string() }),
+  // Saves the session in localStorage, so it survives reloads.
   storage: webStorage(),
-  // How expired access is replaced.
-  refresh: ({ refreshToken, signal }) => refresh(refreshToken, signal),
+  refresh: async ({ refreshToken, signal }) => {
+    const response = await fetch("/api/auth/refresh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      signal,
+    });
+    if (response.status === 401) return null; // rejected: sign out
+    if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+    return response.json();
+  },
 });
-```
 
-Register the client's type once, and the hooks from
-`@monarcode/session-kit/react` carry your user:
-
-<!-- from: site/content/docs/(latest)/getting-started.mdx -->
-
-```tsx
-// Types `AuthProvider` and the hooks with this client.
+// Types the React hooks with this client's user.
 declare module "@monarcode/session-kit" {
   interface Register {
     auth: typeof auth;
@@ -122,43 +91,80 @@ declare module "@monarcode/session-kit" {
 }
 ```
 
-Then render by the session's status:
+**2. Sign in.** Pass `signIn` what your backend's sign-in returned, the tokens
+and the user:
 
-<!-- from: site/content/docs/(latest)/getting-started.mdx -->
+<!-- file: src/sign-in.ts -->
 
-```tsx
-function Screen() {
-  const { status, user } = useAuth();
-  const client = useAuthClient();
+```ts
+import { auth } from "./auth.js";
 
-  switch (status) {
-    case "initializing":
-      return <p>Restoring your session…</p>;
-    case "unauthenticated":
-      return <SignIn />;
-    case "unavailable":
-      // Access couldn't be restored or refreshed: offer another try.
-      return (
-        <button onClick={() => void client.retry().catch(() => {})}>
-          Try again
-        </button>
-      );
-    default:
-      // Signed in: "authenticated", or "refreshing" with the user on screen.
-      return (
-        <main>
-          <h1>Welcome, {user.firstName}</h1>
-          <button onClick={() => void client.signOut().catch(() => {})}>
-            Sign out
-          </button>
-        </main>
-      );
-  }
+export async function signIn(email: string, password: string) {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) throw new Error(`Sign-in failed (${response.status})`);
+  // { accessToken, refreshToken, expiresIn, user }
+  const tokens = await response.json();
+  await auth.signIn(tokens);
 }
 ```
 
-[Getting started](https://session-kit.pages.dev/docs/getting-started) builds this into a working app
-one step at a time, against a real test backend.
+**3. Render by the session's status.** `useAuth` re-renders when it changes,
+in this tab or another:
+
+<!-- file: src/app.tsx -->
+
+```tsx
+import {
+  AuthProvider,
+  useAuth,
+  useAuthClient,
+} from "@monarcode/session-kit/react";
+
+import { auth } from "./auth.js";
+import { SignInForm } from "./sign-in-form.js"; // your form, calling signIn
+
+export function App() {
+  return (
+    <AuthProvider client={auth}>
+      <Home />
+    </AuthProvider>
+  );
+}
+
+function Home() {
+  const session = useAuth();
+  const client = useAuthClient();
+
+  if (session.status === "initializing") return <p>Restoring your session…</p>;
+  if (session.status === "unauthenticated") return <SignInForm />;
+  if (session.status === "unavailable") {
+    // The session couldn't be restored or refreshed, say while offline.
+    return (
+      <button onClick={() => client.retry().catch(console.error)}>
+        Try again
+      </button>
+    );
+  }
+  return (
+    <main>
+      <h1>Welcome, {session.user.name}</h1>
+      <button onClick={() => client.signOut().catch(console.error)}>
+        Sign out
+      </button>
+    </main>
+  );
+}
+```
+
+To call your API, `createAuthFetch` from `@monarcode/session-kit/http` adds
+the access token to each request and refreshes it after a 401.
+[Getting started](https://session-kit.pages.dev/docs/getting-started) builds
+this app step by step against a real test backend, and the guides below add
+your router's guards or server rendering.
 
 ## Pick your setup
 

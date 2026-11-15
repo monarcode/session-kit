@@ -170,9 +170,12 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   `scripts/docs-pages.mjs`, which the site also reads for type hovers, and
   a page that builds on Getting started lists the files it uses as `shared`.
   A new page with titled examples fails the check until it's listed.
-- A README example marked `<!-- from: site/content/docs/(latest)/page.mdx -->`
-  is an excerpt of that page's examples, and the check fails when the two
-  differ: edit the page, then copy.
+- The README's quick start is its own small app: each block marked
+  `<!-- file: src/auth.ts -->` is a file, compiled together like a page's
+  (`README.md` in `documents`). A README example marked
+  `<!-- from: site/content/docs/(latest)/page.mdx -->` is an excerpt of that
+  page's examples instead, and the check fails when the two differ: edit the
+  page, then copy.
 - The reference pages in `site/content/docs/(latest)/reference/` (one per
   entry point, and the error codes) are generated from the JSDoc by
   `pnpm run docs:reference`, except the entry points index and
