@@ -26,5 +26,5 @@ registerHooks({
 	},
 });
 
-export const { rememberDeepLink, SessionGate, secureStorage } =
+export const { deepLinkHandler, rememberDeepLink, SessionGate, secureStorage } =
 	await import("@monarcode/session-kit/expo");

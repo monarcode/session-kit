@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+	type AuthDebugEvent,
 	createMirrorAuth,
 	type ClientCredentials,
 	type MirrorAuthOptions,
@@ -10,6 +11,7 @@ import {
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import {
 	createServerAuth,
+	sessionHandler,
 	type CookieJar,
 } from "@monarcode/session-kit/server";
 
@@ -29,6 +31,16 @@ const settle = async () => {
 		await new Promise((resolve) => setImmediate(resolve));
 };
 
+/**
+ * Waits up to a second for `done`. For work that leaves the event loop, such
+ * as Web Crypto unsealing a cookie, which a fixed number of turns can miss on
+ * a slow machine.
+ */
+const until = async (done: () => boolean) => {
+	for (let i = 0; i < 200 && !done(); i++)
+		await new Promise((resolve) => setTimeout(resolve, 5));
+};
+
 function mirror(
 	options: Partial<MirrorAuthOptions<User, { name: string }>> = {},
 ) {
@@ -38,7 +50,7 @@ function mirror(
 		revalidate: async () => alice,
 		signOut: async () => {},
 		...options,
-	});
+	} as MirrorAuthOptions<User, { name: string }>);
 }
 
 test("starts from the server's session, with no initializing state", async () => {
@@ -113,12 +125,35 @@ test("signIn forwards the input and adopts the session the server returns", asyn
 			throw failure;
 		},
 	});
+	// The app's own error, unchanged, as a single-page app's sign-in form
+	// gets it.
 	await assert.rejects(failing.signIn({ name: "x" }), (error: unknown) => {
-		assert.ok(code("USER_VALIDATION_FAILED")(error));
-		assert.equal((error as Error).cause, failure);
+		assert.equal(error, failure);
 		return true;
 	});
 	assert.equal(failing.state.get().sessionId, "s1");
+	const thrown = mirror({
+		signIn: () => {
+			throw failure;
+		},
+	});
+	await assert.rejects(thrown.signIn({ name: "x" }), (error: unknown) => {
+		assert.equal(error, failure);
+		return true;
+	});
+	const notASession = mirror({
+		signIn: async () => ({ user }) as never,
+	});
+	await assert.rejects(
+		notASession.signIn({ name: "x" }),
+		code("INVALID_SESSION"),
+	);
+	const signedOut = mirror({ signIn: async () => null as never });
+	await assert.rejects(
+		signedOut.signIn({ name: "x" }),
+		code("INVALID_SESSION"),
+	);
+	assert.equal(signedOut.state.get().sessionId, "s1");
 	assert.equal(
 		"signIn" in
 			createMirrorAuth<User>({
@@ -397,8 +432,14 @@ test("end to end: browser sign-in sealed on the server, then authFetch", async (
 
 	const sent: Array<string | null> = [];
 	const originalFetch = globalThis.fetch;
+	// The page the client runs in.
+	Object.defineProperty(globalThis, "location", {
+		value: new URL("https://app.test/dashboard"),
+		configurable: true,
+	});
 	t.after(() => {
 		globalThis.fetch = originalFetch;
+		delete (globalThis as { location?: unknown }).location;
 	});
 	globalThis.fetch = async (request) => {
 		const authorization = (request as Request).headers.get("Authorization");
@@ -407,13 +448,35 @@ test("end to end: browser sign-in sealed on the server, then authFetch", async (
 			status: authorization === "Bearer access-1" ? 401 : 200,
 		});
 	};
-	const authFetch = createAuthFetch(auth, "https://api.example.com/");
+	const authFetch = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
 	assert.equal((await authFetch("me")).status, 200);
 	assert.deepEqual(sent, ["Bearer access-1", "Bearer access-2"]);
 
 	await auth.signOut();
 	assert.equal(cookies.has("app.session"), false);
 	assert.equal(await serverAuth.getSession(jar()), null);
+});
+
+test("a sign-in the app's function refused is reported, with its message only when sensitive", async () => {
+	for (const sensitive of [false, true]) {
+		const events: AuthDebugEvent[] = [];
+		const auth = mirror({
+			debug: { log: (event) => events.push(event), sensitive },
+			signIn: async () => {
+				throw new Error("Wrong password");
+			},
+		});
+		await assert.rejects(auth.signIn({ name: "x" }));
+		const rejected = events.find((event) => event.type === "sign-in");
+		assert.equal(rejected?.message, "rejected by the signIn option");
+		assert.equal(rejected?.error, undefined);
+		assert.deepEqual(
+			rejected?.data,
+			sensitive ? { reason: "Wrong password" } : undefined,
+		);
+	}
 });
 
 test("a failed sign-in leaves a revalidation in flight to apply", async () => {
@@ -429,4 +492,218 @@ test("a failed sign-in leaves a revalidation in flight to apply", async () => {
 	answer.resolve(null);
 	assert.equal(await revalidating, null);
 	assert.equal(auth.state.get().status, "unauthenticated");
+});
+
+/**
+ * A server with a session route at `/api/session`, and `fetch` routed to it
+ * as a browser on the same site would send it.
+ */
+function withSessionRoute(
+	t: { after: (fn: () => void) => void },
+	options: { clientCredentials?: boolean } = {},
+) {
+	const cookies = new Map<string, string>();
+	const jar = (): CookieJar => {
+		const snapshot = new Map(cookies);
+		return {
+			writable: true,
+			get: (name) => snapshot.get(name),
+			set: (name, value) => cookies.set(name, value),
+			delete: (name) => cookies.delete(name),
+		};
+	};
+	let refreshes = 0;
+	const serverAuth = createServerAuth({
+		name: "app",
+		user: userSchema,
+		secret: SECRET,
+		...options,
+		refresh: async () => ({
+			accessToken: `access-${++refreshes + 1}`,
+			expiresIn: 900,
+		}),
+	});
+	const handle = sessionHandler(serverAuth);
+	const sent: string[] = [];
+	const originalFetch = globalThis.fetch;
+	// The page the client runs in.
+	Object.defineProperty(globalThis, "location", {
+		value: new URL("https://app.test/dashboard"),
+		configurable: true,
+	});
+	t.after(() => {
+		globalThis.fetch = originalFetch;
+		delete (globalThis as { location?: unknown }).location;
+	});
+	const network = { down: false, site: "same-origin" };
+	globalThis.fetch = async (input, init) => {
+		if (network.down) throw new TypeError("fetch failed");
+		const headers = new Headers(init?.headers);
+		headers.set("Sec-Fetch-Site", network.site);
+		const request = new Request(new URL(String(input), "https://app.test"), {
+			...init,
+			headers,
+		});
+		sent.push(`${request.method} ${request.url}`);
+		if (!request.url.endsWith("/api/session"))
+			return new Response("<h1>Not found</h1>", { status: 404 });
+		return handle(request, jar());
+	};
+	return { serverAuth, jar, cookies, sent, network };
+}
+
+test("endpoint: the client reads, gets the token and signs out through the session route", async (t) => {
+	const { serverAuth, jar, cookies, sent } = withSessionRoute(t, {
+		clientCredentials: true,
+	});
+	const signedIn = await serverAuth.signIn(jar(), {
+		accessToken: "access-1",
+		refreshToken: "refresh-1",
+		expiresIn: 900,
+		user,
+	});
+	const auth = createMirrorAuth({
+		name: "app",
+		session: null as Session<User> | null,
+		endpoint: "/api/session",
+	});
+	assert.deepEqual(await auth.retry(), signedIn);
+	assert.equal(auth.state.get().status, "authenticated");
+
+	const credentials = await auth.credentials.get();
+	assert.equal(credentials?.accessToken, "access-1");
+	const renewed = await auth.credentials.renew(credentials!);
+	assert.equal(renewed?.accessToken, "access-2");
+
+	await auth.signOut();
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(cookies.has("app.session"), false);
+	assert.deepEqual(sent, [
+		"GET https://app.test/api/session",
+		"POST https://app.test/api/session",
+		"POST https://app.test/api/session",
+		"POST https://app.test/api/session",
+	]);
+});
+
+test("endpoint: failures reject with the server's code, or as the app's functions' do", async (t) => {
+	const { serverAuth, jar, network } = withSessionRoute(t);
+	const session = await serverAuth.signIn(jar(), {
+		accessToken: "access-1",
+		expiresIn: 900,
+		user,
+	});
+	const auth = createMirrorAuth({
+		name: "app",
+		session,
+		endpoint: "/api/session",
+	});
+	// Without clientCredentials, the server keeps the token.
+	await assert.rejects(auth.credentials.get(), code("INVALID_OPTIONS"));
+	network.site = "cross-site";
+	await assert.rejects(auth.retry(), code("INVALID_OPTIONS"));
+	network.site = "same-origin";
+	network.down = true;
+	await assert.rejects(auth.retry(), code("REFRESH_FAILED"));
+	await assert.rejects(auth.signOut(), code("PERSISTENCE_FAILED"));
+	assert.equal(auth.state.get().status, "authenticated");
+	network.down = false;
+
+	const elsewhere = createMirrorAuth({
+		name: "app",
+		session,
+		endpoint: "/api/sessions",
+	});
+	await assert.rejects(elsewhere.retry(), code("REFRESH_FAILED"));
+});
+
+test("endpoint: revalidate, signOut and credentials win, and the path is checked", async (t) => {
+	const { sent } = withSessionRoute(t);
+	const auth = createMirrorAuth({
+		name: "app",
+		session: alice,
+		endpoint: "/api/session",
+		revalidate: async () => bob,
+		credentials: {
+			get: async () => ({ sessionId: "s2", accessToken: "own" }),
+			renew: async () => null,
+		},
+	});
+	assert.deepEqual(await auth.retry(), bob);
+	assert.equal((await auth.credentials.get())?.accessToken, "own");
+	assert.deepEqual(sent, []);
+
+	for (const endpoint of [
+		"api/session",
+		"//evil.test/session",
+		"/\\evil",
+		"/\t/evil.test/session",
+		"/\n\\evil.test",
+		"/api session",
+		1,
+	])
+		assert.throws(
+			() =>
+				createMirrorAuth({
+					name: "app",
+					session: null,
+					endpoint: endpoint as string,
+				}),
+			code("INVALID_OPTIONS"),
+		);
+	assert.throws(
+		// @ts-expect-error: neither endpoint nor revalidate and signOut
+		() => createMirrorAuth({ name: "app", session: null }),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() =>
+			// @ts-expect-error: revalidate without signOut
+			createMirrorAuth({
+				name: "app",
+				session: null,
+				revalidate: async () => null,
+			}),
+		code("INVALID_OPTIONS"),
+	);
+});
+
+test("endpoint: on the server, a call through it rejects with INVALID_OPTIONS", async (t) => {
+	withSessionRoute(t);
+	delete (globalThis as { location?: unknown }).location;
+	const auth = createMirrorAuth({
+		name: "app",
+		session: alice,
+		endpoint: "/api/session",
+	});
+	await assert.rejects(auth.retry(), code("INVALID_OPTIONS"));
+	await assert.rejects(auth.signOut(), code("INVALID_OPTIONS"));
+});
+
+test("endpoint: when the server holds another account, renew follows it", async (t) => {
+	const { serverAuth, jar } = withSessionRoute(t, { clientCredentials: true });
+	const first = await serverAuth.signIn(jar(), {
+		accessToken: "access-1",
+		expiresIn: 900,
+		user,
+	});
+	const auth = createMirrorAuth({
+		name: "app",
+		session: first,
+		endpoint: "/api/session",
+	});
+	const credentials = await auth.credentials.get();
+	// Another account signs in with a form post: no tab hears of it.
+	const second = await serverAuth.signIn(jar(), {
+		accessToken: "access-9",
+		expiresIn: 900,
+		user: { ...user, id: "u2" },
+	});
+	await assert.rejects(
+		auth.credentials.renew(credentials!),
+		code("SESSION_CHANGED"),
+	);
+	await until(() => auth.state.get().sessionId === second.sessionId);
+	assert.equal(auth.state.get().sessionId, second.sessionId);
+	assert.equal((await auth.credentials.get())?.accessToken, "access-9");
 });

@@ -4,10 +4,10 @@ import * as Cause from "effect/Cause";
 import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 
-import type { ApiErrorBody } from "./api-client";
+import type { ApiError } from "./backend";
 
 type ApiCallError =
-	| HttpError.With<ApiErrorBody>
+	| HttpError.With<ApiError>
 	| NetworkError
 	| DecodeError
 	| AuthFailure;

@@ -11,6 +11,10 @@ Guide: [Expo Router](/docs/setups/expo).
 
 ## Functions
 
+### deepLinkHandler
+
+Makes `redirectSystemPath` for `app/+native-intent.tsx`. It keeps each incoming link with [`rememberDeepLink`](#rememberdeeplink), so `SessionGate` opens it after sign-in, and returns the path unchanged.
+
 ### rememberDeepLink
 
 Keeps an incoming deep link, so `SessionGate` can open it after the user signs in. Without it, `Stack.Protected` sends a signed-out user from a guarded screen to one they may see, and the link is lost.
@@ -27,9 +31,13 @@ Wraps the root navigator in `app/_layout.tsx`. It adds what Expo Router's `Stack
 
 ## Types
 
+### DeepLinkHandler
+
+The `redirectSystemPath` that [`deepLinkHandler`](#deeplinkhandler) makes, for `app/+native-intent.tsx`.
+
 ### RememberDeepLinkOptions
 
-Options for [`rememberDeepLink`](#rememberdeeplink), the same as `safeReturnTo`'s. Set `loginPath` when your sign-in screen isn't `/login`, so links to it are dropped rather than kept.
+Options for [`rememberDeepLink`](#rememberdeeplink) and [`deepLinkHandler`](#deeplinkhandler), the same as `safeReturnTo`'s. Set `loginPath` when your sign-in screen isn't `/login`, so links to it are dropped rather than kept.
 
 <auto-type-table
   cwd

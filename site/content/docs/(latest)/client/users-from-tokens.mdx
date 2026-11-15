@@ -33,6 +33,8 @@ export const signInWithTokens = (tokens: {
 }) => tokenAuth.signIn(tokens);
 ```
 
+Reading the user from the token changes a few things:
+
 - **No `updateUser`.** The token is the only source of the user, so call
   `auth.refresh()` to pick up a change.
 - **The signature isn't verified.** That suits a browser, which trusts a user

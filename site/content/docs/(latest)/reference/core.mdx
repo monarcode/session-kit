@@ -23,6 +23,14 @@ Creates a browser client ([`MirrorAuth`](#mirrorauth)) for a session your server
 
 Reads the user from the access token, rather than from what `signIn` is given. Pass the result as `createAuth`'s `user` option.
 
+### isSignedIn
+
+Whether someone is signed in: `true` while `authenticated` or `refreshing`. It narrows `state`, so `state.user` is set when it's `true`.
+
+### loginHref
+
+Builds the sign-in page's URL, with `?redirectTo=` set to `returnTo`, so the user comes back after signing in. The guards use it. Use it in a guard of your own, such as in a route handler.
+
 ### memoryStorage
 
 Keeps the session in memory only. It ends when the page unloads, and other tabs never see it. Use it in tests, or where tokens must never be written to disk. Each call has its own entries.
@@ -33,7 +41,7 @@ Makes a "send me back here after sign-in" path safe to redirect to, such as a `?
 
 ### webStorage
 
-Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. Tabs follow each other's changes, such as a sign-out, and take turns to refresh where the browser supports Web Locks.
+Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. With `localStorage`, tabs follow each other's changes, such as a sign-out. Tabs take turns to refresh where the browser supports Web Locks.
 
 ## Classes
 
@@ -155,7 +163,7 @@ The browser client that [`createMirrorAuth`](#createmirrorauth) returns. It mirr
 
 ### MirrorAuthOptions
 
-Options for [`createMirrorAuth`](#createmirrorauth). Each function is your own server function, action, or `fetch` to a route handler, which calls `serverAuth` from `@monarcode/session-kit/server`.
+Options for [`createMirrorAuth`](#createmirrorauth). The client talks to your server through `endpoint`, your session route, or through functions of your own, such as server functions, which call `serverAuth` from `@monarcode/session-kit/server`. Pass `endpoint`, or `revalidate` and `signOut`.
 
 <auto-type-table
   cwd
@@ -178,6 +186,14 @@ What your refresh callback ([`RefreshFn`](#refreshfn)) returns:
 - [`Tokens`](#tokens): the new tokens. They must last at least five seconds. Leave out `refreshToken` or `user` to keep the current one.
 - `null`: your backend rejected the refresh token. The user is signed out.
 
+### Register
+
+Register your client's type here, once, so the hooks from `@monarcode/session-kit/react` and the Effect service carry your user. Without it, the user is typed `unknown`.
+
+### RegisteredAuth
+
+The client registered in [`Register`](#register), or a client with an `unknown` user when none is. It's `never` when what's registered isn't a client.
+
 ### RevokeFn
 
 Asks your backend to revoke the tokens of a session that just signed out. It's the `revoke` option of [`AuthOptions`](#authoptions).
@@ -195,6 +211,10 @@ Options for [`safeReturnTo`](#safereturnto).
 ### Session
 
 Who is signed in: the session ID and the user, from `getSession()`. It holds no tokens, so it's safe to keep in route context or pass around.
+
+### SessionOf
+
+The session type of a client: what its `getSession` resolves, without `null`. It takes any client: one from `createAuth` or `createMirrorAuth`, the server's from `createServerAuth`, or a request's session from it.
 
 ### SignInInput
 
@@ -217,6 +237,10 @@ The signed-in user's type, inferred from the `user` option: what `state.user` an
 ### UserInput
 
 The user that `signIn` and `updateUser` accept, inferred from the `user` option. It differs from [`User`](#user) when the schema has defaults or transforms.
+
+### UserOf
+
+The user type of a client, as [`SessionOf`](#sessionof) finds it: the `user` of its session.
 
 ### UserSource
 

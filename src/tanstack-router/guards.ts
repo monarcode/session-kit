@@ -5,7 +5,7 @@ import {
 	sessionOrNull,
 	type GuardClient,
 } from "../core/guard.js";
-import { loginHref, safeReturnTo } from "../core/return-to.js";
+import { LOGIN_PATH, loginHref, safeReturnTo } from "../core/return-to.js";
 import type { Session } from "../core/types.js";
 
 /**
@@ -21,7 +21,7 @@ import type { Session } from "../core/types.js";
  *
  * export const options: RequireSessionOptions = {
  * 	location,
- * 	loginPath: "/login",
+ * 	loginPath: "/sign-in",
  * };
  * ```
  *
@@ -33,8 +33,11 @@ export type RequireSessionOptions = {
 	 * come back to it after signing in.
 	 */
 	location: { href: string };
-	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
-	loginPath: string;
+	/**
+	 * Your sign-in page's path, starting with `/`.
+	 * @default "/login"
+	 */
+	loginPath?: string | undefined;
 };
 
 /**
@@ -48,6 +51,7 @@ export type RequireSessionOptions = {
  *
  * Other errors, such as `REFRESH_FAILED` after a failed refresh, are
  * rethrown to the route's error component, which can offer `auth.retry()`.
+ * A `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
  *
  * Render the route's children with `SessionOutlet`, and call `connectAuth`,
  * so the guard runs again when the session changes.
@@ -74,8 +78,8 @@ export type RequireSessionOptions = {
  * 	getParentRoute: () => rootRoute,
  * 	id: "authenticated",
  * 	beforeLoad: ({ context, location }) =>
- * 		requireSession(context.auth, { location, loginPath: "/login" }),
- * 	component: () => <SessionOutlet pending={<p>Checking session…</p>} />,
+ * 		requireSession(context.auth, { location }),
+ * 	component: SessionOutlet,
  * });
  * ```
  *
@@ -85,13 +89,12 @@ export async function requireSession<U>(
 	auth: GuardClient<U>,
 	options: RequireSessionOptions,
 ): Promise<{ session: Session<U> }> {
+	const loginPath = options.loginPath ?? LOGIN_PATH;
 	// Fails fast on a bad path, before any session is read.
-	loginHref(options.loginPath, "/");
+	loginHref(loginPath, "/");
 	const session = await guardSession(auth);
 	if (!session)
-		throw redirect({
-			href: loginHref(options.loginPath, options.location.href),
-		});
+		throw redirect({ href: loginHref(loginPath, options.location.href) });
 	return { session };
 }
 
@@ -134,7 +137,8 @@ export type RedirectIfSignedInOptions = {
  * to `redirectTo`, made safe with `safeReturnTo`.
  *
  * If the session can't be read, such as after a failed refresh or while
- * locked, the sign-in page shows, so the user can sign in again.
+ * locked, the sign-in page shows, so the user can sign in again. A
+ * `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
  *
  * @example
  * ```ts
@@ -167,6 +171,8 @@ export async function redirectIfSignedIn(
 	auth: GuardClient<unknown>,
 	options: RedirectIfSignedInOptions,
 ): Promise<void> {
+	// Fails fast on a bad path, even for a visitor who isn't signed in.
+	safeReturnTo(undefined, { loginPath: options.loginPath });
 	const session = await sessionOrNull(auth);
 	if (session) {
 		throw redirect({

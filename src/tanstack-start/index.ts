@@ -1,81 +1,56 @@
 import { AuthError } from "../core/errors.js";
 import { mirrorOf, type MirrorAuth } from "../core/mirror.js";
 import type { Session } from "../core/types.js";
+import { connectAuth, type AuthRouter } from "../tanstack-router/connect.js";
 
-/**
- * The session the server render sends to the browser, from
- * {@link sessionHydration}'s `dehydrate`. It holds no tokens.
- *
- * @example
- * ```ts
- * import type {
- * 	DehydratedSession,
- * } from "@monarcode/session-kit/tanstack-start";
- *
- * type User = { id: number; firstName: string };
- *
- * export const signedOut: DehydratedSession<User> = {
- * 	loaded: true,
- * 	session: null,
- * };
- * ```
- *
- * @since 0.1.0
- */
-export type DehydratedSession<U> = {
-	/**
-	 * Whether {@link loadSession} read the session on the server for this
-	 * page. When it didn't, such as for a root route with `ssr: false` or a
-	 * failed read, the browser reads the session itself.
-	 */
+/** What the server render sends to the browser for the session. */
+type DehydratedSession = {
+	/** Whether `loadSession` read the session on the server for this page. */
 	loaded: boolean;
-	/** The session the server read, or `null` when signed out. */
-	session: Session<U> | null;
+	session: Session<unknown> | null;
 };
 
 /**
- * The router options {@link sessionHydration} returns, for `createRouter`.
- *
- * @example
- * ```ts
- * import type { MirrorAuth } from "@monarcode/session-kit";
- * import {
- * 	sessionHydration,
- * 	type SessionHydration,
- * } from "@monarcode/session-kit/tanstack-start";
- *
- * type User = { id: number; firstName: string };
- * declare const auth: MirrorAuth<User>;
- *
- * export const options: SessionHydration<User> = sessionHydration(auth);
- * ```
- *
- * @since 0.1.0
+ * The router's own `dehydrate` result is kept beside the session, so the
+ * app's `hydrate` gets exactly what its `dehydrate` returned.
  */
-export type SessionHydration<U> = {
-	/** On the server: the session to send with the page. */
-	dehydrate: () => DehydratedSession<U>;
-	/** In the browser: starts the client from what `dehydrate` sent. */
-	hydrate: (dehydrated: DehydratedSession<U>) => void;
+type Dehydrated = { sessionKit: DehydratedSession; app: unknown };
+
+type SessionRouter<U> = AuthRouter & {
+	options: {
+		context: { auth: MirrorAuth<U> };
+		dehydrate?: (() => unknown) | undefined;
+		hydrate?: ((dehydrated: never) => unknown) | undefined;
+	};
 };
 
+const hydrated = new WeakSet<object>();
+
 /**
- * Router options that carry the session from the server render to the
- * browser. Spread them into `createRouter`.
+ * Connects a TanStack Start router to the browser client in its context, as
+ * `auth`. Call it once in `getRouter`, after `createRouter`.
  *
- * On the server, `dehydrate` sends the session {@link loadSession} read. In
- * the browser, `hydrate` starts the client from it before the first render,
- * without running guards again or telling other tabs. When the server didn't
- * read the session, `hydrate` leaves the client as it is, and `loadSession`
- * reads it in the browser.
+ * It carries the session from the server render to the browser. On the
+ * server, the page is sent with the session {@link loadSession} read. In the
+ * browser, the client starts from it before the first render, without
+ * running guards again or telling other tabs. When the server didn't read
+ * the session, the browser reads it itself.
  *
- * `hydrate` throws `INVALID_OPTIONS` for a client that isn't from
- * `createMirrorAuth`.
+ * In the browser, it then does what `connectAuth` does for a TanStack Router
+ * app: guards run again when the session changes. It returns a function
+ * that stops.
+ *
+ * Throws `INVALID_OPTIONS` when the router's context has no client from
+ * `createMirrorAuth` as `auth`.
+ *
+ * A `dehydrate` and a `hydrate` of your own keep working: yours gets back
+ * what yours sent. Pass them to `createRouter`. One set later, such as with
+ * `router.update`, replaces the session's.
  *
  * @example
  * ```ts
  * import type { MirrorAuth } from "@monarcode/session-kit";
- * import { sessionHydration } from "@monarcode/session-kit/tanstack-start";
+ * import { connectSession } from "@monarcode/session-kit/tanstack-start";
  * import {
  * 	createRootRouteWithContext,
  * 	createRouter,
@@ -87,38 +62,61 @@ export type SessionHydration<U> = {
  * export function getRouter() {
  * 	const auth = createAppAuth();
  * 	const routeTree = createRootRouteWithContext<{ auth: typeof auth }>()();
- * 	return createRouter({
- * 		routeTree,
- * 		context: { auth },
- * 		...sessionHydration(auth),
- * 	});
+ * 	const router = createRouter({ routeTree, context: { auth } });
+ * 	connectSession(router);
+ * 	return router;
  * }
  * ```
  *
+ * @see {@link loadSession} to read the session before the guards run
+ *
  * @since 0.1.0
  */
-export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
-	return {
-		dehydrate() {
+export function connectSession<U>(router: SessionRouter<U>): () => void {
+	// Read with care: JavaScript, or a router made without a context, can
+	// get here with no client at all.
+	const auth: MirrorAuth<U> | undefined = router.options?.context?.auth;
+	const mirror = auth && mirrorOf(auth);
+	if (!mirror)
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"connectSession needs a createMirrorAuth client as context.auth",
+		);
+	if (!hydrated.has(router)) {
+		hydrated.add(router);
+		const { options } = router;
+		const ownDehydrate = options.dehydrate;
+		const ownHydrate = options.hydrate;
+		// The router reads both options when it calls them, so they can change
+		// after `createRouter`. It calls them with the options as `this`.
+		options.dehydrate = async function dehydrate(
+			this: unknown,
+		): Promise<Dehydrated> {
+			const app = await ownDehydrate?.call(this);
 			const { sessionId, user } = auth.state.get();
 			return {
-				loaded: mirrorOf(auth)?.answered ?? false,
-				session:
-					sessionId !== null && user !== null ? { sessionId, user } : null,
+				sessionKit: {
+					loaded: mirror.answered,
+					session:
+						sessionId !== null && user !== null
+							? { sessionId, user }
+							: null,
+				},
+				app,
 			};
-		},
-		hydrate(dehydrated) {
-			const mirror = mirrorOf(auth);
-			if (!mirror)
-				throw new AuthError(
-					"INVALID_OPTIONS",
-					"sessionHydration needs a client from createMirrorAuth",
-				);
-			// The router passes `undefined` when the server sent no data, as from
-			// a router made without these options.
-			if (dehydrated?.loaded) mirror.hydrate(dehydrated.session);
-		},
-	};
+		};
+		options.hydrate = function hydrate(
+			this: unknown,
+			dehydrated: Dehydrated | undefined,
+		) {
+			// `undefined` when the server sent no data, as from a router that
+			// wasn't connected there.
+			const sent = dehydrated?.sessionKit;
+			if (sent?.loaded) mirror.hydrate(sent.session as Session<U> | null);
+			return ownHydrate?.call(this, dehydrated?.app as never);
+		} as (dehydrated: never) => unknown;
+	}
+	return connectAuth(router);
 }
 
 /**
@@ -127,7 +125,7 @@ export function sessionHydration<U>(auth: MirrorAuth<U>): SessionHydration<U> {
  *
  * On the server, it calls the client's `revalidate`, so guards and the page
  * see the session from the cookie. In the browser, it does nothing when
- * {@link sessionHydration} already brought the server's session. Otherwise,
+ * {@link connectSession} already brought the server's session. Otherwise,
  * such as for a root route that didn't render on the server, it asks the
  * server on each navigation until a read succeeds.
  *

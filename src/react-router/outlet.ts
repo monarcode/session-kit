@@ -13,7 +13,7 @@ import {
 	useLocation,
 } from "react-router";
 
-import { loginHref } from "../core/return-to.js";
+import { LOGIN_PATH, loginHref } from "../core/return-to.js";
 import {
 	renderUnavailable,
 	useAdapterClient,
@@ -31,7 +31,7 @@ import {
  *
  * export const layout = (
  * 	<SessionOutlet
- * 		loginPath="/login"
+ * 		loginPath="/sign-in"
  * 		pending={<p>Restoring session…</p>}
  * 		unavailable={({ error, retry }) => (
  * 			<div role="alert">
@@ -46,11 +46,15 @@ import {
  * @since 0.1.0
  */
 export type SessionOutletProps = {
-	/** Your sign-in page's path, starting with `/`, such as `"/login"`. */
-	loginPath: string;
 	/**
-	 * Shown while the saved session is read and, in data mode, until the
-	 * loader has accepted a new session.
+	 * Your sign-in page's path, starting with `/`. Use the same one as
+	 * `requireSession`'s.
+	 * @default "/login"
+	 */
+	loginPath?: string | undefined;
+	/**
+	 * Shown while the saved session is read and, in data or framework mode,
+	 * until the loader has accepted a new session.
 	 */
 	pending?: ReactNode | undefined;
 	/**
@@ -91,7 +95,7 @@ function useGuardedSessionId(): string | undefined {
  * `?redirectTo=` set to where they were. In declarative mode, that makes it
  * the guard.
  *
- * In data mode, use it as the element of a route whose loader returns
+ * In data or framework mode, render it from a route whose loader returns
  * `requireSession`'s result. When the account changes, it shows
  * `pending` until the loader has run again, so no child sees the last
  * account's data.
@@ -101,6 +105,9 @@ function useGuardedSessionId(): string | undefined {
  * sidebar, isn't guarded this way. Read the user there from state, where it
  * may be `null`.
  *
+ * Throws `INVALID_OPTIONS` when it has neither an `AuthProvider` around it
+ * nor a `client`.
+ *
  * @example
  * ```tsx
  * import { Route, Routes } from "react-router";
@@ -109,7 +116,7 @@ function useGuardedSessionId(): string | undefined {
  * // Declarative mode, inside `AuthProvider` and `BrowserRouter`.
  * export const routes = (
  * 	<Routes>
- * 		<Route element={<SessionOutlet loginPath="/login" />}>
+ * 		<Route element={<SessionOutlet />}>
  * 			<Route index element={<p>Signed in</p>} />
  * 		</Route>
  * 		<Route path="/login" element={<p>Sign in</p>} />
@@ -120,7 +127,7 @@ function useGuardedSessionId(): string | undefined {
  * @since 0.1.0
  */
 export function SessionOutlet({
-	loginPath,
+	loginPath = LOGIN_PATH,
 	pending = null,
 	unavailable,
 	client,

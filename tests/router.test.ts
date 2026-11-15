@@ -289,8 +289,9 @@ const guardedRouter = async (
 	const privateRoute = createRoute({
 		getParentRoute: () => root,
 		path: "/private",
+		// No loginPath: it defaults to "/login".
 		beforeLoad: ({ context, location }) =>
-			requireSession(context.auth, { location, loginPath: "/login" }),
+			requireSession(context.auth, { location }),
 	});
 	const router = createRouter({
 		routeTree: root.addChildren([login, privateRoute]),
@@ -384,6 +385,21 @@ test("requireSession reads a session that changes mid-check again", async () => 
 		requireSession(churning, { ...options, loginPath: "login" }),
 		{ code: "INVALID_OPTIONS", message: /loginPath must start with/ },
 	);
+	// Even for a visitor who isn't signed in.
+	const signedOut = { getSession: async () => null, isCurrent: () => true };
+	await assert.rejects(
+		redirectIfSignedIn(signedOut, { redirectTo: "/", loginPath: "login" }),
+		{ code: "INVALID_OPTIONS", message: /loginPath must start with/ },
+	);
+});
+
+test("connectAuth needs the client in the Router's context", () => {
+	const router = {
+		options: { context: {} },
+		clearCache() {},
+		async invalidate() {},
+	};
+	assert.throws(() => connectAuth(router as never), code("INVALID_OPTIONS"));
 });
 
 test("requireSession reads again when a sign-in replaces the session it was restoring", async () => {

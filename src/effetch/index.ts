@@ -35,8 +35,9 @@ import {
  */
 export interface SessionBearerOptions {
 	/**
-	 * Your API's URL, usually the effetch client's `baseUrl`. The access token
-	 * goes only to requests on its origin.
+	 * Your API's URL, usually the effetch client's `baseUrl`. It must be
+	 * absolute, such as `https://api.example.com`. The access token goes only
+	 * to requests on its origin.
 	 */
 	baseUrl: string;
 	/**
@@ -107,8 +108,11 @@ const refuseRedirects = <A, E, R>(
  *
  * Calls fail with `AuthFailure`, before sending anything: `UNAUTHENTICATED`
  * when signed out, unless `optional` sends them without a token, and
- * `LOCKED` while locked. If the session changes during a call, it fails with
- * `SESSION_CHANGED` rather than return a response meant for another account.
+ * `LOCKED` while locked. When a refresh fails, the call fails with that
+ * failure, such as `REFRESH_FAILED`.
+ *
+ * If the session changes during a call, it fails with `SESSION_CHANGED`
+ * rather than return a response meant for another account.
  *
  * The token never leaves your API. A request on another origin, or with a
  * username or password in its URL, dies with `INVALID_OPTIONS`. With
@@ -122,8 +126,8 @@ const refuseRedirects = <A, E, R>(
  * token. `Fetch.make` then needs the `Auth` service, but calls don't.
  *
  * On the server, make the effetch client per request, and provide it the
- * `Auth` layer for that request's `serverAuth.forRequest(jar)`. That view
- * reads the token from the request's cookie and saves a renewed one.
+ * `Auth` layer for that request's session (`RequestAuth`). It reads the
+ * token from the request's cookie and saves a renewed one.
  *
  * @example
  * ```ts

@@ -1,8 +1,271 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.0
+
+The first release candidate for `0.1.0`. The public API is now frozen, and
+later `0.1` releases only add to it.
+
+### Added
+
+- `authFetch` takes a `URL` or a `Request` as well as a path, as `fetch`
+  does. An HTTP client with a `fetch` option can now send its requests
+  through it, and they keep its safeguards: the token stays on one origin, a
+  401 refreshes once, and only a GET or HEAD is sent again. The
+  [Other HTTP clients](https://session-kit.pages.dev/docs/client/other-http-clients)
+  page shows ky, axios with its `fetch` adapter, and openapi-fetch. It
+  replaces the ky recipe built on hooks, and keeps the axios interceptors for
+  an instance on axios's default adapter.
+- `UseMirrorAuthOptions`, the type of `useMirrorAuth`'s options.
+- Hooks without a hooks file. `@monarcode/session-kit/react` exports
+  `AuthProvider`, `useAuth` and `useAuthClient`, typed by the client you
+  register once in `Register`, from `@monarcode/session-kit`. Until you
+  register one, `AuthProvider` takes any client, and the user is `unknown`.
+  `ProvidedAuth` names the client they use.
+  `createAuthHooks` stays, for an app with several clients.
+
+  ```ts
+  declare module "@monarcode/session-kit" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  ```
+
+- `@monarcode/session-kit/tanstack-router` exports `useAuth` and
+  `useAuthClient`, which read the client from Router context and are typed
+  by the Router you register. They need no `AuthProvider` and no
+  registration of their own.
+- One request's session on the server, without passing its cookie jar.
+  `startAuth(serverAuth)` in `@monarcode/session-kit/tanstack-start/server`
+  finds the request on each call, so it's made once, at module level, and
+  one `createAuthFetch` over it serves every request.
+  `routerAuth(serverAuth)` in `@monarcode/session-kit/react-router/server`
+  takes the route's `context`. The guides use these. The jar-first methods
+  stay, for servers without an adapter.
+
+  ```ts
+  // Before
+  await serverAuth.signIn(startJar(), tokens);
+  // After
+  export const session = startAuth(serverAuth);
+  await session.signIn(tokens);
+  ```
+
+- `serverAuth.forRequest(jar)` has every method now: `signIn`,
+  `updateUser`, `refreshIfDue` and `clientCredentials` join the rest.
+- `SessionOf<T>` and `UserOf<T>` in `@monarcode/session-kit` give the
+  session and user types of any client: one from `createAuth`,
+  `createMirrorAuth` or `createServerAuth`, or a request's session.
+
+  ```ts
+  type AppSession = SessionOf<typeof serverAuth>; // { sessionId, user }
+  ```
+
+- Middleware and server guards for the server-rendered setups, in place of
+  the code the guides had you copy. Each refreshes before rendering, while a
+  cookie can still be set, and ignores a failed refresh. The TanStack Start
+  and React Router middleware also mark each response that doesn't set its
+  own `Cache-Control` as `private, no-store` (`cacheControl` changes or
+  skips it). Next.js marks pages that read cookies `no-store` itself.
+  - TanStack Start: `refreshSession(serverAuth, options?)` in
+    `@monarcode/session-kit/tanstack-start/server`, a handler for Start's
+    `createMiddleware({ type: "request" }).server()`. Start strips what's in
+    `.server()` from the browser bundle, `serverAuth` included.
+  - React Router: `sessionMiddleware(serverAuth, options?)` for the root
+    route, `requireSession(serverAuth, { loginPath, basename })` for guarded
+    routes, whose `session(context)` gives their loaders a session that's
+    never `null`, and `redirectIfSignedIn(serverAuth, options?)` as the
+    sign-in page's loader, in `@monarcode/session-kit/react-router/server`.
+  - Next.js: `nextSession(serverAuth, { cookies, redirect })` in
+    `@monarcode/session-kit/next`, with `get()`, `require(path)` and
+    `redirectIfSignedIn(redirectTo)` for Server Components, `readOnly()` and
+    `writable()` for the request's session, and `refresh(request, response)`
+    for `proxy.ts`. You pass Next's own `cookies` and `redirect`.
+
+  ```ts
+  // app/root.tsx
+  export const middleware = sessionMiddleware(serverAuth);
+  // app/routes/protected.tsx
+  export const middleware = [signedIn]; // signedIn = requireSession(serverAuth)
+  ```
+
+- `loginHref(loginPath, returnTo)` in `@monarcode/session-kit` builds the
+  sign-in page's URL with `?redirectTo=`, for a guard of your own.
+- `SessionMiddlewareOptions` in `@monarcode/session-kit/server`: `within`
+  and `cacheControl`, for `refreshSession` and `sessionMiddleware`.
+- A session route, in place of the server functions, Server Functions and
+  resource routes the guides had you write for the browser's client. It
+  reads the session, signs out, and gets or renews the access token when
+  `createServerAuth` has `clientCredentials`. It answers your own site's
+  pages only (by `Sec-Fetch-Site`, or a `POST`'s `Origin` on plain http),
+  with `Cache-Control: no-store`. Signing in stays your own code.
+  - `createMirrorAuth({ endpoint })` calls it. `revalidate`, `signOut` and
+    `credentials` are optional now, and win over `endpoint` when given. The
+    options' type needs `endpoint`, or `revalidate` and `signOut`. A failure
+    the server reports rejects with its `AuthErrorCode`.
+  - `sessionHandler(serverAuth)` in `@monarcode/session-kit/server` answers
+    it, for a request and its cookie jar (`SessionHandler`).
+  - `sessionRoute(serverAuth)` wraps it for each framework: a server route's
+    `handlers` in `@monarcode/session-kit/tanstack-start/server`
+    (`StartSessionRoute`), a resource route's `loader` and `action` in
+    `@monarcode/session-kit/react-router/server` (`RouterSessionRoute`), and
+    a Route Handler's `GET` and `POST` in `@monarcode/session-kit/next`, with
+    Next's `cookies` in `NextSessionRouteOptions` (`NextSessionRoute`).
+
+  ```ts
+  // app/api/session/route.ts
+  export const { GET, POST } = sessionRoute(serverAuth, { cookies });
+  // lib/auth/client.ts
+  createMirrorAuth({ name: "app", session, endpoint: "/api/session", signIn });
+  ```
+
+- `isSignedIn(state)` in `@monarcode/session-kit`: `true` while
+  `authenticated` or `refreshing`, and `false` while `locked`. It narrows
+  `user`, and works as a selector: `useAuth(isSignedIn)`.
+- `requireSessionLoader(auth, options?)` and
+  `redirectIfSignedInLoader(auth, options?)` in
+  `@monarcode/session-kit/react-router` make the guards' loaders, for
+  `loader` or `clientLoader`. The second reads `?redirectTo=` from the URL.
+  Their options are `RequireSessionLoaderOptions` and
+  `RedirectIfSignedInLoaderOptions`, and they return `RequireSessionLoader`
+  and `RedirectIfSignedInLoader`. `requireSession` and `redirectIfSignedIn`
+  stay, for a loader that does more.
+
+  ```ts
+  export const clientLoader = requireSessionLoader(auth);
+  ```
+
+- `loginPath` defaults to `"/login"` in `requireSession` for TanStack Router
+  and React Router, and in React Router's `SessionOutlet`.
+- `deepLinkHandler(auth, options?)` in `@monarcode/session-kit/expo` makes
+  `redirectSystemPath` for `app/+native-intent.tsx` (`DeepLinkHandler`).
+  `rememberDeepLink` stays, for a `redirectSystemPath` that does more.
+- `AuthRouter` in `@monarcode/session-kit/tanstack-router`, the Router type
+  `connectAuth` takes, for typing a function that takes your Router.
+- `NextSession` has `signIn`, `signOut` and, with a user schema,
+  `updateUser`, so a Server Function writes `await session.signIn(tokens)`
+  rather than `await (await session.writable()).signIn(tokens)`. The Next.js
+  guide and example use them.
 
 ### Changed
+
+- **Breaking:** the session route answers 500, not 400, for an
+  `INVALID_OPTIONS` that comes from the server's setup, such as a missing
+  secret, `clientCredentials` not turned on, or React Router's middleware
+  not added. A request it can't read still answers 400.
+- A saved session past `maxAge`, or saved by another version, signs out
+  without an error, and `unlock()` resolves `null` for one. It set
+  `INVALID_SESSION` in `state.error`, which an app showing errors showed
+  after 30 idle days or an upgrade. A malformed saved session still does.
+- The Server sessions page says how to read the secret on Cloudflare
+  Workers.
+
+- **Breaking:** `createAuthFetch` takes the base URL as an option, as
+  `sessionBearer` does. A missing `baseUrl` throws `INVALID_OPTIONS`.
+
+  ```ts
+  // Before
+  createAuthFetch(auth, "https://api.example.com/", { optional: true });
+  // After
+  createAuthFetch(auth, {
+    baseUrl: "https://api.example.com/",
+    optional: true,
+  });
+  ```
+
+- **Breaking:** `AuthFetch`'s first parameter is `string | URL | Request`,
+  not `string`. Only code that implements the type is affected, such as a
+  test fake that declares `(path: string) => …`: widen its parameter.
+- `authFetch` rejects with `INVALID_OPTIONS` when called with no path. It
+  used to request `undefined` under the base URL.
+- `authFetch` asks for the credentials before it builds the request. Signed
+  out or locked, a call with an `init` that `Request` refuses now rejects
+  with `UNAUTHENTICATED` or `LOCKED`, not with `Request`'s `TypeError`.
+- **Breaking:** the `signIn` of a `createMirrorAuth` client rejects with what
+  your `signIn` option threw, unchanged, as a sign-in in a single-page app
+  does. It used to wrap it in a `USER_VALIDATION_FAILED` `AuthError`, so a
+  sign-in form had to read the message from `cause`. A result that isn't a
+  session still rejects with `INVALID_SESSION`.
+
+  ```ts
+  // Before
+  const reason = error instanceof Error ? error.cause : undefined;
+  setError(reason instanceof Error ? reason.message : "Could not sign in");
+  // After
+  setError(error instanceof Error ? error.message : "Could not sign in");
+  ```
+
+- **Breaking:** `useMirrorAuth` takes one options object, and throws
+  `INVALID_OPTIONS` without `create` or `onChange`.
+
+  ```ts
+  // Before
+  useMirrorAuth(createAppAuth, session, () => router.refresh());
+  // After
+  useMirrorAuth({
+    create: createAppAuth,
+    session,
+    onChange: () => router.refresh(),
+  });
+  ```
+
+- **Breaking:** TanStack Start's `connectSession(router)` replaces
+  `sessionHydration(auth)` and the `connectAuth(router)` beside it. It keeps
+  the router's own `dehydrate` and `hydrate`, which `...sessionHydration(auth)`
+  replaced, or was replaced by, depending on the order of the spread.
+  `sessionHydration`, `SessionHydration` and `DehydratedSession` are removed.
+
+  ```ts
+  // Before
+  const router = createRouter({
+    routeTree,
+    context: { auth },
+    ...sessionHydration(auth),
+  });
+  connectAuth(router);
+  // After
+  const router = createRouter({ routeTree, context: { auth } });
+  connectSession(router);
+  ```
+
+- **Breaking:** `Register` and `RegisteredAuth` moved from
+  `@monarcode/session-kit/effect` to `@monarcode/session-kit`, so one
+  registration types the hooks and the Effect service. Change the module you
+  augment. The other `Registered…` types stay in `./effect`. Register a
+  client from `createAuth` or `createMirrorAuth`: anything else now types the
+  hooks and the Effect service as `never`, where the Effect service used to
+  fall back to an `unknown` user.
+
+  ```ts
+  // Before
+  declare module "@monarcode/session-kit/effect" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  // After
+  declare module "@monarcode/session-kit" {
+    interface Register {
+      auth: typeof auth;
+    }
+  }
+  ```
+
+- **Breaking:** in `@monarcode/session-kit/tanstack-router`, `useRouterAuth`
+  is now `useAuthClient`, and `RegisteredAuth` is now `RouterAuth`, so it
+  isn't confused with the main entry point's. When `auth` is optional in
+  Router context, `useAuthClient` returns the client without `undefined`, as
+  it throws when there's none. A hooks file made with
+  `createAuthHooks({ useClient: useRouterAuth })` can go: import `useAuth`
+  and `useAuthClient` from `@monarcode/session-kit/tanstack-router` instead.
+- **Breaking:** `RequestAuth` takes the user `signIn` accepts as a second
+  type parameter, as `ServerAuth` does: `RequestAuth<User, User>`, or
+  `RequestAuth<User, never>` when the user comes from the access token. Most
+  apps write `SessionOf` or `UserOf` instead.
+- Effect's `Auth.layer` binds a session from `startAuth` to the request
+  that's current when it's called, and throws `INVALID_OPTIONS` outside
+  one. `Auth.signIn` and `Auth.updateUser` still die on a request's session,
+  and now point at its own `signIn` and `updateUser`.
 
 - The guides moved to the documentation site,
   [session-kit.pages.dev](https://session-kit.pages.dev), with an API
@@ -22,10 +285,9 @@
   `defaultError` to effetch-query's `endpoints`. `sessionBearer`'s example
   calls the client's methods too.
 - `AuthErrorCode`'s docs say which codes the browser client of a
-  server-rendered app rejects with: `USER_VALIDATION_FAILED` when signing in
-  on the server fails, `PERSISTENCE_FAILED` when signing out there fails, and
-  `REFRESH_FAILED` when reading the session or the access token from the
-  server fails.
+  server-rendered app rejects with: `PERSISTENCE_FAILED` when signing out on
+  the server fails, and `REFRESH_FAILED` when reading the session or the
+  access token from the server fails.
 - The setup guides are corrected against the code and the example apps. The
   TanStack Start guard renders `SessionOutlet`, the Next.js guard sends users
   back to the page they asked for after sign-in, and the React Router layout
@@ -37,11 +299,100 @@
 - The compatibility page lists `effect` as a peer of `./effetch` as well as
   `./effect`, and the entry points page orders the entry points as the
   reference does.
+- The router guides' sign-in pages no longer navigate after a sign-in. The
+  sign-in page's guard runs again and sends the user on, so a form only signs
+  in. The server-rendering guides call the API with `createAuthFetch` over the
+  request's session, and the Expo guide adds the profile screen its deep-link
+  steps open.
+- The hovers on a request's session say what `signIn` takes, that it never
+  calls your backend and trusts its input, and which errors `signIn` and
+  `updateUser` reject with. `getSession`, `signOut` and `credentials.get` say
+  where to use them.
+- The `tanstack-start-spa-effetch` example is laid out as the Effect guide
+  is, in `backend.ts`, `refresh.ts`, `auth.ts`, `layer.ts`, `api.ts` and
+  `runtime.ts`. Its `FetchLive` layer is gone: the API client and the
+  refresh client each turn off Effect's tracing headers themselves, and the
+  runtime provides plain `FetchHttpClient.layer`. The guide's refresh client
+  now turns them off too. It sent them, which fails the preflight of an API
+  that doesn't allow them.
+- The React Router guide's Guards in loaders section says when to use
+  `requireSessionLoader` (the whole loader, usually a layout's) and
+  `requireSession` (inside a loader that loads data too). A page's loader that
+  calls your API checks the session itself, since React Router runs nested
+  routes' loaders at the same time.
+- A Hybrid setup page, under Server rendering: the browser signs in with
+  your backend and calls your API, and the server keeps the session. It shows
+  a server function that checks the tokens with your backend before
+  `session.signIn`, and one that passes them on unchecked, with when that's
+  safe.
+- `createMirrorAuth`'s `endpoint`, `revalidate` and `signOut` options show
+  their docs in editor hovers, which showed none. `revalidate`'s say when the
+  client calls it: when the tab becomes visible after 10 seconds or more, and
+  when another tab signs in or out.
 - The reference lists the members of `AuthStorage`, `Tokens` and
   `CookieJar`, the types an app builds itself. The server-rendering guides'
   sign-in shows the backend's own message for a failed sign-in, as the
   example apps do, and the secret-rotation example works once the old secret
   is removed.
+- The hovers and the guides are checked line by line against the code. The
+  hovers name errors they left out: `PERSISTENCE_FAILED` from `signIn`,
+  `getSession` and `unlock`, `REFRESH_FAILED` and `SESSION_CHANGED` from
+  `credentials.renew`, `createAuthFetch` and `sessionBearer`, a request's
+  `getSession` and `refreshIfDue` on the server, the `INVALID_OPTIONS` that
+  guards, outlets and `sessionRoute` throw, and the session route's status
+  codes. `AuthErrorCode`'s docs cover a saved session older than `maxAge`, a
+  `locking.seal` that fails, and a refresh that times out.
+- Corrected in the docs: `signOut()` waits for `revoke`.
+  `signOutOnRepeated401: false` only stops a second 401 from signing users
+  out, and without a refresh token the first one still does. A read-only
+  request's `getSession` resolves, and only `credentials.get` rejects once
+  the token has expired. React Router passes loaders `url` from 7.15, not
+  from 8. `AFTER_FIRST_UNLOCK` is for a refresh while the device is locked.
+  Remove an old `secret` once `maxAge` has passed since the change.
+- The guides gain what they lacked: a Sign out section for TanStack Start,
+  `cacheControl` and the two sets of guards for React Router with server
+  rendering, the session route's checks on the Security page, storage that
+  can't be read on the Errors page, and what `secureStorage`, `SessionGate`
+  and `deepLinkHandler` do on the Expo page. The Expo guide's locking example
+  throws when a change to the device's biometrics made the key unreadable,
+  as its comment says, where it made a new key. The Effect guide's sign-in
+  button awaits `auth.signIn`, where a failed sign-in went unhandled.
+
+### Fixed
+
+- With a user read from the access token, `ServerAuth`, `RequestAuth` and
+  `NextSession` keep their names in editors and declaration files. Editors
+  showed internal names, and exporting such a value from a module that emits
+  declarations failed with TS4023. A session with a user schema is no longer
+  assignable to a token user's type, such as `RequestAuth<User, never>`,
+  since their `signIn` takes different input.
+- The guides and examples call `login` on its own line before `signIn`,
+  rather than nesting the `await`.
+- `signOut()` before the saved session is restored, such as with
+  asynchronous storage or before the first `mount()`, revokes the saved
+  tokens. It cleared them without revoking, so the refresh token stayed
+  valid at the backend. A locked session still isn't revoked.
+- `safeReturnTo` matches a `loginPath` that has a query, such as
+  `"/login?tab=1"`, by its path. It returned the sign-in page as safe.
+- `redirectIfSignedIn` (both routers) rejects a `loginPath` that doesn't start
+  with `/` for every visitor, and `redirectIfSignedInLoader` when the loader
+  is made. It failed only once someone signed in.
+- `connectAuth` throws `INVALID_OPTIONS` when the Router's context has no
+  client as `auth`, and `nextSession` when called without options, where
+  each threw a `TypeError`.
+- `authFetch` rejects a `Request` from another realm or a polyfill with
+  `INVALID_OPTIONS`. It was sent as the path `"[object Request]"` under
+  `baseUrl`.
+- The docs say that React Router's loader guards can't keep a `#fragment`,
+  and that a Next.js Route Handler should answer 401 rather than call
+  `require` under a `basePath`.
+- The example apps match their guides. React Router's data mode imports
+  `RouterProvider` from `react-router/dom`, and the framework apps generate
+  route types. The effetch app retries before `sessionBearer` and resets
+  per account. The TanStack apps read the user from the guarded route's
+  context and keep `disconnectAuth`. A failed sign-in in React Router with
+  server rendering returns status 400, in the example and the guide, so the
+  loaders don't run again. Stale comments are corrected.
 
 ## 0.1.0-alpha.8
 

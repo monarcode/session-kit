@@ -53,19 +53,21 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   Tokens last one minute, so the early refresh runs after about 30 seconds.
   Requests omit `credentials: "include"`, which DummyJSON's own snippets use,
   because session-kit keeps tokens out of cookies.
-- **Guards**: `requireSession` and `SessionOutlet` for TanStack Router and
-  Start, `SessionOutlet` alone in React Router's declarative mode, and loader
-  guards with `useAuthRevalidation` in data and framework mode.
+- **Guards**: `requireSession`, `redirectIfSignedIn` and `SessionOutlet` for
+  TanStack Router and Start. `SessionOutlet` alone in React Router's
+  declarative mode. `requireSessionLoader`, `redirectIfSignedInLoader`,
+  `SessionOutlet` and `useAuthRevalidation` in data and framework mode.
 - **TanStack Start** sets `defaultSsr: false` in `src/start.ts`. Start's own
   server still renders requests in SPA mode, and the guards need the browser's
   saved session.
 - **TanStack Start with Effect** is the SPA app written with Effect,
   [effetch](https://github.com/monarcode/effetch) and
-  [effetch-query](https://github.com/monarcode/effetch-query). `src/auth.ts`
-  describes the user with an Effect Schema and refreshes through effetch.
-  `src/api-client.ts` is the API client, a service whose `sessionBearer`
-  plugin sends the access token, and `src/runtime.ts` composes the app's
-  layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
+  [effetch-query](https://github.com/monarcode/effetch-query), laid out as
+  the guide is. `src/backend.ts` describes DummyJSON with Effect Schemas,
+  `src/refresh.ts` refreshes through effetch, and `src/auth.ts` reads the
+  user from the access token. `src/api.ts` is the API client, a service whose
+  `sessionBearer` plugin sends the access token, and `src/runtime.ts`
+  composes the app's layers into one runtime. `src/endpoints.ts` declares the sign-in mutation
   and the profile query, which `src/ui.tsx` uses with `useMutation` and
   `useQuery`, and the root route gives each session its own query cache. The
   hooks and the guards are the SPA app's. See
@@ -74,31 +76,34 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `httpOnly` cookie with `createServerAuth` (`src/auth/server.ts`), signs in
   with DummyJSON from a server function, and refreshes in request middleware
   (`src/start.ts`). `createMirrorAuth` gives the routes and components a
-  client, filled by `loadSession` on the server and `sessionHydration` in the
-  browser. `auth/me` is called both from a server function and, with
-  `clientCredentials`, from the browser. Set `SESSION_SECRET` (32 or more
-  random characters) to run `vite preview`; `vite dev` uses a development
-  secret. The cookie is `Secure` outside `vite dev`, which Safari refuses
-  over `http://localhost`: try `vite preview` in another browser. See
+  client, filled by `loadSession` on the server and `connectSession` in the
+  browser. The browser signs out and gets the access token through the
+  session route (`src/routes/api/session.ts`). `auth/me` is called both from
+  a server function and, with `clientCredentials`, from the browser. Set
+  `SESSION_SECRET` (32 or more random characters) to run `vite preview`;
+  `vite dev` uses a development secret. The cookie is `Secure` outside
+  `vite dev`, which Safari refuses over `http://localhost`: try
+  `vite preview` in another browser. See
   [the guide](https://session-kit.pages.dev/docs/setups/tanstack-start).
 - **Next.js** keeps the session the same way: Proxy refreshes it
   (`proxy.ts`), Server Components read it through `lib/auth/session.ts`, and
-  Server Functions in `app/actions.ts` sign in and out. `useMirrorAuth` in
+  a Server Function in `app/actions.ts` signs in. `useMirrorAuth` in
   `app/providers.tsx` gives Client Components the client and renders the
   page again when the session changes in the browser, so the pages'
-  redirects run. The browser gets the access token from a Route Handler.
+  redirects run. The browser reads the session, signs out and gets the
+  access token through the session route (`app/api/session/route.ts`).
   `SESSION_SECRET` and Safari work as for TanStack Start, with `next start`
   and `next dev`. See [the guide](https://session-kit.pages.dev/docs/setups/next).
 - **React Router with server rendering** keeps the session the same way.
-  Root middleware (`app/auth/middleware.server.ts`) gives each request a
-  cookie jar and refreshes, the root loader reads the session, and the sign-in
-  route's action signs in with a plain form that works before scripts load.
+  The root route's `sessionMiddleware` gives each request a cookie jar and
+  refreshes, the root loader reads the session, and the sign-in route's
+  action signs in with a plain form that works before scripts load.
   `useMirrorAuth` in `app/root.tsx` gives the components the client and runs
   the loaders again when the session changes in the browser, so the
-  protected route's middleware redirects. The browser signs out, revalidates
-  and gets the access token through the resource routes in
-  `app/routes/auth.*.ts`. `SESSION_SECRET` and Safari work as for TanStack
-  Start, with `pnpm start` (after `pnpm build`) and `react-router dev`. See
+  protected route's `requireSession` guard redirects. The browser reads the
+  session, signs out and gets the access token through the session route in
+  `app/routes/auth.session.ts`. `SESSION_SECRET` and Safari work as for
+  TanStack Start, with `pnpm start` (after `pnpm build`) and `react-router dev`. See
   [the guide](https://session-kit.pages.dev/docs/setups/react-router-ssr).
 - **Expo Router** saves the session with `secureStorage()`. `SessionGate` in
   `app/_layout.tsx` holds the splash screen, shows `src/unavailable.tsx`
@@ -108,7 +113,8 @@ run ios` and `run android` build it natively. In CI it is only bundled, with
   `expo-secure-store` config plugin keeps the session out of Android backups.
 
 Each app is self-contained, so it can be copied out on its own. That is why
-the client-side web apps have the same `ui.tsx` rather than sharing one. The
+the client-side web apps have the same `ui.tsx`, apart from where the hooks
+come from, rather than sharing one. The
 server-rendered apps have their own, since they sign in on the server, and so
 does the Effect app, whose handlers run Effects. The apps differ in where the
 user comes from on purpose, so both user sources appear: the login response,

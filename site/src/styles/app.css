@@ -45,6 +45,55 @@
 	}
 }
 
+/* The How it works figure: once, as it scrolls into view, a square crosses
+   each arrow in the way it points, in the order a sign-in and a request
+   travel. Under reduced motion the arrows just stand. */
+@keyframes how-cross-x {
+	from {
+		left: 0;
+		opacity: 0;
+	}
+	20%,
+	80% {
+		opacity: 1;
+	}
+	to {
+		left: calc(100% - 5px);
+		opacity: 0;
+	}
+}
+
+@keyframes how-cross-y {
+	from {
+		top: 0;
+		opacity: 0;
+	}
+	20%,
+	80% {
+		opacity: 1;
+	}
+	to {
+		top: calc(100% - 5px);
+		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	[data-play] .how-packet {
+		animation: how-cross-x 450ms ease-in-out var(--delay) both;
+	}
+	[data-play] .how-packet[data-axis="y"] {
+		animation-name: how-cross-y;
+	}
+	[data-play] .how-packet[data-direction="left"] {
+		animation-direction: reverse;
+	}
+	[data-play] .how-packet[data-direction="both"] {
+		animation-direction: alternate;
+		animation-iteration-count: 2;
+	}
+}
+
 /* A lane tooltip settling into place. */
 @keyframes buffer-tip-in {
 	from {

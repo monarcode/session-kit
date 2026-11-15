@@ -1,8 +1,7 @@
 import { Button, Text, View } from "react-native";
 
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 import { Link } from "expo-router";
-
-import { useAuth, useAuthClient } from "../../src/auth";
 
 export default function Home() {
 	const firstName = useAuth((state) => state.user?.firstName);

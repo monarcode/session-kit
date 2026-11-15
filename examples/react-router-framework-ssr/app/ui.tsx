@@ -2,9 +2,9 @@ import { useMemo, useState } from "react";
 import { Form } from "react-router";
 
 import { createAuthFetch } from "@monarcode/session-kit/http";
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
 
 import { API } from "./auth/api";
-import { useAuth, useAuthClient } from "./hooks";
 
 /**
  * The sign-in form, prefilled with DummyJSON's documented test user. It
@@ -60,7 +60,10 @@ export function Profile({ fromServer }: { fromServer: string }) {
 	const user = useAuth((state) => state.user);
 	const auth = useAuthClient();
 	// The browser's requests get the access token from the server, in memory.
-	const authFetch = useMemo(() => createAuthFetch(auth, `${API}/`), [auth]);
+	const authFetch = useMemo(
+		() => createAuthFetch(auth, { baseUrl: `${API}/` }),
+		[auth],
+	);
 	const [fromBrowser, setFromBrowser] = useState("");
 
 	async function loadProfile() {
@@ -87,7 +90,9 @@ export function Profile({ fromServer }: { fromServer: string }) {
 				Load profile in the browser
 			</button>
 			{fromBrowser && <p>auth/me in the browser: {fromBrowser}</p>}
-			<button onClick={() => void auth.signOut()}>Sign out</button>
+			<button onClick={() => void auth.signOut().catch(() => {})}>
+				Sign out
+			</button>
 		</main>
 	);
 }

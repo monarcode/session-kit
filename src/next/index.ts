@@ -1,8 +1,18 @@
+import { AuthError } from "../core/errors.js";
+import { LOGIN_PATH, loginHref, safeReturnTo } from "../core/return-to.js";
+import type { Session, SignInInput } from "../core/types.js";
+import {
+	refreshBeforeRendering,
+	refreshWithin,
+	type RequestAuth,
+	type ServerAuth,
+} from "../server/auth.js";
 import {
 	pairJars,
 	type CookieJar,
 	type CookieOptions,
 } from "../server/cookies.js";
+import { handleSession } from "../server/handler.js";
 
 /**
  * A request's cookie store, as `cookies()` from `next/headers` resolves it.
@@ -215,4 +225,310 @@ export function proxyJar(
 		proxyJars.set(response, jar);
 	}
 	return jar;
+}
+
+/**
+ * Options for {@link nextSession}. Pass Next's own `cookies` and `redirect`,
+ * as this entry point doesn't import `next`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionOptions } from "@monarcode/session-kit/next";
+ * import { cookies } from "next/headers";
+ * import { redirect } from "next/navigation";
+ *
+ * export const options: NextSessionOptions = {
+ * 	cookies,
+ * 	redirect,
+ * 	loginPath: "/sign-in",
+ * };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionOptions = {
+	/** `cookies` from `next/headers`. */
+	cookies: () => Promise<NextCookies>;
+	/** `redirect` from `next/navigation`. */
+	redirect: (url: string) => never;
+	/**
+	 * Your sign-in page's path, starting with `/`.
+	 * @default "/login"
+	 */
+	loginPath?: string | undefined;
+	/**
+	 * How soon before the access token expires `refresh` refreshes it, in
+	 * seconds, as `serverAuth.refreshIfDue` explains.
+	 * @default 60
+	 */
+	within?: number | undefined;
+};
+
+/**
+ * The session in a Next.js app, made by {@link nextSession}: reads and
+ * guards for Server Components, the request's session for Server Functions
+ * and Route Handlers, and the refresh for Proxy.
+ *
+ * @example
+ * ```ts
+ * import type { NextSession } from "@monarcode/session-kit/next";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const session: NextSession<User, User>;
+ *
+ * // app/orders/page.tsx: the user, or the sign-in page.
+ * export default async function Orders() {
+ * 	const { user } = await session.require("/orders");
+ * 	return user.firstName;
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSession<U, I> = {
+	// One mapped type, as `RequestAuth` is.
+	[
+		K in keyof NextSessionMembers<U, I> as K extends "updateUser"
+			? [I] extends [never]
+				? never
+				: K
+			: K
+	]: NextSessionMembers<U, I>[K];
+};
+
+type NextSessionMembers<U, I> = NextSessionBase<U, I> & {
+	/**
+	 * Replaces the signed-in user in the cookie, such as after a profile
+	 * edit, as {@link RequestAuth}'s `updateUser` does over `writable()`. Use
+	 * it in Server Functions and Route Handlers.
+	 */
+	updateUser: (input: I | (() => Promise<I>)) => Promise<Session<U>>;
+};
+
+type NextSessionBase<U, I> = {
+	/**
+	 * Resolves who is signed in, from the cookie, or `null`. It doesn't set
+	 * cookies, so it works in Server Components. Proxy refreshes first.
+	 */
+	get: () => Promise<Session<U> | null>;
+	/**
+	 * Resolves the session, or redirects to the sign-in page with
+	 * `?redirectTo=` set to `path`, the page's own path, as Server Components
+	 * don't know their URL.
+	 *
+	 * Next adds a `basePath` to redirects from pages and Server Functions,
+	 * but not from Route Handlers. With a `basePath`, a Route Handler should
+	 * read the session with `get` and answer 401 instead.
+	 */
+	require: (path: string) => Promise<Session<U>>;
+	/**
+	 * For your sign-in page: redirects a signed-in user to `redirectTo`,
+	 * usually the `redirectTo` search param, made safe with `safeReturnTo`.
+	 * It resolves for a signed-out user, or when the session can't be read.
+	 */
+	redirectIfSignedIn: (redirectTo: unknown) => Promise<void>;
+	/**
+	 * The request's session for Server Components, which doesn't set
+	 * cookies. Read its `credentials` to call your API while rendering.
+	 */
+	readOnly: () => Promise<RequestAuth<U, I>>;
+	/**
+	 * The request's session for Server Functions and Route Handlers, which
+	 * sets cookies. `signIn`, `signOut` and `updateUser` are shortcuts to
+	 * it. Use it for the rest, such as renewing the access token.
+	 */
+	writable: () => Promise<RequestAuth<U, I>>;
+	/**
+	 * Signs in with your backend's tokens, setting the cookie, as
+	 * {@link RequestAuth}'s `signIn` does over `writable()`. Use it in Server
+	 * Functions and Route Handlers.
+	 */
+	signIn: (input: SignInInput<I>) => Promise<Session<U>>;
+	/**
+	 * Signs out and clears the cookie, as {@link RequestAuth}'s `signOut`
+	 * does over `writable()`. Use it in Server Functions and Route Handlers.
+	 */
+	signOut: () => Promise<void>;
+	/**
+	 * For Proxy: refreshes access that expires within `within` seconds,
+	 * setting the new cookie on `response`, and resolves `response`. A
+	 * failed refresh is left for the page, which reads the session as it is.
+	 */
+	refresh: <R extends ProxyResponse>(
+		request: ProxyRequest,
+		response: R,
+	) => Promise<R>;
+};
+
+/**
+ * Gives a Next.js app its session ({@link NextSession}), over {@link nextJar}
+ * and {@link proxyJar}. Make it once, beside `serverAuth`, in a module only
+ * server code imports.
+ *
+ * Server Components read it with `get` and guard pages with `require`.
+ * Server Functions and Route Handlers sign in and out with `signIn` and
+ * `signOut`.
+ * `proxy.ts` refreshes with `refresh`, as rendering can't set cookies.
+ *
+ * Throws `INVALID_OPTIONS` without `cookies` or `redirect`, when
+ * `loginPath` doesn't start with `/`, or when `within` is negative.
+ *
+ * @example
+ * ```ts
+ * import { nextSession } from "@monarcode/session-kit/next";
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { cookies } from "next/headers";
+ * import { redirect } from "next/navigation";
+ * import { NextResponse, type NextRequest } from "next/server";
+ *
+ * type User = { id: number; firstName: string };
+ * declare const serverAuth: ServerAuth<User, User>;
+ *
+ * export const session = nextSession(serverAuth, { cookies, redirect });
+ *
+ * // proxy.ts
+ * export function proxy(request: NextRequest) {
+ * 	return session.refresh(request, NextResponse.next());
+ * }
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function nextSession<U, I>(
+	serverAuth: ServerAuth<U, I>,
+	options: NextSessionOptions,
+): NextSession<U, I> {
+	const cookies = options?.cookies;
+	const redirect = options?.redirect;
+	if (typeof cookies !== "function" || typeof redirect !== "function")
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass cookies from next/headers and redirect from next/navigation",
+		);
+	const loginPath = options.loginPath ?? LOGIN_PATH;
+	// Fails fast on bad options, before any request.
+	loginHref(loginPath, "/");
+	const within = refreshWithin({ within: options.within });
+	const jar = async (writable: boolean) =>
+		nextJar(await cookies(), { writable });
+	const get = async () => serverAuth.getSession(await jar(false));
+	const readOnly = async () => serverAuth.forRequest(await jar(false));
+	const writable = async () => serverAuth.forRequest(await jar(true));
+	const base: NextSessionBase<U, I> = {
+		get,
+		async require(path) {
+			const session = await get();
+			if (session) return session;
+			return redirect(
+				loginHref(loginPath, safeReturnTo(path, { loginPath })),
+			);
+		},
+		async redirectIfSignedIn(redirectTo) {
+			// Outside the catch: Next's `redirect` throws to redirect.
+			if (await get().catch(() => null))
+				redirect(safeReturnTo(redirectTo, { loginPath }));
+		},
+		readOnly,
+		writable,
+		signIn: async (input) => (await writable()).signIn(input),
+		signOut: async () => (await writable()).signOut(),
+		async refresh(request, response) {
+			await refreshBeforeRendering(
+				serverAuth,
+				proxyJar(request, response),
+				within,
+			);
+			return response;
+		},
+	};
+	if (!("updateUser" in serverAuth)) return base as NextSession<U, I>;
+	type Updating = {
+		updateUser: (input: unknown) => Promise<Session<U>>;
+	};
+	return {
+		...base,
+		updateUser: async (input: unknown) =>
+			((await writable()) as unknown as Updating).updateUser(input),
+	} as NextSession<U, I>;
+}
+
+/**
+ * The Route Handlers {@link sessionRoute} makes, for `GET` and `POST`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionRoute } from "@monarcode/session-kit/next";
+ *
+ * declare const route: NextSessionRoute;
+ *
+ * export const { GET, POST } = route;
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionRoute = {
+	GET: (request: Request) => Promise<Response>;
+	POST: (request: Request) => Promise<Response>;
+};
+
+/**
+ * Options for {@link sessionRoute}. Pass Next's own `cookies`, as this entry
+ * point doesn't import `next`.
+ *
+ * @example
+ * ```ts
+ * import type { NextSessionRouteOptions } from "@monarcode/session-kit/next";
+ * import { cookies } from "next/headers";
+ *
+ * export const options: NextSessionRouteOptions = { cookies };
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type NextSessionRouteOptions = {
+	/** `cookies` from `next/headers`. */
+	cookies: () => Promise<NextCookies>;
+};
+
+/**
+ * Makes the Route Handlers for your session route, which answers
+ * `createMirrorAuth`'s `endpoint`: the browser client reads the session,
+ * signs out and gets the access token through it. Pass `cookies` from
+ * `next/headers` ({@link NextSessionRouteOptions}).
+ *
+ * It answers this site's own pages only, as `sessionHandler` from
+ * `@monarcode/session-kit/server` explains, and serves the access token only
+ * when `createServerAuth` has `clientCredentials`. Sign-in stays your own
+ * Server Function.
+ *
+ * Throws `INVALID_OPTIONS` without `cookies`.
+ *
+ * @example
+ * ```ts
+ * import { sessionRoute } from "@monarcode/session-kit/next";
+ * import type { ServerAuth } from "@monarcode/session-kit/server";
+ * import { cookies } from "next/headers";
+ *
+ * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ *
+ * // app/api/session/route.ts
+ * export const { GET, POST } = sessionRoute(serverAuth, { cookies });
+ * ```
+ *
+ * @since 0.1.0
+ */
+export function sessionRoute<U, I>(
+	serverAuth: ServerAuth<U, I>,
+	options: NextSessionRouteOptions,
+): NextSessionRoute {
+	const cookies = options?.cookies;
+	if (typeof cookies !== "function")
+		throw new AuthError(
+			"INVALID_OPTIONS",
+			"Pass cookies from next/headers to sessionRoute",
+		);
+	const handle = handleSession(serverAuth);
+	const route = (request: Request) =>
+		handle(request, async () => nextJar(await cookies(), { writable: true }));
+	return { GET: route, POST: route };
 }

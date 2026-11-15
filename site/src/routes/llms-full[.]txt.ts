@@ -10,6 +10,7 @@ export const Route = createFileRoute("/llms-full.txt")({
 					(await Promise.all(currentPages().map(docsLlms.page))).join(
 						"\n\n",
 					),
+					{ headers: { "Content-Type": "text/plain; charset=utf-8" } },
 				),
 		},
 	},

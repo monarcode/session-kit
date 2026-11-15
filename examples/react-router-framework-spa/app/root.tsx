@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
 
+import { AuthProvider } from "@monarcode/session-kit/react";
 import { useAuthRevalidation } from "@monarcode/session-kit/react-router";
 
 import { auth } from "./auth";
-import { AuthProvider } from "./hooks";
 import { Pending } from "./ui";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 export function Layout({ children }: { children: ReactNode }) {
 	return (

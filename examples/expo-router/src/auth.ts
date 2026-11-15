@@ -1,7 +1,6 @@
 import { createAuth } from "@monarcode/session-kit";
 import { secureStorage } from "@monarcode/session-kit/expo";
 import { createAuthFetch } from "@monarcode/session-kit/http";
-import { createAuthHooks } from "@monarcode/session-kit/react";
 import { z } from "zod";
 
 /** DummyJSON's auth API: https://dummyjson.com/docs/auth */
@@ -29,9 +28,10 @@ export const auth = createAuth({
 	name: "expo-example",
 	user: userSchema,
 	// The iOS keychain, or Keystore-encrypted storage on Android. Two JWTs and
-	// a user exceed SecureStore's 2048-byte value limit, so the value is split
-	// across keys. The defaults are `clearOnReinstall: true` and SecureStore's
-	// own `keychainAccessible` (`WHEN_UNLOCKED`).
+	// a user can pass 2048 bytes, which some iOS releases refuse to store in
+	// one value, so the value is split across keys. The defaults are
+	// `clearOnReinstall: true` and SecureStore's own `keychainAccessible`
+	// (`WHEN_UNLOCKED`).
 	storage: secureStorage(),
 	// Logs restores, refreshes, timers, and the gate's decisions to Metro in
 	// development. Tokens and user fields stay out of the log.
@@ -55,14 +55,11 @@ export const auth = createAuth({
 	},
 });
 
-export const { AuthProvider, useAuth, useAuthClient } =
-	createAuthHooks<typeof auth>();
-
 /**
  * Sends requests to DummyJSON with the access token. After a 401 it
  * refreshes, then replays a GET or HEAD once.
  */
-export const authFetch = createAuthFetch(auth, `${API}/`);
+export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });
 
 /** Signs in with DummyJSON, then saves the tokens and the user it returned. */
 export async function signInWithPassword(username: string, password: string) {

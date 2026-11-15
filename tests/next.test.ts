@@ -3,7 +3,9 @@ import { test } from "node:test";
 
 import {
 	nextJar,
+	nextSession,
 	proxyJar,
+	sessionRoute,
 	type NextCookies,
 } from "@monarcode/session-kit/next";
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -249,4 +251,178 @@ test("a read-only view's renew returns a token the writable jar already renewed"
 		render.credentials.renew(renewed!),
 		code("REFRESH_FAILED"),
 	);
+});
+
+/** What Next's `redirect` throws, standing in for it. */
+class Redirect extends Error {
+	readonly location: string;
+	constructor(location: string) {
+		super(`Redirect to ${location}`);
+		this.location = location;
+	}
+}
+const redirect = (url: string): never => {
+	throw new Redirect(url);
+};
+const redirected = (location: string) => (error: unknown) =>
+	error instanceof Redirect && error.location === location;
+
+test("nextSession reads and guards for Server Components, and writes for Server Functions", async () => {
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(), response);
+	const session = nextSession(serverAuth, {
+		cookies: async () => store,
+		redirect,
+	});
+
+	assert.equal(await session.get(), null);
+	await assert.rejects(
+		session.require("/orders?page=2"),
+		redirected("/login?redirectTo=%2Forders%3Fpage%3D2"),
+	);
+	await session.redirectIfSignedIn("/orders");
+	await assert.rejects(
+		(await session.readOnly()).signIn(tokens()),
+		code("INVALID_OPTIONS"),
+	);
+
+	const signedIn = await (await session.writable()).signIn(tokens());
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	assert.deepEqual(await session.get(), signedIn);
+	assert.deepEqual(await session.require("/orders"), signedIn);
+	assert.equal(
+		(await (await session.readOnly()).credentials.get())?.accessToken,
+		"access-1",
+	);
+	await assert.rejects(
+		session.redirectIfSignedIn("/orders"),
+		redirected("/orders"),
+	);
+	await assert.rejects(
+		session.redirectIfSignedIn("https://evil.test/"),
+		redirected("/"),
+	);
+	await assert.rejects(session.redirectIfSignedIn("/login"), redirected("/"));
+});
+
+test("nextSession's signIn, updateUser and signOut write the cookie", async () => {
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(), response);
+	const session = nextSession(serverAuth, {
+		cookies: async () => store,
+		redirect,
+	});
+	const signedIn = await session.signIn(tokens());
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+	assert.deepEqual(await session.get(), signedIn);
+	const updated = await session.updateUser({
+		...signedIn.user,
+		email: "new@example.com",
+	});
+	assert.equal(updated.sessionId, signedIn.sessionId);
+	assert.equal((await session.get())?.user.email, "new@example.com");
+	await session.signOut();
+	assert.equal(await session.get(), null);
+});
+
+test("nextSession's guards use loginPath, and bad options throw", async () => {
+	const store = actionStore(nextRequest(), NextResponse.next());
+	const cookies = async () => store;
+	const session = nextSession(serverAuth, {
+		cookies,
+		redirect,
+		loginPath: "/sign-in",
+	});
+	await assert.rejects(
+		session.require("/sign-in"),
+		redirected("/sign-in?redirectTo=%2F"),
+	);
+	assert.throws(
+		() => nextSession(serverAuth, {} as never),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() => nextSession(serverAuth, undefined as never),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() => nextSession(serverAuth, { cookies, redirect, loginPath: "login" }),
+		code("INVALID_OPTIONS"),
+	);
+	assert.throws(
+		() => nextSession(serverAuth, { cookies, redirect, within: -1 }),
+		code("INVALID_OPTIONS"),
+	);
+});
+
+test("nextSession's refresh refreshes in Proxy and resolves the response", async () => {
+	const signedIn = NextResponse.next();
+	await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
+		tokens({ expiresIn: 30 }),
+	);
+	const cookies = async () => actionStore(nextRequest(), NextResponse.next());
+
+	refreshes = 0;
+	const early = NextResponse.next();
+	const later = nextSession(serverAuth, { cookies, redirect, within: 10 });
+	assert.equal(await later.refresh(nextRequest(signedIn), early), early);
+	assert.equal(refreshes, 0);
+	assert.deepEqual(early.headers.getSetCookie(), []);
+
+	const response = NextResponse.next();
+	const session = nextSession(serverAuth, { cookies, redirect });
+	assert.equal(
+		await session.refresh(nextRequest(signedIn), response),
+		response,
+	);
+	assert.equal(refreshes, 1);
+	assert.match(response.headers.getSetCookie()[0]!, /^app\.session=1\./);
+
+	const failing = createServerAuth({
+		name: "app",
+		user: userSchema,
+		secret: SECRET,
+		refresh: async () => {
+			throw new Error("backend down");
+		},
+	});
+	const kept = NextResponse.next();
+	assert.equal(
+		await nextSession(failing, { cookies, redirect }).refresh(
+			nextRequest(signedIn),
+			kept,
+		),
+		kept,
+	);
+});
+
+test("sessionRoute answers the browser client in a Route Handler, setting cookies", async () => {
+	const signedIn = NextResponse.next();
+	const session = await serverAuth.signIn(
+		nextJar(actionStore(nextRequest(), signedIn), { writable: true }),
+		tokens(),
+	);
+	const response = NextResponse.next();
+	const store = actionStore(nextRequest(signedIn), response);
+	const { GET, POST } = sessionRoute(serverAuth, {
+		cookies: async () => store,
+	});
+	const toRoute = (method: string, body?: object) =>
+		new Request("https://app.test/api/session", {
+			method,
+			headers: { "Sec-Fetch-Site": "same-origin" },
+			...(body && { body: JSON.stringify(body) }),
+		});
+
+	const read = await GET(toRoute("GET"));
+	assert.deepEqual((await read.json()).session, session);
+	const signedOut = await POST(toRoute("POST", { v: 1, action: "signOut" }));
+	assert.equal(signedOut.status, 200);
+	assert.deepEqual(deleted(response), ["app.session"]);
+	for (const options of [undefined, {}, { cookies: "x" }])
+		assert.throws(
+			() => sessionRoute(serverAuth, options as never),
+			code("INVALID_OPTIONS"),
+		);
 });

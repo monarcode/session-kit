@@ -36,11 +36,11 @@ export function useMountEffect(
  *
  * @example
  * ```ts
+ * import { isSignedIn } from "@monarcode/session-kit";
  * import type { AuthSource } from "@monarcode/session-kit/react";
  *
- * export function isSignedIn(auth: AuthSource): boolean {
- * 	const { status } = auth.state.get();
- * 	return status === "authenticated" || status === "refreshing";
+ * export function signedInNow(auth: AuthSource): boolean {
+ * 	return isSignedIn(auth.state.get());
  * }
  * ```
  *
@@ -148,7 +148,7 @@ export type RetryableSource = AuthSource &
  * }
  *
  * export const layout = (
- * 	<SessionOutlet loginPath="/login" unavailable={SessionUnavailable} />
+ * 	<SessionOutlet unavailable={SessionUnavailable} />
  * );
  * ```
  *

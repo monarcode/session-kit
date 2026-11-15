@@ -4,16 +4,16 @@ import { pathToFileURL } from "node:url";
 
 export function prepareRelease(manifest, changelog, version) {
 	const number = "(?:0|[1-9][0-9]*)";
-	const alpha = new RegExp(
-		`^${number}\\.${number}\\.${number}-alpha\\.${number}$`,
+	const prerelease = new RegExp(
+		`^${number}\\.${number}\\.${number}-(?:alpha|rc)\\.${number}$`,
 	);
 	if (
 		typeof version !== "string" ||
 		version.trim() !== version ||
-		!alpha.test(version)
+		!prerelease.test(version)
 	) {
 		throw new Error(
-			"Use an alpha version such as 0.1.0-alpha.1, without a v prefix.",
+			"Use a prerelease version such as 0.1.0-rc.0, without a v prefix.",
 		);
 	}
 	if (manifest.version !== version)

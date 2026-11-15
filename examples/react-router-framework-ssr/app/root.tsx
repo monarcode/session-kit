@@ -11,19 +11,34 @@ import {
 	type LoaderFunctionArgs,
 } from "react-router";
 
-import { useMirrorAuth } from "@monarcode/session-kit/react";
-import { routerJar } from "@monarcode/session-kit/react-router/server";
+import { AuthProvider, useMirrorAuth } from "@monarcode/session-kit/react";
+import { sessionMiddleware } from "@monarcode/session-kit/react-router/server";
 
-import { createAppAuth } from "./auth/client";
-import { sessionMiddleware } from "./auth/middleware.server";
-import { serverAuth } from "./auth/session.server";
-import { AuthProvider } from "./hooks";
+import { createAppAuth, type AppAuth } from "./auth/client";
+import { auth, serverAuth } from "./auth/session.server";
 
-export const middleware = sessionMiddleware;
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: AppAuth;
+	}
+}
+
+/**
+ * Gives each request its cookies, then refreshes access that is about to
+ * expire before loaders and actions read it, while the response can still
+ * set the cookie. Every response is marked private, as each one depends on
+ * who is signed in.
+ */
+export const middleware = sessionMiddleware(serverAuth, {
+	// The example's tokens live a minute: refresh in their last 15 seconds.
+	within: 15,
+});
 
 /** Who is signed in, from the cookie. Holds no tokens. */
 export async function loader({ context }: LoaderFunctionArgs) {
-	return { session: await serverAuth.getSession(routerJar(context)) };
+	return { session: await auth(context).getSession() };
 }
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -57,7 +72,11 @@ export function Layout({ children }: { children: ReactNode }) {
 export default function App() {
 	const { session } = useLoaderData<typeof loader>();
 	const { revalidate } = useRevalidator();
-	const auth = useMirrorAuth(createAppAuth, session, revalidate);
+	const auth = useMirrorAuth({
+		create: createAppAuth,
+		session,
+		onChange: revalidate,
+	});
 	return (
 		<AuthProvider client={auth}>
 			<Outlet />

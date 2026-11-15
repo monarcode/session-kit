@@ -1,27 +1,21 @@
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
+import { refreshSession } from "@monarcode/session-kit/tanstack-start/server";
 import {
 	createCsrfMiddleware,
 	createMiddleware,
 	createStart,
 } from "@tanstack/react-start";
-import { setResponseHeader } from "@tanstack/react-start/server";
 
 import { serverAuth } from "./auth/server";
 
 /**
  * Refreshes access that is about to expire before routes and server
- * functions read it, while the response can still set the cookie. A failed
- * refresh is left for the route: `loadSession` then rejects, and the root
- * route's error component offers a retry.
+ * functions read it, while the response can still set the cookie. Start
+ * keeps what's inside `.server()` out of the browser bundle, `serverAuth`
+ * included.
  */
 const sessionMiddleware = createMiddleware({ type: "request" }).server(
-	async ({ next }) => {
-		// Every page and server function here depends on who is signed in.
-		setResponseHeader("Cache-Control", "private, no-store");
-		// The example's tokens live a minute: refresh in their last 15 seconds.
-		await serverAuth.refreshIfDue(startJar(), { within: 15 }).catch(() => {});
-		return next();
-	},
+	// The example's tokens live a minute: refresh in their last 15 seconds.
+	refreshSession(serverAuth, { within: 15 }),
 );
 
 export const startInstance = createStart(() => ({

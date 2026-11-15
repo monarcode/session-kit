@@ -4,10 +4,9 @@ description: Build a small app that signs in, stays signed in across reloads and
 ---
 
 In this guide, you build a small React app that signs in, stays signed in
-across reloads and tabs, calls an API, and signs out. The six steps are the
-same for every setup that keeps the session in the browser or on the device.
-Server-rendered apps create their client differently, so start from
-[Server rendering](/docs/server-rendering) instead.
+across reloads and tabs, calls an API, and signs out. The web router guides
+build on this app. Server-rendered apps create their client differently, so
+start from [Server rendering](/docs/server-rendering) instead.
 
 The code signs in against
 [DummyJSON's auth API](https://dummyjson.com/docs/auth), a public test
@@ -15,7 +14,7 @@ backend, so it runs as written.
 
 ## Before you begin
 
-Install Session kit, Zod, and React, as
+In a React app, install Session kit and Zod, as
 [Installation](/docs/installation) shows.
 
 ## 1. Talk to your backend
@@ -71,7 +70,7 @@ export async function refresh(refreshToken: string, signal: AbortSignal) {
 }
 ```
 
-The schemas do two jobs: they check what the backend sent, and they give the
+The schemas do two jobs. They check what the backend sent, and they give the
 rest of the app its types. Requests omit `credentials: "include"`, because
 Session kit keeps tokens out of cookies and attaches them itself.
 
@@ -98,7 +97,8 @@ export const auth = createAuth({
 
 /** Signs in with the backend, then hands the result to Session kit. */
 export async function signInWithPassword(username: string, password: string) {
-  await auth.signIn(await login(username, password));
+  const tokens = await login(username, password);
+  await auth.signIn(tokens);
 }
 
 export type AppAuth = typeof auth;
@@ -111,7 +111,8 @@ doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the
 details, and [Storage](/docs/configuration/storage) lists the other places a
 session can be saved.
 
-Create one client per `name` in each tab, once, as this module does.
+Create the client once, at module level, as this file does. Give each client
+in an app its own `name`.
 
 DummyJSON's tokens are JWTs, so their expiry comes from the `exp` and `iat`
 claims. [Expiry](/docs/configuration/expiry) covers backends that say it
@@ -127,7 +128,7 @@ import { useState, type FormEvent } from "react";
 
 import { signInWithPassword } from "./auth.js";
 
-export function SignIn({ onSignedIn }: { onSignedIn?: () => unknown }) {
+export function SignIn() {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
 
@@ -141,7 +142,6 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => unknown }) {
         String(form.get("username")),
         String(form.get("password")),
       );
-      await onSignedIn?.();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not sign in");
     } finally {
@@ -173,32 +173,35 @@ export function SignIn({ onSignedIn }: { onSignedIn?: () => unknown }) {
 }
 ```
 
-The form doesn't have to do anything when it succeeds: signing in changes the
-client's state, and the next step renders from that state. `onSignedIn` is for
-routers, which use it to send the user on to the page they asked for.
+The form doesn't have to do anything when it succeeds. Signing in changes the
+client's state, and the next step renders from that state. With a router, the
+sign-in page's guard runs again and sends the user on.
 
 ## 4. Read the session in React
 
-Create the hooks once, typed by your client, and export them for every
-component to share:
-
-```ts title="src/hooks.ts"
-import { createAuthHooks } from "@monarcode/session-kit/react";
-
-import type { auth } from "./auth.js";
-
-export const { AuthProvider, useAuth, useAuthClient } =
-  createAuthHooks<typeof auth>();
-```
+The hooks come from `@monarcode/session-kit/react`. Register your client's
+type once, where you render `AuthProvider`, and they carry your user.
 
 Then render by `status`. Each case is one of the states in
 [How it works](/docs#how-it-works). By the last case, TypeScript has narrowed
 `user` to a value that's set:
 
 ```tsx title="src/app.tsx"
+import {
+  AuthProvider,
+  useAuth,
+  useAuthClient,
+} from "@monarcode/session-kit/react";
+
 import { auth } from "./auth.js";
-import { AuthProvider, useAuth, useAuthClient } from "./hooks.js";
 import { SignIn } from "./sign-in.js";
+
+// Types `AuthProvider` and the hooks with this client.
+declare module "@monarcode/session-kit" {
+  interface Register {
+    auth: typeof auth;
+  }
+}
 
 export function App() {
   return (
@@ -245,16 +248,23 @@ function AuthError() {
 }
 ```
 
-- `AuthProvider` mounts the client: it restores the saved session, starts the
+Each part of this file has a job:
+
+- `AuthProvider` mounts the client. It restores the saved session, starts the
   refresh timer, and follows other tabs.
 - `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
   it, and re-renders only when that part changes, as `AuthError` does.
 - `useAuthClient()` returns the client, for actions.
+- With more than one client in an app, create hooks for each with
+  `createAuthHooks<typeof client>()` instead.
+- `isSignedIn(state)` is `true` while `authenticated` or `refreshing`. Pass it
+  to `useAuth` to read only that: `useAuth(isSignedIn)`. It comes from
+  `@monarcode/session-kit`.
 - `retry` and `signOut` reject when they fail, and publish the same failure in
   `state.error`. `AuthError` shows it, so the handlers have nothing left to
   do.
 
-With [`locking`](/docs/client/locking), give `locked` a case of its own: it
+With [`locking`](/docs/client/locking), give `locked` a case of its own. It
 has a user too, but no usable access.
 
 That's a working app. To check it:
@@ -275,7 +285,7 @@ import { createAuthFetch } from "@monarcode/session-kit/http";
 import { auth } from "./auth.js";
 import { API, userSchema } from "./backend.js";
 
-export const authFetch = createAuthFetch(auth, `${API}/`);
+export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });
 
 /** The signed-in user, fresh from the backend. */
 export async function fetchProfile() {
@@ -290,6 +300,9 @@ again. Other methods are never sent twice.
 [Authenticated requests](/docs/client/requests) covers the rest of its
 behaviour and its options.
 
+Using ky, axios or openapi-fetch? Pass `authFetch` as the client's `fetch`:
+see [Other HTTP clients](/docs/client/other-http-clients).
+
 ## 6. Protect your routes
 
 The client is the same everywhere. What changes is how each router keeps
@@ -300,8 +313,9 @@ your router:
   [TanStack Start in SPA mode](/docs/setups/tanstack-router#tanstack-start-in-spa-mode).
 - [React Router](/docs/setups/react-router), in declarative, data, or
   framework mode with `ssr: false`.
-- [Expo Router](/docs/setups/expo), for iOS and Android.
-- Without a router, you are done: render by `status`, as `Screen` does.
+- [Expo Router](/docs/setups/expo), for iOS and Android. Its guide starts from
+  scratch.
+- Without a router, you are done. Render by `status`, as `Screen` does.
 
 With Effect, the same client becomes a service: see
 [Effect and effetch](/docs/effect).

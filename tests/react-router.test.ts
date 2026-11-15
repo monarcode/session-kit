@@ -47,13 +47,7 @@ function Root() {
 }
 
 /** A sign-in route loader that sends a signed-in user on to `redirectTo`. */
-const loginLoader =
-	(auth: Client) =>
-	async ({ request }: { request: Request }) => {
-		const redirectTo = new URL(request.url).searchParams.get("redirectTo");
-		await binding.redirectIfSignedIn(auth, { redirectTo });
-		return null;
-	};
+const loginLoader = (auth: Client) => binding.redirectIfSignedInLoader(auth);
 
 /** A home page that counts its mounts and shows the user's email. */
 const homePage = (
@@ -254,7 +248,7 @@ test("data mode: StrictMode lets a loader's refresh finish and sends the token o
 								request,
 								loginPath: "/login",
 							}),
-						element: h(binding.SessionOutlet, { loginPath: "/login" }),
+						element: h(binding.SessionOutlet, {}),
 						children: [{ index: true, element: "home" }],
 					},
 				],
@@ -290,7 +284,7 @@ test("declarative mode: SessionOutlet sends signed-out users to sign in", async 
 					h(
 						Route,
 						{
-							element: h(binding.SessionOutlet, { loginPath: "/login" }),
+							element: h(binding.SessionOutlet, {}),
 						},
 						h(Route, { path: "/private", element: "private" }),
 					),
@@ -416,20 +410,90 @@ test("data mode: loaders guard routes and re-run when auth changes", async () =>
 	assert.equal(view.container.textContent, "home:alice@example.com");
 });
 
-test("loader guards redirect with the requested URL and never leave the site", async () => {
+test("requireSessionLoader and redirectIfSignedInLoader make the loaders", async () => {
 	const auth = newClient();
 	await auth.getSession();
-	const request = new Request("https://auth.test/private?tab=2#top");
-	const redirected = await binding
-		.requireSession(auth, { request, loginPath: "/login" })
+	const request = new Request("https://auth.test/app/private?tab=2");
+	const guard = binding.requireSessionLoader(auth, { basename: "/app" });
+	const redirected = await guard({ request }).then(
+		() => assert.fail("Expected a redirect"),
+		(response: Response) => response,
+	);
+	assert.equal(
+		redirected.headers.get("Location"),
+		"/login?redirectTo=%2Fprivate%3Ftab%3D2",
+	);
+	await signIn(auth);
+	assert.deepEqual(
+		(await guard({ request })).session,
+		await auth.getSession(),
+	);
+	assert.throws(
+		() => binding.redirectIfSignedInLoader(auth, { loginPath: "login" }),
+		{ code: "INVALID_OPTIONS" },
+	);
+	const signInPage = binding.redirectIfSignedInLoader(auth, {
+		loginPath: ["/login", "/sign-up"],
+	});
+	for (const [redirectTo, to] of [
+		["/orders", "/orders"],
+		["/sign-up", "/"],
+	] as const) {
+		const away = await signInPage({
+			request: new Request(
+				`https://auth.test/login?redirectTo=${encodeURIComponent(redirectTo)}`,
+			),
+		}).then(
+			() => assert.fail("Expected a redirect"),
+			(response: Response) => response,
+		);
+		assert.equal(away.headers.get("Location"), to);
+	}
+	await auth.signOut();
+	assert.equal(
+		await signInPage({ request: new Request("https://auth.test/login") }),
+		null,
+	);
+	assert.throws(
+		() => binding.requireSessionLoader(auth, { loginPath: "login" }),
+		{
+			code: "INVALID_OPTIONS",
+		},
+	);
+	assert.throws(
+		() => binding.requireSessionLoader(auth, { basename: "app" }),
+		{
+			code: "INVALID_OPTIONS",
+		},
+	);
+	const elsewhere = await binding
+		.requireSessionLoader(auth, { loginPath: "/sign-in" })({ request })
 		.then(
 			() => assert.fail("Expected a redirect"),
 			(response: Response) => response,
 		);
+	assert.equal(
+		elsewhere.headers.get("Location"),
+		"/sign-in?redirectTo=%2Fapp%2Fprivate%3Ftab%3D2",
+	);
+});
+
+test("loader guards redirect with the requested URL and never leave the site", async () => {
+	const auth = newClient();
+	await auth.getSession();
+	const request = new Request("https://auth.test/private?tab=2#top");
+	const redirected = await binding.requireSession(auth, { request }).then(
+		() => assert.fail("Expected a redirect"),
+		(response: Response) => response,
+	);
 	assert.equal(redirected.status, 302);
 	assert.equal(
 		redirected.headers.get("Location"),
 		"/login?redirectTo=%2Fprivate%3Ftab%3D2%23top",
+	);
+	await assert.rejects(
+		binding.redirectIfSignedIn(auth, { redirectTo: "/", loginPath: "login" }),
+		{ code: "INVALID_OPTIONS" },
 	);
 	await signIn(auth);
 	const { session } = await binding.requireSession(auth, {

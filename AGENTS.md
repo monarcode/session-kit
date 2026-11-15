@@ -82,7 +82,9 @@ Consumers import from the root and from subpaths:
   (`INVALID_OPTIONS`). Wrap a failure at the operation's boundary with
   `toAuthError(code, message, cause)`, where the operation knows its code;
   a `cause` is whatever failed, and doesn't need to be an `AuthError`.
-  `fetch`'s and `Request`'s own failures pass through `authFetch`.
+  `fetch`'s and `Request`'s own failures pass through `authFetch`, and the
+  app's own sign-in errors pass through a `createMirrorAuth` client's
+  `signIn`.
 - Source imports use explicit `.js` extensions. Because
   `exactOptionalPropertyTypes` is on, write optional props as
   `foo?: T | undefined`. `readonly` is a separate, per-type choice: outputs
@@ -168,9 +170,12 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   `scripts/docs-pages.mjs`, which the site also reads for type hovers, and
   a page that builds on Getting started lists the files it uses as `shared`.
   A new page with titled examples fails the check until it's listed.
-- A README example marked `<!-- from: site/content/docs/(latest)/page.mdx -->`
-  is an excerpt of that page's examples, and the check fails when the two
-  differ: edit the page, then copy.
+- The README's quick start is its own small app: each block marked
+  `<!-- file: src/auth.ts -->` is a file, compiled together like a page's
+  (`README.md` in `documents`). A README example marked
+  `<!-- from: site/content/docs/(latest)/page.mdx -->` is an excerpt of that
+  page's examples instead, and the check fails when the two differ: edit the
+  page, then copy.
 - The reference pages in `site/content/docs/(latest)/reference/` (one per
   entry point, and the error codes) are generated from the JSDoc by
   `pnpm run docs:reference`, except the entry points index and

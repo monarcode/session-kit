@@ -14,7 +14,13 @@ import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { nextJar, proxyJar } from "@monarcode/session-kit/next";
-import { createAuthHooks, useMirrorAuth } from "@monarcode/session-kit/react";
+import {
+	AuthProvider,
+	createAuthHooks,
+	useAuth,
+	useAuthClient,
+	useMirrorAuth,
+} from "@monarcode/session-kit/react";
 import {
 	requireSession as requireLoaderSession,
 	SessionOutlet as RouterSessionOutlet,
@@ -22,6 +28,7 @@ import {
 } from "@monarcode/session-kit/react-router";
 import {
 	cookieJarMiddleware,
+	routerAuth,
 	routerJar,
 } from "@monarcode/session-kit/react-router/server";
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -30,13 +37,17 @@ import {
 	redirectIfSignedIn,
 	requireSession,
 	SessionOutlet,
-	useRouterAuth,
+	useAuth as useRouterState,
+	useAuthClient as useRouterClient,
 } from "@monarcode/session-kit/tanstack-router";
 import {
+	connectSession,
 	loadSession,
-	sessionHydration,
 } from "@monarcode/session-kit/tanstack-start";
-import { startJar } from "@monarcode/session-kit/tanstack-start/server";
+import {
+	startAuth,
+	startJar,
+} from "@monarcode/session-kit/tanstack-start/server";
 
 const packageRoot = new URL("../", import.meta.url);
 
@@ -49,22 +60,28 @@ test("all public entry points import without browser globals", () => {
 		webStorage,
 		createServerAuth,
 		loadSession,
-		sessionHydration,
+		connectSession,
 		startJar,
+		startAuth,
 		nextJar,
 		proxyJar,
 		useMirrorAuth,
 		createAuthHooks,
+		AuthProvider,
+		useAuth,
+		useAuthClient,
 		connectAuth,
 		requireSession,
 		redirectIfSignedIn,
 		SessionOutlet,
-		useRouterAuth,
+		useRouterState,
+		useRouterClient,
 		requireLoaderSession,
 		RouterSessionOutlet,
 		useAuthRevalidation,
 		cookieJarMiddleware,
 		routerJar,
+		routerAuth,
 		createAuthFetch,
 		Auth,
 		AuthFailure,
@@ -161,6 +178,58 @@ test("TanStack Router declarations retain consumer Router registration", async (
 		"utf8",
 	);
 	assert.match(declarations, /Register extends/);
-	assert.match(declarations, /useRouterAuth\(\): RegisteredAuth/);
-	assert.doesNotMatch(declarations, /useRouterAuth\(\): any/);
+	assert.match(declarations, /useAuthClient\(\): RouterAuth/);
+	assert.doesNotMatch(declarations, /useAuthClient\(\): any/);
+});
+
+test("declaration files can name a token user's server session types", async () => {
+	const ts = (await import("typescript")).default;
+	// Not written to disk: the host below serves it.
+	const file = new URL("./declarations.ts", import.meta.url).pathname;
+	const source = `
+import { fromAccessToken } from "@monarcode/session-kit";
+import { nextSession } from "@monarcode/session-kit/next";
+import { createServerAuth, type CookieJar } from "@monarcode/session-kit/server";
+import { z } from "zod";
+
+export const serverAuth = createServerAuth({
+	name: "app",
+	user: fromAccessToken(z.object({ sub: z.string() })),
+	secret: "a-type-test-secret-that-is-32-chars-long",
+});
+declare const jar: CookieJar;
+export const requestSession = serverAuth.forRequest(jar);
+declare const cookies: () => Promise<never>;
+declare const redirect: (url: string) => never;
+export const session = nextSession(serverAuth, { cookies, redirect });
+`;
+	const options = {
+		strict: true,
+		target: ts.ScriptTarget.ES2022,
+		module: ts.ModuleKind.NodeNext,
+		moduleResolution: ts.ModuleResolutionKind.NodeNext,
+		declaration: true,
+		emitDeclarationOnly: true,
+		skipLibCheck: true,
+		types: [],
+	};
+	const host = ts.createCompilerHost(options);
+	const { fileExists, readFile } = host;
+	host.fileExists = (name) => name === file || fileExists(name);
+	host.readFile = (name) => (name === file ? source : readFile(name));
+	let declarations = "";
+	host.writeFile = (_name, text) => {
+		declarations = text;
+	};
+	const program = ts.createProgram([file], options, host);
+	const emitted = program.emit();
+	const errors = [
+		...ts.getPreEmitDiagnostics(program),
+		...emitted.diagnostics,
+	].map((diagnostic) =>
+		ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"),
+	);
+	assert.deepEqual(errors, []);
+	for (const name of ["ServerAuth<", "RequestAuth<", "NextSession<"])
+		assert.ok(declarations.includes(name), `${name} in ${declarations}`);
 });

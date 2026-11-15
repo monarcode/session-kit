@@ -143,6 +143,7 @@ function useAccountKey(sessionId: string | null): number {
  * for after sign-in.
  *
  * Render it inside `AuthProvider`, or pass a `client`, which it mounts.
+ * Without either, it throws `INVALID_OPTIONS`.
  *
  * - **While the session is restored**, and until `ready`, it renders
  *   nothing, so the splash screen stays up, and hides the splash screen once
@@ -156,7 +157,9 @@ function useAccountKey(sessionId: string | null): number {
  *   unlock screen. Neither unlocking nor a password sign-in from the lock
  *   screen remounts the navigator.
  * - **When the app returns to the foreground** it re-checks the session,
- *   because timers don't run while iOS suspends the app.
+ *   because timers don't run while iOS suspends the app. An access token that
+ *   expired meanwhile is refreshed. A refresh that already failed stays
+ *   failed until `retry()`.
  * - **After a sign-in or unlock** it opens the deep link
  *   `rememberDeepLink` kept, with `router.replace`, once `ready`.
  * - **When one account replaces another** without a sign-out between them, it
@@ -167,32 +170,32 @@ function useAccountKey(sessionId: string | null): number {
  * @example
  * ```tsx
  * // Rendered inside `AuthProvider` in app/_layout.tsx.
- * import type { AuthClient } from "@monarcode/session-kit";
+ * import { isSignedIn } from "@monarcode/session-kit";
  * import { SessionGate } from "@monarcode/session-kit/expo";
- * import { createAuthHooks } from "@monarcode/session-kit/react";
+ * import { useAuth } from "@monarcode/session-kit/react";
  * import { SplashScreen, Stack } from "expo-router";
- *
- * declare const auth: AuthClient<{ name: string }, { name: string }>;
- * const { useAuth } = createAuthHooks<typeof auth>();
  *
  * void SplashScreen.preventAutoHideAsync();
  *
  * export function RootNavigator() {
- * 	// `status`, not `user`: a locked session keeps its user.
- * 	const signedIn = useAuth(
- * 		({ status }) => status === "authenticated" || status === "refreshing",
- * 	);
  * 	return (
  * 		<SessionGate>
- * 			<Stack>
- * 				<Stack.Protected guard={signedIn}>
- * 					<Stack.Screen name="(app)" />
- * 				</Stack.Protected>
- * 				<Stack.Protected guard={!signedIn}>
- * 					<Stack.Screen name="login" />
- * 				</Stack.Protected>
- * 			</Stack>
+ * 			<RootStack />
  * 		</SessionGate>
+ * 	);
+ * }
+ *
+ * function RootStack() {
+ * 	const signedIn = useAuth(isSignedIn);
+ * 	return (
+ * 		<Stack>
+ * 			<Stack.Protected guard={signedIn}>
+ * 				<Stack.Screen name="(app)" />
+ * 			</Stack.Protected>
+ * 			<Stack.Protected guard={!signedIn}>
+ * 				<Stack.Screen name="login" />
+ * 			</Stack.Protected>
+ * 		</Stack>
  * 	);
  * }
  * ```

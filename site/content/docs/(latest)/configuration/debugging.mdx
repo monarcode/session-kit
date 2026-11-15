@@ -44,7 +44,7 @@ export const debug: AuthDebug = (event) =>
 
 Events leave out tokens, saved values and the user's fields. A session
 appears as its `sessionId`, and an error as its code and message, without
-its `cause`.
+its `cause` or `issues`.
 
 To include them, pass `{ sensitive: true }`. Anyone who reads such logs can
 act as the user, so keep it to development builds. To set both, pass

@@ -23,7 +23,11 @@ import { createAuthHooks } from "@monarcode/session-kit/react";
 
 import { deferredStorage } from "./deferred-storage.ts";
 import { act, render, settle, user, userSchema, useDom } from "./dom.ts";
-import { rememberDeepLink, SessionGate } from "./expo-modules.ts";
+import {
+	deepLinkHandler,
+	rememberDeepLink,
+	SessionGate,
+} from "./expo-modules.ts";
 import { lockable } from "./helpers.ts";
 import { navigation } from "./mocks/expo-router.ts";
 import { appState } from "./mocks/react-native.ts";
@@ -218,6 +222,39 @@ test("opens a link kept while signed out, once, after the sign-in", async () => 
 	await act(async () => navigation.go("/login"));
 	await act(() => auth.signIn({ accessToken: "access-2", user }));
 	assert.equal(navigation.replaced.length, 1);
+});
+
+test("deepLinkHandler remembers each link and returns its path", async () => {
+	const auth = newClient();
+	const redirectSystemPath = deepLinkHandler(auth, { loginPath: "/sign-in" });
+	navigation.go("/sign-in");
+	await renderGate(auth);
+	let returned = "";
+	await act(async () => {
+		returned = redirectSystemPath({
+			path: "myapp://orders/7",
+			initial: false,
+		});
+	});
+	assert.equal(returned, "myapp://orders/7");
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, ["/orders/7"]);
+	assert.throws(
+		() => deepLinkHandler(auth, { loginPath: "sign-in" }),
+		(error: AuthError) => error.code === "INVALID_OPTIONS",
+	);
+});
+
+test("deepLinkHandler without options drops links to /login", async () => {
+	const auth = newClient();
+	const redirectSystemPath = deepLinkHandler(auth);
+	navigation.go("/login");
+	await renderGate(auth);
+	await act(async () => {
+		redirectSystemPath({ path: "myapp://login", initial: true });
+	});
+	await act(() => auth.signIn({ accessToken: "access-1", user }));
+	assert.deepEqual(navigation.replaced, []);
 });
 
 test("keeps a link that arrived before the session was restored", async () => {

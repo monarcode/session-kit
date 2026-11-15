@@ -7,8 +7,11 @@ import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 
-import { AuthError } from "../core/errors.js";
-import type { AuthClient, Credentials } from "../core/types.js";
+import { AuthError, toAuthError } from "../core/errors.js";
+import type { SessionOf, UserOf } from "../core/infer.js";
+import type { Register, RegisteredAuth } from "../core/register.js";
+import { boundSession, REQUEST_SESSION } from "../core/request-session.js";
+import type { Credentials } from "../core/types.js";
 import type { RequestAuth } from "../server/auth.js";
 import {
 	type AuthFailure,
@@ -16,63 +19,6 @@ import {
 	fromPromise,
 	unauthenticated,
 } from "./failure.js";
-
-/**
- * Register your client's type here, once, so `Auth`'s Effects carry your
- * user. Without it, the user is typed `unknown`. The same registration
- * types `Auth` on the server, where {@link Auth.layer} takes a
- * `serverAuth.forRequest(jar)` view.
- *
- * @example
- * ```ts
- * import { createAuth, memoryStorage } from "@monarcode/session-kit";
- * import { Auth } from "@monarcode/session-kit/effect";
- * import { z } from "zod";
- *
- * export const auth = createAuth({
- * 	name: "app",
- * 	user: z.object({ id: z.string(), name: z.string() }),
- * 	storage: memoryStorage(),
- * });
- *
- * declare module "@monarcode/session-kit/effect" {
- * 	interface Register {
- * 		auth: typeof auth;
- * 	}
- * }
- *
- * export const AuthLive = Auth.layer(auth);
- * ```
- *
- * @example
- * A `createMirrorAuth` client, made per request with server rendering,
- * registers its type the same way:
- * ```ts
- * import { createMirrorAuth, type Session } from "@monarcode/session-kit";
- * import { Auth } from "@monarcode/session-kit/effect";
- *
- * declare function getSessionFn(): Promise<Session<{ id: number }> | null>;
- *
- * export const createAppAuth = () =>
- * 	createMirrorAuth({
- * 		name: "app",
- * 		session: null,
- * 		revalidate: getSessionFn,
- * 		signOut: async () => {},
- * 	});
- *
- * declare module "@monarcode/session-kit/effect" {
- * 	interface Register {
- * 		auth: ReturnType<typeof createAppAuth>;
- * 	}
- * }
- *
- * export const layer = () => Auth.layer(createAppAuth());
- * ```
- *
- * @since 0.1.0
- */
-export interface Register {}
 
 /**
  * What `Auth` needs from a client. Any `createAuth` or `createMirrorAuth`
@@ -115,51 +61,31 @@ export type AuthServiceClient = {
 };
 
 /**
- * The client registered in {@link Register}, or a client with an `unknown`
- * user when none is.
- *
- * @example
- * ```ts
- * import type { RegisteredAuth } from "@monarcode/session-kit/effect";
- *
- * declare const client: RegisteredAuth;
- * export const status = client.state.get().status;
- * ```
- *
- * @since 0.1.0
- */
-export type RegisteredAuth = Register extends {
-	readonly auth: infer Client extends AuthServiceClient;
-}
-	? Client
-	: AuthClient<unknown, unknown>;
-
-/**
  * What {@link Auth.layer} takes. Once you register a client in
- * {@link Register}, that's your client, or on the server a
- * `serverAuth.forRequest(jar)` view with the same user. Until then, it's any
+ * {@link Register}, that's your client, or on the server a request's session
+ * with the same user (`RequestAuth`). Until then, it's any
  * {@link AuthServiceClient}.
  *
  * @example
  * ```ts
  * import { Auth, type AuthLayerClient } from "@monarcode/session-kit/effect";
  *
- * // Takes the browser client or one request's view on the server.
+ * // Takes the browser client, or one request's session on the server.
  * export const provideAuth = (client: AuthLayerClient) => Auth.layer(client);
  * ```
  *
  * @since 0.1.0
  */
 export type AuthLayerClient = Register extends {
-	readonly auth: AuthServiceClient;
+	readonly auth: object;
 }
 	?
 			| RegisteredAuth
-			| RequestAuth<
-					RegisteredSession extends { readonly user: infer U }
-						? U
-						: unknown
-			  >
+			// A request's session with the registered user, whatever its
+			// `signIn` takes: `any` accepts every input, `never` the servers
+			// that read the user from the access token.
+			| RequestAuth<UserOf<RegisteredAuth>, any>
+			| RequestAuth<UserOf<RegisteredAuth>, never>
 	: AuthServiceClient;
 
 /**
@@ -175,19 +101,18 @@ export type AuthLayerClient = Register extends {
  *
  * @since 0.1.0
  */
-export type RegisteredSession = NonNullable<
-	Awaited<ReturnType<RegisteredAuth["getSession"]>>
->;
+export type RegisteredSession = SessionOf<RegisteredAuth>;
 
 /**
  * Your registered client's `AuthState`, as {@link Auth.changes} emits it.
  *
  * @example
  * ```ts
+ * import { isSignedIn } from "@monarcode/session-kit";
  * import type { RegisteredState } from "@monarcode/session-kit/effect";
  *
- * export const signedIn = (state: RegisteredState) =>
- * 	state.status === "authenticated" || state.status === "refreshing";
+ * export const signedInUser = (state: RegisteredState) =>
+ * 	isSignedIn(state) ? state.user : null;
  * ```
  *
  * @since 0.1.0
@@ -241,8 +166,8 @@ export type RegisteredUserInput = RegisteredAuth extends {
  * an access token for API calls, sign in and out, update the user, and
  * stream state changes.
  *
- * Provide it with {@link Auth.layer}. Register your client's type in
- * {@link Register} so the Effects carry your user.
+ * Provide it with {@link Auth.layer}. Register your client's type in the
+ * main entry point's {@link Register}, so the Effects carry your user.
  *
  * Each Effect fails with an {@link AuthFailure} whose `code` is the client's
  * `AuthErrorCode`. An Effect dies on misuse (`INVALID_OPTIONS`).
@@ -272,21 +197,19 @@ export type RegisteredUserInput = RegisteredAuth extends {
  * ```
  *
  * @example
- * On the server, each request provides its own session, from
- * `serverAuth.forRequest(jar)`. Build what uses it per request too:
+ * On the server, each request provides its own session (`RequestAuth`),
+ * such as one from `startAuth`. Build what uses it per request too:
  * ```ts
  * import * as Effect from "effect/Effect";
  * import { Auth } from "@monarcode/session-kit/effect";
- * import type { CookieJar, ServerAuth } from "@monarcode/session-kit/server";
+ * import type { RequestAuth } from "@monarcode/session-kit/server";
  *
- * declare const serverAuth: ServerAuth<{ id: number }, { id: number }>;
+ * declare const session: RequestAuth<{ id: number }, { id: number }>;
  *
- * const program = Effect.map(Auth.session, (session) => session.sessionId);
+ * const program = Effect.map(Auth.session, (current) => current.sessionId);
  *
- * export const sessionId = (jar: CookieJar) =>
- * 	Effect.runPromise(
- * 		Effect.provide(program, Auth.layer(serverAuth.forRequest(jar))),
- * 	);
+ * export const sessionId = () =>
+ * 	Effect.runPromise(Effect.provide(program, Auth.layer(session)));
  * ```
  *
  * @since 0.1.0
@@ -297,13 +220,19 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	/**
 	 * Provides `client` as the {@link Auth} service.
 	 *
-	 * On the server, pass `serverAuth.forRequest(jar)`, and provide it per
-	 * request with the services that use it. Never put it in a runtime that
-	 * every request shares. A request's view has only what `Auth`'s Effects
-	 * use, so don't reach for other client methods through `Auth.use` there.
+	 * On the server, pass the request's session, and provide it per request
+	 * with the services that use it. Never put it in a runtime that every
+	 * request shares. A session from `startAuth` is bound to the request that
+	 * is current when you call this. Outside a request, it throws
+	 * `INVALID_OPTIONS`.
+	 *
+	 * A request's session isn't your browser client, so use only `Auth`'s
+	 * Effects there, not other client methods through `Auth.use`.
 	 */
 	static readonly layer = (client: AuthLayerClient): Layer.Layer<Auth> =>
-		Layer.succeed(Auth, client as RegisteredAuth);
+		// Bound now, in the caller's request: inside a fiber, the current
+		// request may not be the one the Effect runs for.
+		Layer.succeed(Auth, (boundSession(client) ?? client) as RegisteredAuth);
 
 	/**
 	 * The current session, refreshed first if the access token expired, as
@@ -365,7 +294,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * with a 401. Calls at the same time share one refresh.
 	 *
 	 * Fails with `UNAUTHENTICATED` when the session ended instead, and with
-	 * `SESSION_CHANGED` when another session replaced it.
+	 * `SESSION_CHANGED` when another session replaced it. It fails with
+	 * `LOCKED` while locked, and with the refresh's own failure, such as
+	 * `REFRESH_FAILED`.
 	 *
 	 * `sessionBearer` from `@monarcode/session-kit/effetch` renews on a 401
 	 * by itself.
@@ -388,25 +319,43 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * example after a login request.
 	 *
 	 * Fails with `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
-	 * `PERSISTENCE_FAILED` or `SESSION_CHANGED`.
+	 * `PERSISTENCE_FAILED` or `SESSION_CHANGED`. With a `createMirrorAuth`
+	 * client, an error your `signIn` option throws, such as a wrong password,
+	 * fails with `USER_VALIDATION_FAILED`, and is its `AuthError`'s `cause`.
 	 *
-	 * Dies when the client has no `signIn`. That's a `createMirrorAuth` client
-	 * made without one, or a request's view on the server, where you call
-	 * `serverAuth.signIn(jar, …)` instead.
+	 * Dies when the client has no `signIn`: a `createMirrorAuth` client made
+	 * without one. It dies with a request's session on the server too. Call
+	 * that session's own `signIn`, which takes the tokens and the user.
 	 */
 	static readonly signIn = (
 		input: RegisteredSignIn,
 	): Effect.Effect<void, AuthFailure, Auth> =>
 		Auth.use((client) => {
-			const signIn = (
-				client as { signIn?: (input: unknown) => Promise<unknown> }
-			).signIn;
+			// A request's session has a `signIn`, but it takes the tokens and the
+			// user, not what the registered client's takes.
+			const signIn =
+				REQUEST_SESSION in client
+					? undefined
+					: (client as { signIn?: (input: unknown) => Promise<unknown> })
+							.signIn;
 			return signIn
-				? Effect.asVoid(fromPromise(() => signIn.call(client, input)))
+				? fromPromise(async () => {
+						try {
+							await signIn.call(client, input);
+						} catch (cause) {
+							// A mirror client rejects with the app's own error. An Effect
+							// gets it as a typed failure rather than a defect.
+							throw toAuthError(
+								"USER_VALIDATION_FAILED",
+								"Could not sign in",
+								cause,
+							);
+						}
+					})
 				: Effect.die(
 						new AuthError(
 							"INVALID_OPTIONS",
-							"This client has no signIn: pass signIn to createMirrorAuth, or on the server call serverAuth.signIn(jar, input)",
+							"Auth.signIn needs a client with signIn: pass signIn to createMirrorAuth. On the server, call signIn on the request's session instead, with the tokens and the user",
 						),
 					);
 		});
@@ -418,6 +367,10 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * client is signed out anyway when only its storage couldn't be cleared,
 	 * and a failed `revoke` doesn't fail it. A `createMirrorAuth` client
 	 * stays signed in when your server's sign-out fails.
+	 *
+	 * Dies with a request's session on the server where the request can't set
+	 * cookies, such as in a Next.js page. Sign out in an action or a route
+	 * handler.
 	 */
 	static readonly signOut: Effect.Effect<void, AuthFailure, Auth> = Auth.use(
 		(client) => fromPromise(() => client.signOut()),
@@ -434,8 +387,9 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 	 * failure passes through as is.
 	 *
 	 * Dies when the client can't update the user: its user comes from the
-	 * access token, it's a `createMirrorAuth` client, or it's a request's view
-	 * on the server. There, call `serverAuth.updateUser(jar, …)` instead.
+	 * access token, or it's a `createMirrorAuth` client. It dies with a
+	 * request's session on the server too. Call that session's own
+	 * `updateUser`.
 	 */
 	static readonly updateUser = <E = never, R = never>(
 		input: RegisteredUserInput | Effect.Effect<RegisteredUserInput, E, R>,
@@ -446,6 +400,15 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 			Auth | R
 		> {
 			const client = yield* Auth;
+			// A request's session has an `updateUser`, but its input is the
+			// server's user, and it resolves the session.
+			if (REQUEST_SESSION in client)
+				return yield* Effect.die(
+					new AuthError(
+						"INVALID_OPTIONS",
+						"Auth.updateUser needs a browser client: on the server, call updateUser on the request's session instead",
+					),
+				);
 			const update = (
 				client as { updateUser?: (input: unknown) => Promise<void> }
 			).updateUser;
@@ -453,7 +416,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 				return yield* Effect.die(
 					new AuthError(
 						"INVALID_OPTIONS",
-						"This client has no updateUser: its user comes from the access token or from the server. On the server, unless the user comes from the access token, call serverAuth.updateUser(jar, input)",
+						"This client has no updateUser: its user comes from the access token or from the server. Unless it comes from the access token, update it on the server, with updateUser on the request's session",
 					),
 				);
 			if (!Effect.isEffect(input))

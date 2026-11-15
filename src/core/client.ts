@@ -11,6 +11,7 @@ import { createId } from "./id.js";
 import { attempt, chain, isThenable, type MaybePromise } from "./maybe.js";
 import {
 	createPersistence,
+	isOutdated,
 	type SavedEntry,
 	type StoredSession,
 } from "./persistence.js";
@@ -452,7 +453,8 @@ export function createAuth<Src extends UserSource>(
 	 * Signs out every tab, as the saved session can't be used, and clears it.
 	 */
 	async function discardSaved(error: AuthError) {
-		forget(error);
+		// A session that only ran out signs out without an error to show.
+		forget(isOutdated(error) ? null : error);
 		const expected = epoch;
 		try {
 			await persistence.clear();
@@ -897,31 +899,48 @@ export function createAuth<Src extends UserSource>(
 				: `signed out: ${reason}`,
 			{ sessionId: (locked ?? session)?.id ?? null },
 		);
-		const ended =
-			revoke && revokeHandler && session
-				? {
-						accessToken: session.accessToken,
-						refreshToken: session.refreshToken,
-					}
+		const revoking = revoke && revokeHandler !== undefined;
+		// Before restoring finishes, the saved session is revoked instead. It's
+		// read before `clear()` queues. A locked session's tokens are sealed,
+		// so it isn't revoked, restored or not.
+		const unrestored =
+			revoking && !initialized && !locking
+				? (async () => {
+						try {
+							return await persistence.read();
+						} catch {
+							return null;
+						}
+					})()
 				: undefined;
+		const current = revoking ? session : null;
 		forget();
 		const expected = epoch;
-		let clearFailure: AuthError | undefined;
-		try {
-			await persistence.clear();
-		} catch (cause) {
-			clearFailure = toAuthError(
-				"PERSISTENCE_FAILED",
-				"Could not clear the saved session",
-				cause,
-			);
+		// Queued now, so a sign-in during the read saves after the clear.
+		const clearing = persistence.clear().then(
+			() => undefined,
+			(cause: unknown) =>
+				toAuthError(
+					"PERSISTENCE_FAILED",
+					"Could not clear the saved session",
+					cause,
+				),
+		);
+		const ending = current ?? (unrestored ? await unrestored : null);
+		const ended = ending
+			? {
+					accessToken: ending.accessToken,
+					refreshToken: ending.refreshToken,
+				}
+			: undefined;
+		const clearFailure = await clearing;
+		if (clearFailure)
 			debug.log(
 				"sign-out",
 				"could not clear the saved session",
 				undefined,
 				clearFailure,
 			);
-		}
 		let revokeFailure: AuthError | undefined;
 		if (ended) {
 			try {
@@ -1297,6 +1316,8 @@ export function createAuth<Src extends UserSource>(
 			debug.log("lock", "unlock failed", { sessionId: target.id }, error);
 			// The saved session can't be used: sign out, as restoring would.
 			if (rejectsSaved(error)) await discardSaved(error);
+			// One that only ran out is gone, not an error.
+			if (isOutdated(error)) return null;
 			throw error;
 		}
 		// A sign-in or sign-out during the read.

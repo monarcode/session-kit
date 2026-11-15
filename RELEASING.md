@@ -1,7 +1,8 @@
 # Releasing session-kit
 
-The `Release alpha` workflow is manually triggered. It releases an alpha version
-already committed to `main`; it does not change versions or commit files.
+The `Release` workflow is manually triggered. It releases an alpha or release
+candidate version already committed to `main`; it does not change versions or
+commit files.
 It checks and packs with pnpm, publishes the verified tarball to npm using `latest`,
 then creates a Git tag and GitHub prerelease at the workflow's commit.
 
@@ -25,19 +26,21 @@ See [npm's trusted publishing documentation](https://docs.npmjs.com/trusted-publ
 The workflow runs on GitHub-hosted runners with Node.js 24 and npm >=11.5.1.
 For this public repository/package, trusted publishing also generates provenance.
 
-## Release an alpha
+## Release an alpha or release candidate
 
-1. Make the intended package changes. Set `package.json` to a new alpha version,
-   such as `0.1.0-alpha.1`, and add its `## 0.1.0-alpha.1` section to `CHANGELOG.md`.
+1. Make the intended package changes. Set `package.json` to the new version,
+   such as `0.1.0-rc.0`, and rename `CHANGELOG.md`'s `## Unreleased` heading
+   to `## 0.1.0-rc.0`.
 2. Run `pnpm run check`, then commit and push those changes to `main`.
-3. Open GitHub Actions → **Release alpha** → **Run workflow**. Choose `main`
+3. Open GitHub Actions → **Release** → **Run workflow**. Choose `main`
    and enter the exact package version, without a `v` prefix.
 4. Verify the run succeeds, npm exposes the version through `latest`, and the
    matching GitHub prerelease exists.
 
 The workflow rejects a different branch, invalid or mismatched versions, missing
-release notes, an existing npm version, and an existing Git tag. It does not
-support stable releases yet. The published `0.1.0-alpha.0` cannot be republished.
+release notes, an existing npm version, and an existing Git tag. It takes
+`-alpha.N` and `-rc.N` versions only, not stable releases yet. The published
+`0.1.0-alpha.0` cannot be republished.
 
 The build job has read-only repository permissions. Only the publishing job
 receives OIDC and release-write permissions. Its tarball and release notes come

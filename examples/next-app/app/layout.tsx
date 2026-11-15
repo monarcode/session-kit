@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { getSession } from "../lib/auth/session";
+import { session } from "../lib/auth/session";
 import { Providers } from "./providers";
 
 export const metadata = { title: "session-kit with Next.js" };
@@ -10,11 +10,11 @@ export default async function RootLayout({
 }: {
 	children: ReactNode;
 }) {
-	const session = await getSession();
+	const current = await session.get();
 	return (
 		<html lang="en">
 			<body>
-				<Providers session={session}>{children}</Providers>
+				<Providers session={current}>{children}</Providers>
 			</body>
 		</html>
 	);

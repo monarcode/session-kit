@@ -43,6 +43,24 @@ test("timers longer than setTimeout's limit neither fire early nor get lost", as
 	t.mock.timers.reset();
 });
 
+test("a saved session older than maxAge signs out without an error", async (t) => {
+	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
+	await client({ maxAge: 60 }).signIn(input({ expiresIn: 3_600 }));
+	assert.notEqual(saved(), null);
+	t.mock.timers.tick(61_000);
+	const auth = client({ maxAge: 60 });
+	assert.equal(await auth.getSession(), null);
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(auth.state.get().error, null);
+	assert.equal(saved(), null);
+	t.mock.timers.reset();
+});
+
+test("maxAge must be a positive whole number of seconds", () => {
+	for (const maxAge of [0, -1, 1.5, Number.NaN])
+		assert.throws(() => client({ maxAge }), code("INVALID_OPTIONS"));
+});
+
 test("proactive failure keeps unexpired access but expiry hides the user", async (t) => {
 	t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 1_000_000 });
 	const auth = client({

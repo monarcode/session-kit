@@ -9,6 +9,7 @@ import defaultMdxComponents from "fumadocs-ui/mdx";
 import type { MDXComponents } from "mdx/types";
 
 import { Card, Cards } from "./docs/cards";
+import { HowItWorks } from "./docs/how-it-works";
 
 // Every name in an example is a hover target, hundreds a page, so they stay
 // out of the tab order: the code reads the same without its hovers.
@@ -36,6 +37,7 @@ export function getMDXComponents(components?: MDXComponents) {
 		Accordions,
 		Card,
 		Cards,
+		HowItWorks,
 		Step,
 		Steps,
 		Tab,

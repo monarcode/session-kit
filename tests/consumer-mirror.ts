@@ -6,6 +6,7 @@ import { Auth } from "../dist/effect/index.js";
 // A program of its own: one `Register` per program, here the mirror client a
 // server-rendered app registers.
 import { createMirrorAuth, type Session } from "../dist/index.js";
+import { AuthProvider, useAuth } from "../dist/react/index.js";
 import { createServerAuth, type CookieJar } from "../dist/server/index.js";
 
 const userSchema = z.object({ id: z.number(), firstName: z.string() });
@@ -30,11 +31,18 @@ const createAppAuth = () =>
 		signOut: async () => {},
 	});
 
-declare module "../dist/effect/index.js" {
+declare module "../dist/index.js" {
 	interface Register {
 		auth: ReturnType<typeof createAppAuth>;
 	}
 }
+
+// The hooks from `./react` take the mirror client, and carry its user.
+AuthProvider({ client: createAppAuth() });
+const mirrorName: string | undefined = useAuth(
+	(state) => state.user?.firstName,
+);
+void mirrorName;
 
 declare const jar: CookieJar;
 const requestLayer: Layer.Layer<Auth> = Auth.layer(serverAuth.forRequest(jar));

@@ -8,7 +8,7 @@ import { Pending, Unavailable } from "../ui";
 
 export const Route = createFileRoute("/_authenticated")({
 	beforeLoad: ({ context, location }) =>
-		requireSession(context.auth, { location, loginPath: "/login" }),
+		requireSession(context.auth, { location }),
 	errorComponent: ({ error }) => <Unavailable error={error} />,
 	component: () => <SessionOutlet pending={<Pending />} />,
 });

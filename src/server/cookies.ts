@@ -339,7 +339,7 @@ export function jarStorage(input: {
 		if (!jar.writable)
 			throw new AuthError(
 				"INVALID_OPTIONS",
-				"This cookie jar can't set cookies, so the session can't be saved here",
+				"This request can't set cookies, so the session can't be saved here",
 			);
 		const parts: string[] = [];
 		if (sealed.length > CHUNK_SIZE) {
@@ -424,7 +424,7 @@ export function jarStorage(input: {
 				if (!jar.writable)
 					throw new AuthError(
 						"REFRESH_FAILED",
-						"This cookie jar can't set cookies any more, so the session isn't refreshed here",
+						"This request can't set cookies any more, so the session isn't refreshed here",
 					);
 				const tried = session;
 				const failure = tried && shared.failure(tried);

@@ -1,14 +1,20 @@
+import type { LoaderFunction, LoaderFunctionArgs } from "react-router";
+
 import * as Fetch from "@monarcode/effetch";
 import {
 	createRootRouteWithContext,
+	createRoute,
 	createRouter,
 } from "@tanstack/react-router";
+import { createMiddleware, createStart } from "@tanstack/react-start";
 import * as Effect from "effect/Effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import * as SecureStore from "expo-secure-store";
+import { cookies } from "next/headers.js";
+import { redirect } from "next/navigation.js";
 import { NextResponse, type NextRequest } from "next/server.js";
 import { z } from "zod";
 
@@ -23,11 +29,16 @@ import {
 	type SessionBearerPlugin,
 } from "../dist/effetch/index.js";
 import * as expo from "../dist/expo/index.js";
-import { createAuthFetch, type AuthFetch } from "../dist/http/index.js";
+import {
+	createAuthFetch,
+	type AuthFetch,
+	type AuthFetchClient,
+} from "../dist/http/index.js";
 import {
 	createAuth,
 	createMirrorAuth,
 	fromAccessToken,
+	isSignedIn,
 	memoryStorage,
 	webStorage,
 	type AuthClient,
@@ -41,18 +52,39 @@ import {
 	type MirrorAuth,
 	type RefreshFn,
 	type Session,
+	type SessionOf,
+	type SignInInput,
 	type UserInput,
+	type UserOf,
 } from "../dist/index.js";
-import { nextJar, proxyJar, type NextCookies } from "../dist/next/index.js";
+import {
+	nextJar,
+	nextSession,
+	proxyJar,
+	sessionRoute as nextSessionRoute,
+	type NextCookies,
+	type NextSession,
+} from "../dist/next/index.js";
 import * as reactRouter from "../dist/react-router/index.js";
 import {
 	cookieJarMiddleware,
+	redirectIfSignedIn,
+	requireSession as requireServerSession,
+	routerAuth,
 	routerJar,
+	sessionMiddleware,
+	sessionRoute as routerSessionRoute,
 	type RouterContextLike,
 } from "../dist/react-router/server.js";
-import { createAuthHooks, useMirrorAuth } from "../dist/react/index.js";
+import * as react from "../dist/react/index.js";
+import {
+	createAuthHooks,
+	useMirrorAuth,
+	type UseMirrorAuthOptions,
+} from "../dist/react/index.js";
 import {
 	createServerAuth,
+	sessionHandler,
 	type CookieJar,
 	type RequestAuth,
 } from "../dist/server/index.js";
@@ -60,15 +92,17 @@ import {
 	connectAuth,
 	requireSession,
 	SessionOutlet,
-	useRouterAuth,
+	useAuth,
+	useAuthClient,
+	type AuthRouter,
+	type RouterAuth,
 } from "../dist/tanstack-router/index.js";
+import { connectSession, loadSession } from "../dist/tanstack-start/index.js";
 import {
-	loadSession,
-	sessionHydration,
-	type DehydratedSession,
-	type SessionHydration,
-} from "../dist/tanstack-start/index.js";
-import { startJar } from "../dist/tanstack-start/server.js";
+	refreshSession,
+	startAuth,
+	startJar,
+} from "../dist/tanstack-start/server.js";
 
 const userSchema = z.object({ id: z.string(), email: z.string() });
 
@@ -89,28 +123,68 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-declare module "../dist/effect/index.js" {
+// One registration types the hooks from `./react` and the Effect service.
+declare module "../dist/index.js" {
 	interface Register {
 		auth: typeof auth;
 	}
 }
 
 connectAuth(router);
-createAuthFetch(auth, "https://api.example.com");
-createAuthFetch(auth, "https://api.example.com", { optional: true });
-createAuthFetch(auth, "https://api.example.com", { optional: undefined });
-const authFetch: AuthFetch = createAuthFetch(auth, "https://api.example.com");
+// A Router made with `context: { auth }` is an `AuthRouter`.
+const authRouter: AuthRouter = router;
+connectAuth(authRouter);
+const baseUrl = "https://api.example.com";
+createAuthFetch(auth, { baseUrl });
+createAuthFetch(auth, { baseUrl, optional: true });
+createAuthFetch(auth, { baseUrl, optional: undefined });
+// @ts-expect-error The base URL is an option, not an argument.
+createAuthFetch(auth, baseUrl);
+// @ts-expect-error baseUrl is required.
+createAuthFetch(auth, { optional: true });
+const authFetch: AuthFetch = createAuthFetch(auth, { baseUrl });
 void authFetch("orders", { method: "POST" }).then((response) => response.ok);
+void authFetch(new URL("orders", baseUrl));
+void authFetch(new Request(`${baseUrl}/orders`), { method: "POST" });
 const fakeFetch: AuthFetch = async () => new Response("[]");
 const plainFetch: AuthFetch = fetch;
-void [fakeFetch, plainFetch];
+// It fits wherever a `fetch` is taken: the global's type, and the narrower
+// ones HTTP clients declare (ky's, then openapi-fetch's).
+const asFetch: typeof fetch = authFetch;
+const asKyFetch: (input: Request, init?: RequestInit) => Promise<Response> =
+	authFetch;
+const asOpenApiFetch: (input: Request) => Promise<Response> = authFetch;
+void [fakeFetch, plainFetch, asFetch, asKyFetch, asOpenApiFetch];
 // @ts-expect-error: a path is required.
 void authFetch();
 
-// Provider-free hooks typed by the registered Router.
-const { useAuth, useAuthClient } = createAuthHooks({
-	useClient: useRouterAuth,
-});
+// TanStack Router's hooks, typed by the registered Router.
+const routerClient: typeof auth = useAuthClient();
+const routerClientType: RouterAuth = routerClient;
+void routerClientType;
+// The hooks from `./react`, typed by the registered client.
+const registeredClient: typeof auth = react.useAuthClient();
+const registeredEmail: string | undefined = react.useAuth(
+	(state) => state.user?.email,
+);
+const registeredState: AuthState<z.output<typeof userSchema>> = react.useAuth();
+void [registeredClient, registeredEmail, registeredState];
+react.AuthProvider({ client: auth });
+// @ts-expect-error User fields come from the registered client's schema.
+react.useAuth((state) => state.user?.missing);
+// @ts-expect-error Without a selector, it returns the state, whatever is asked.
+const notState: string = react.useAuth();
+// @ts-expect-error Without a selector, it takes no type argument.
+react.useAuth<number>();
+// @ts-expect-error The router's hook returns the state too.
+const notRouterState: string = useAuth();
+void [notState, notRouterState];
+// The rest of `createAuthHooks`, for an app with several clients.
+const fromRouter = createAuthHooks({ useClient: useAuthClient });
+const routerEmail: string | undefined = fromRouter.useAuth(
+	(state) => state.user?.email,
+);
+void routerEmail;
 // Hooks for an explicit client type, with a provider.
 const provided = createAuthHooks<typeof auth>();
 provided.AuthProvider({ client: auth });
@@ -121,6 +195,8 @@ const otherAuth = createAuth({
 });
 // @ts-expect-error The provider takes the client these hooks were made for.
 provided.AuthProvider({ client: otherAuth });
+// @ts-expect-error So does the registered one.
+react.AuthProvider({ client: otherAuth });
 SessionOutlet({ pending: "Checking session…" });
 
 async function guard() {
@@ -132,6 +208,24 @@ async function guard() {
 	return email;
 }
 void guard;
+
+// A route's guard: loginPath defaults to "/login".
+createRoute({
+	getParentRoute: () => root,
+	id: "guarded",
+	beforeLoad: ({ context, location }) =>
+		requireSession(context.auth, { location }),
+	component: SessionOutlet,
+});
+
+// isSignedIn narrows the state, and is a selector as it is.
+const signedInNow: boolean = useAuth(isSignedIn);
+void signedInNow;
+const someState = auth.state.get();
+if (isSignedIn(someState)) {
+	const email: string = someState.user.email;
+	void email;
+}
 
 function Component() {
 	const email: string | undefined = useAuth((state) => state.user?.email);
@@ -287,11 +381,32 @@ async function loader({ request }: { request: Request }) {
 	return email;
 }
 void loader;
+// loginPath defaults to "/login" in the immediate form too.
+export async function defaultLoader({ request }: { request: Request }) {
+	const { session } = await reactRouter.requireSession(auth, { request });
+	const email: string = session.user.email;
+	return email;
+}
+// @ts-expect-error The check needs the loader's request.
+void reactRouter.requireSession(auth);
+// The loaders, typed by the client.
+const guardLoader: LoaderFunction = reactRouter.requireSessionLoader(auth);
+void guardLoader;
+const shortLoader = reactRouter.requireSessionLoader(auth, {
+	basename: "/app",
+});
+export async function useShortLoader(request: Request) {
+	const email: string = (await shortLoader({ request })).session.user.email;
+	return email;
+}
+const signInLoader: LoaderFunction = reactRouter.redirectIfSignedInLoader(auth);
+void signInLoader;
+// @ts-expect-error The check needs redirectTo.
+void reactRouter.redirectIfSignedIn(auth, { loginPath: "/x" });
 reactRouter.SessionOutlet({
 	loginPath: "/login",
 	unavailable: ({ error, retry }) => `${error?.code}${String(retry)}`,
 });
-// @ts-expect-error The outlet needs the sign-in path.
 reactRouter.SessionOutlet({});
 
 // `AuthClient` needs both the user and its input, so `updateUser` is never
@@ -339,6 +454,10 @@ expo.SessionGate({ client: { state: expoAuth.state, mount: expoAuth.mount } });
 expo.rememberDeepLink(expoAuth, "myapp://orders/42", { loginPath: "/sign-in" });
 // @ts-expect-error The deep link is kept for one client.
 expo.rememberDeepLink("myapp://orders/42");
+export const redirectSystemPath: (event: {
+	path: string;
+	initial: boolean;
+}) => Promise<string | null> | string | null = expo.deepLinkHandler(expoAuth);
 
 // Locking: `true`, or the app's `seal` and `open`, which may be async.
 createAuth({ ...debugBase, locking: true });
@@ -488,30 +607,154 @@ const tokenServer = createServerAuth({
 // @ts-expect-error A user read from the token has no updateUser.
 void tokenServer.updateUser;
 
-// One request's session, shaped like a client's read side.
-const requestAuth: RequestAuth<z.output<typeof userSchema>> =
-	serverAuth.forRequest(jar);
+// One request's session: every server method, without the jar.
+type AppUser = z.output<typeof userSchema>;
+const requestAuth: RequestAuth<AppUser, AppUser> = serverAuth.forRequest(jar);
+// Its members are read-only; a server's and Next's session's aren't.
+// @ts-expect-error RequestAuth's members are read-only.
+requestAuth.signIn = requestAuth.signIn;
+serverAuth.signIn = serverAuth.signIn;
+const anyRequestAuth: RequestAuth<AppUser, any> = requestAuth;
+// A request's session is a client for createAuthFetch, in generic code too.
+const fetchClient = <U, I>(session: RequestAuth<U, I>): AuthFetchClient =>
+	session;
+void [anyRequestAuth, fetchClient];
+// @ts-expect-error A browser client isn't a request's session.
+void ((): RequestAuth<unknown, unknown> => auth);
+// A schema user's session signs in with a user, so it isn't a token user's.
+// @ts-expect-error The signIn inputs differ.
+void ((): RequestAuth<AppUser, never> => requestAuth);
 async function requestSide() {
 	const session = await requestAuth.getSession();
 	const viewEmail: string | undefined = session?.user.email;
 	const status: AuthState<unknown>["status"] = requestAuth.state.get().status;
-	return [viewEmail, status, await requestAuth.credentials.get()];
+	const signedIn: Session<AppUser> = await requestAuth.signIn({
+		accessToken: "a",
+		user: { id: "1", email: "a@example.com" },
+	});
+	// @ts-expect-error signIn needs the user the schema validates.
+	await requestAuth.signIn({ accessToken: "a" });
+	await requestAuth.updateUser({ id: "1", email: signedIn.user.email });
+	await requestAuth.updateUser(async () => ({
+		id: "1",
+		email: "b@example.com",
+	}));
+	const refreshed: Session<AppUser> | null = await requestAuth.refreshIfDue({
+		within: 30,
+	});
+	const forBrowser = await requestAuth.clientCredentials.get();
+	await requestAuth.clientCredentials.renew({
+		sessionId: "s",
+		accessToken: "a",
+	});
+	return [viewEmail, status, refreshed, forBrowser?.expiresIn];
 }
 void requestSide;
-createAuthFetch(requestAuth, "https://api.example.com");
-createAuthFetch(tokenServer.forRequest(jar), "https://api.example.com");
-// @ts-expect-error Signing in stays on serverAuth.
-void requestAuth.signIn;
-// @ts-expect-error So does updateUser.
-void requestAuth.updateUser;
+createAuthFetch(requestAuth, { baseUrl });
+createAuthFetch(tokenServer.forRequest(jar), { baseUrl });
+// @ts-expect-error A user read from the token has no updateUser.
+void tokenServer.forRequest(jar).updateUser;
 // @ts-expect-error The view is read-only.
 requestAuth.getSession = async () => null;
 // @ts-expect-error So is its state.
 requestAuth.state.get = () => requestAuth.state.get();
 
+// The adapters' request sessions: the same type, without a jar.
+const startSession: RequestAuth<AppUser, AppUser> = startAuth(serverAuth);
+createAuthFetch(startSession, { baseUrl });
+// @ts-expect-error A user read from the token has no updateUser.
+void startAuth(tokenServer).updateUser;
+const sessionOf = routerAuth(serverAuth);
+declare const routerContext: RouterContextLike;
+const routerSession: RequestAuth<AppUser, AppUser> = sessionOf(routerContext);
+void routerSession;
+
+// React Router's middleware types are checked in react-router-middleware.ts.
+const signedIn = requireServerSession(serverAuth, {
+	loginPath: "/login",
+	basename: "/app",
+});
+void redirectIfSignedIn(serverAuth, { loginPath: ["/login", "/sign-up"] });
+export function guardedLoader({ context }: LoaderFunctionArgs) {
+	const email: string = signedIn.session(context).user.email;
+	return email;
+}
+// @ts-expect-error The middleware takes no list of paths.
+sessionMiddleware(serverAuth, { paths: ["/"] });
+void sessionMiddleware(serverAuth, { within: 15, cacheControl: false });
+// @ts-expect-error The guard's session is never null.
+const guardedNull: null = signedIn.session(routerContext);
+void guardedNull;
+
+const startSessionMiddleware = createMiddleware({ type: "request" }).server(
+	refreshSession(serverAuth, { within: 15, cacheControl: "private" }),
+);
+void createStart(() => ({ requestMiddleware: [startSessionMiddleware] }));
+// After middleware that adds context.
+const withRequestId = createMiddleware({ type: "request" }).server(({ next }) =>
+	next({ context: { requestId: "r1" } }),
+);
+void createMiddleware({ type: "request" })
+	.middleware([withRequestId])
+	.server(refreshSession(serverAuth));
+
+const appSessionNext: NextSession<AppUser, AppUser> = nextSession(serverAuth, {
+	cookies,
+	redirect,
+});
+export async function guardedPage() {
+	const { user } = await appSessionNext.require("/orders");
+	const current: AppUser | undefined = (await appSessionNext.get())?.user;
+	await appSessionNext.redirectIfSignedIn(null);
+	const writable: RequestAuth<AppUser, AppUser> =
+		await appSessionNext.writable();
+	return [user.email, current, writable];
+}
+export async function nextActions(input: SignInInput<AppUser>) {
+	const signedIn: Session<AppUser> = await appSessionNext.signIn(input);
+	await appSessionNext.updateUser(signedIn.user);
+	await appSessionNext.signOut();
+	const tokenSession = nextSession(tokenServer, { cookies, redirect });
+	// @ts-expect-error A user read from the token has no updateUser.
+	void tokenSession.updateUser;
+	// @ts-expect-error signIn takes the tokens and the user.
+	await appSessionNext.signIn({ accessToken: "a" });
+}
+declare const proxyRequest: NextRequest;
+const proxied: Promise<NextResponse> = appSessionNext.refresh(
+	proxyRequest,
+	NextResponse.next(),
+);
+void proxied;
+// The session route, in each framework's own route types.
+export const { GET, POST } = nextSessionRoute(serverAuth, { cookies });
+void routerSessionRoute(serverAuth);
+const answered: Promise<Response> = sessionHandler(serverAuth)(
+	new Request("https://app.test/api/session"),
+	jar,
+);
+void answered;
+// @ts-expect-error nextSession needs Next's cookies and redirect.
+nextSession(serverAuth, { cookies });
+
+// The session and user types of any client.
+const appSession: SessionOf<typeof serverAuth> = {
+	sessionId: "s",
+	user: { id: "1", email: "a@example.com" },
+};
+const fromRequest: SessionOf<typeof requestAuth> = appSession;
+const fromClient: SessionOf<typeof auth> = fromRequest;
+const appUser: UserOf<typeof startSession> = fromClient.user;
+const clientUser: UserOf<typeof auth> = appUser;
+const tokenUser: UserOf<typeof tokenServer> = { sub: "1" };
+// @ts-expect-error The user's fields come from the schema.
+const wrongUser: UserOf<typeof serverAuth> = { id: 1 };
+void [clientUser, tokenUser, wrongUser];
+
 // On the server, `Auth.layer` takes a request's session with the registered user.
 const requestLayer: Layer.Layer<Auth> = Auth.layer(serverAuth.forRequest(jar));
 void Effect.runPromise(Effect.provide(Auth.session, requestLayer));
+Auth.layer(startSession);
 // @ts-expect-error A request's session with another user doesn't fit.
 Auth.layer(tokenServer.forRequest(jar));
 // @ts-expect-error An Effect that needs the session doesn't run without it.
@@ -538,17 +781,46 @@ void mirrorEmail;
 void mirror.signIn({ username: "emilys" });
 // @ts-expect-error signIn takes what the signIn option takes.
 void mirror.signIn({ password: "x" });
-createAuthFetch(mirror, "https://api.example.com");
+createAuthFetch(mirror, { baseUrl });
 createAuthHooks<typeof mirror>().AuthProvider({ client: mirror });
 void requireSession(mirror, {
 	location: { href: "/private" },
 	loginPath: "/login",
 });
+// With the session route, a session that starts null, and a typed signIn.
+declare function signInFn(input: {
+	data: { username: string };
+}): Promise<Session<z.output<typeof userSchema>>>;
+const routed = createMirrorAuth({
+	name: "type-test",
+	session: null,
+	endpoint: "/api/session",
+	signIn: (data: { username: string }) => signInFn({ data }),
+});
+const routedEmail: string | undefined = routed.state.get().user?.email;
+void routedEmail;
+void routed.signIn({ username: "emilys" });
+// @ts-expect-error signIn's input is inferred from the option.
+void routed.signIn({ password: "x" });
+createAuthFetch(routed, { baseUrl });
 const plainMirror: MirrorAuth<{ id: string }> = createMirrorAuth({
 	name: "type-test",
 	session: null as Session<{ id: string }> | null,
 	revalidate: async () => null,
 	signOut: async () => {},
+});
+// With endpoint, revalidate alone is fine, as Start passes it.
+createMirrorAuth({
+	name: "type-test",
+	session: null as Session<{ id: string }> | null,
+	endpoint: "/api/session",
+	revalidate: async () => null,
+});
+// @ts-expect-error Without endpoint, revalidate needs signOut.
+createMirrorAuth({
+	name: "type-test",
+	session: null,
+	revalidate: async () => null,
 });
 // @ts-expect-error Without the signIn option, there is no signIn.
 void plainMirror.signIn;
@@ -556,11 +828,24 @@ void plainMirror.signIn;
 void plainMirror.lock;
 
 // TanStack Start: hydration and the request's jar.
-const hydration: SessionHydration<z.output<typeof userSchema>> =
-	sessionHydration(mirror);
-const dehydrated: DehydratedSession<z.output<typeof userSchema>> =
-	hydration.dehydrate();
-hydration.hydrate(dehydrated);
+const startRoot = createRootRouteWithContext<{ auth: typeof mirror }>()({});
+const startRouter = createRouter({
+	routeTree: startRoot,
+	context: { auth: mirror },
+	// The app's own, beside the session.
+	dehydrate: () => ({ theme: "dark" }),
+	hydrate: (data: { theme: string }) => void data.theme,
+});
+const disconnectSession: () => void = connectSession(startRouter);
+void disconnectSession;
+void connectSession(
+	createRouter({
+		routeTree: createRootRouteWithContext<{ auth: typeof plainMirror }>()({}),
+		context: { auth: plainMirror },
+	}),
+);
+// @ts-expect-error Only a mirror client holds the server's session.
+connectSession(router);
 void loadSession(mirror);
 void loadSession(plainMirror);
 // @ts-expect-error Only a mirror client holds the server's session.
@@ -580,26 +865,39 @@ void proxyJar(nextRequest, NextResponse.next());
 
 // The mirror hook, for any server-rendering framework.
 declare const renderAgain: () => void;
-const synced = useMirrorAuth(
-	(session) =>
+const synced = useMirrorAuth({
+	create: (session) =>
 		createMirrorAuth({
 			name: "type-test",
 			session,
 			revalidate: async () => session,
 			signOut: async () => {},
 		}),
-	initial,
-	renderAgain,
-);
+	session: initial,
+	onChange: renderAgain,
+});
 const syncedUser: z.output<typeof userSchema> | null = synced.state.get().user;
 void syncedUser;
-// @ts-expect-error The client must hold the server session's user.
-useMirrorAuth(() => plainMirror, initial, renderAgain);
-void useMirrorAuth(() => mirror, initial, renderAgain).signIn({
-	username: "emilys",
+useMirrorAuth({
+	// @ts-expect-error The client must hold the server session's user.
+	create: () => plainMirror,
+	session: initial,
+	onChange: renderAgain,
 });
+void useMirrorAuth({
+	create: () => mirror,
+	session: initial,
+	onChange: renderAgain,
+}).signIn({ username: "emilys" });
 // @ts-expect-error The hook needs to know how to render on the server again.
-useMirrorAuth(() => mirror, initial);
+useMirrorAuth({ create: () => mirror, session: initial });
+// @ts-expect-error The options are one object.
+useMirrorAuth(() => mirror, initial, renderAgain);
+const mirrorOptions: UseMirrorAuthOptions<
+	z.output<typeof userSchema>,
+	typeof mirror
+> = { create: () => mirror, session: initial, onChange: renderAgain };
+void useMirrorAuth(mirrorOptions);
 
 // React Router: the request's jar and its middleware.
 declare const requestContext: RouterContextLike;

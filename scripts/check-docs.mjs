@@ -157,29 +157,55 @@ function checkExportDocs(program) {
 		if (missing.length > 0)
 			problems.push(`${locate(node)}: ${name} needs ${missing.join(", ")}`);
 	};
-	const requireMemberDocs = (name, members) => {
+	// A member that another part of the same type documents may be declared
+	// again without docs, such as to make an option required: editors show
+	// the documented one.
+	const requireMemberDocs = (name, members, documented = new Set()) => {
 		for (const member of members) {
 			if (member.name === undefined || !ts.isPropertySignature(member))
 				continue;
-			if (!docOf(member).description)
+			if (
+				!docOf(member).description &&
+				!documented.has(member.name.getText())
+			)
 				problems.push(
 					`${locate(member)}: ${name}.${member.name.getText()} needs a description`,
 				);
 		}
 	};
-	// Object types, also when joined with `&` or `|`.
-	const literalsOf = (type) =>
-		ts.isTypeLiteralNode(type)
-			? [type]
-			: ts.isIntersectionTypeNode(type) || ts.isUnionTypeNode(type)
-				? type.types.flatMap(literalsOf)
-				: ts.isParenthesizedTypeNode(type)
-					? literalsOf(type.type)
-					: [];
+	// Object types, also when joined with `&` or `|`, or behind a type alias
+	// that isn't exported, whose members only show through this one.
+	const literalsOf = (type, seenAliases = new Set()) => {
+		if (ts.isTypeLiteralNode(type)) return [type];
+		if (ts.isIntersectionTypeNode(type) || ts.isUnionTypeNode(type))
+			return type.types.flatMap((part) => literalsOf(part, seenAliases));
+		if (ts.isParenthesizedTypeNode(type))
+			return literalsOf(type.type, seenAliases);
+		if (ts.isTypeReferenceNode(type)) {
+			const alias = checker
+				.getSymbolAtLocation(type.typeName)
+				?.declarations?.find(ts.isTypeAliasDeclaration);
+			const exported = alias?.modifiers?.some(
+				(modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword,
+			);
+			if (!alias || exported || seenAliases.has(alias)) return [];
+			seenAliases.add(alias);
+			return literalsOf(alias.type, seenAliases);
+		}
+		return [];
+	};
 	const isOverloadImplementation = (node) =>
 		ts.isFunctionDeclaration(node) &&
 		node.body !== undefined &&
 		checker.getSymbolAtLocation(node.name)?.declarations?.length > 1;
+	// Editors show the first overload's JSDoc for an overload that has none.
+	const isLaterOverload = (node, symbol) =>
+		ts.isFunctionDeclaration(node) &&
+		node.body === undefined &&
+		!docOf(node).description &&
+		symbol.declarations.find(
+			(other) => ts.isFunctionDeclaration(other) && other.body === undefined,
+		) !== node;
 	const seen = new Set();
 	for (const subpath of subpaths) {
 		const moduleSymbol = checker.getSymbolAtLocation(
@@ -193,14 +219,29 @@ function checkExportDocs(program) {
 			if (seen.has(symbol)) continue;
 			seen.add(symbol);
 			for (const declaration of symbol.declarations ?? []) {
-				if (isOverloadImplementation(declaration)) continue;
+				if (
+					isOverloadImplementation(declaration) ||
+					isLaterOverload(declaration, symbol)
+				)
+					continue;
 				requireFull(exported.name, declaration);
 				if (!/(Options|Props)$/.test(exported.name)) continue;
 				if (ts.isInterfaceDeclaration(declaration))
 					requireMemberDocs(exported.name, declaration.members);
-				if (ts.isTypeAliasDeclaration(declaration))
-					for (const literal of literalsOf(declaration.type))
-						requireMemberDocs(exported.name, literal.members);
+				if (ts.isTypeAliasDeclaration(declaration)) {
+					const literals = literalsOf(declaration.type);
+					const documented = new Set(
+						literals.flatMap((literal) =>
+							literal.members
+								.filter(
+									(member) => member.name && docOf(member).description,
+								)
+								.map((member) => member.name.getText()),
+						),
+					);
+					for (const literal of literals)
+						requireMemberDocs(exported.name, literal.members, documented);
+				}
 			}
 		}
 	}

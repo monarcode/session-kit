@@ -1,5 +1,5 @@
 {
 	"title": "Server rendering",
 	"defaultOpen": true,
-	"pages": ["index", "server-sessions"]
+	"pages": ["index", "server-sessions", "hybrid"]
 }

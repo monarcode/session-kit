@@ -9,13 +9,14 @@ and the two rules it must follow so that a saved session can be restored.
 
 Any [Standard Schema](https://standardschema.dev) library works, such as Zod,
 Valibot or ArkType. If your backend puts the user in the access token
-instead, see [Users from tokens](/docs/client/users-from-tokens).
+instead, see [Users from the access token](/docs/client/users-from-tokens).
 
 ## When the schema runs
 
 The client runs the schema on every user it accepts:
 
 - At sign-in.
+- When `updateUser` replaces the user.
 - After a refresh that returns a user.
 - When it restores a saved session.
 - When another tab saves a session.
@@ -42,6 +43,11 @@ const { user } = auth.state.get();
 //      ^?
 ```
 
+To name the types elsewhere, use `UserOf<typeof auth>` and
+`SessionOf<typeof auth>`. To type the hooks from
+`@monarcode/session-kit/react`, register the client once, as
+[Getting started](/docs/getting-started#4-read-the-session-in-react) shows.
+
 ## Rules for restoring
 
 The client saves the user beside the tokens, and runs the schema on it again
@@ -52,13 +58,13 @@ when it restores the session. That sets two rules for the schema:
 - **It accepts its own output and returns it unchanged.** A one-way
   transform, such as one that renames a field, breaks this rule.
 
-`signIn` rejects a schema that breaks either rule with
-`USER_VALIDATION_FAILED`. That way the problem shows up when you sign in,
-not as users being signed out on their next reload.
+A schema that breaks either rule is rejected with `USER_VALIDATION_FAILED`
+the first time it accepts a user, usually at sign-in. That way the problem
+shows up at once, not as users being signed out on their next reload.
 
 ## Users the schema rejects
 
 A deploy can change the schema so that it rejects users saved before it. The
-client doesn't restore such a user: the user signs in again. A user saved by
+client doesn't restore such a user, so the user signs in again. A user saved by
 another tab that the schema rejects signs every tab out, with
 `USER_VALIDATION_FAILED` in `state.error`.

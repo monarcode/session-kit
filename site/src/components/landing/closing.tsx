@@ -1,5 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
+import { gitConfig } from "@/lib/shared";
+
 import { COLUMN, PRIMARY_ACTION, SectionHead } from "./buffer";
 import { Install } from "./install";
 
@@ -8,7 +10,7 @@ const INLINE_LINK =
 
 /**
  * Where the page ends: the hero's actions again, so a visitor who read to the
- * bottom doesn't scroll back for them, under two facts they can check.
+ * bottom doesn't scroll back for them, under three facts they can check.
  */
 export function Closing() {
 	return (
@@ -27,6 +29,19 @@ export function Closing() {
 						npm provenance
 					</a>
 					.
+				</p>
+				<p>
+					<span aria-hidden="true" className="text-buffer-dim">
+						{"// "}
+					</span>
+					Each one passes{" "}
+					<a
+						href={`https://github.com/${gitConfig.user}/${gitConfig.repo}/tree/${gitConfig.branch}/tests`}
+						className={INLINE_LINK}
+					>
+						the test suite
+					</a>{" "}
+					twice, with synchronous and with asynchronous storage.
 				</p>
 				<p>
 					<span aria-hidden="true" className="text-buffer-dim">

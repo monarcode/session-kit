@@ -38,7 +38,8 @@ export const auth = createAuth({
 
 /** Signs in with DummyJSON and saves the tokens, which carry the user. */
 export async function signInWithPassword(username: string, password: string) {
-	await auth.signIn(tokens.parse(await login(username, password)));
+	const response = await login(username, password);
+	await auth.signIn(tokens.parse(response));
 }
 
 /**
@@ -88,4 +89,4 @@ async function login(username: string, password: string): Promise<unknown> {
  * Sends requests to DummyJSON with the access token. After a 401 it
  * refreshes, then replays a GET or HEAD once.
  */
-export const authFetch = createAuthFetch(auth, `${API}/`);
+export const authFetch = createAuthFetch(auth, { baseUrl: `${API}/` });

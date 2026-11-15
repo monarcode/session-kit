@@ -15,6 +15,10 @@ through `storage` events:
 - A sign-in or an account switch switches every tab.
 - A profile update or a refresh shows in every tab.
 
+With server rendering, `createMirrorAuth` clients follow each other over a
+`BroadcastChannel` instead, as [Server rendering](/docs/server-rendering)
+explains.
+
 ## One refresh at a time
 
 The client refreshes under the `<name>:auth:refresh`
@@ -25,8 +29,8 @@ Rotating refresh tokens therefore work with several tabs open.
 Without Web Locks, two tabs that refresh at the same instant can both spend
 the token. A short reuse window on your backend covers that case.
 
-## Expo apps and locking
+## Expo apps
 
 An Expo app has one JavaScript context, so it has no tabs to follow and needs
-no lock. With [`locking`](/docs/client/locking) on, tabs don't follow each
-other.
+no lock. In a browser, [`locking`](/docs/client/locking) stops tabs from
+following each other.

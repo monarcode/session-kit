@@ -19,7 +19,7 @@ import type { AuthStorage } from "../core/storage.js";
  * import { secureStorage } from "@monarcode/session-kit/expo";
  * import { AFTER_FIRST_UNLOCK } from "expo-secure-store";
  *
- * // For an app that refreshes in a background task before the first unlock.
+ * // For an app that refreshes in a background task while the device is locked.
  * export const storage = secureStorage({
  * 	keychainAccessible: AFTER_FIRST_UNLOCK,
  * });
@@ -31,7 +31,7 @@ export type SecureStorageOptions = {
 	/**
 	 * When iOS lets the app read the session: one of SecureStore's constants,
 	 * such as `AFTER_FIRST_UNLOCK`. An app that refreshes in a background task
-	 * before the device's first unlock needs `AFTER_FIRST_UNLOCK`. Passed to
+	 * while the device is locked needs `AFTER_FIRST_UNLOCK`. Passed to
 	 * SecureStore unchanged.
 	 *
 	 * While the keychain can't be read, the session is `unavailable`, not
@@ -120,9 +120,10 @@ const undecryptable = (error: unknown) =>
  * encrypted with an Android Keystore key on Android. Pass it as
  * `createAuth`'s `storage` in Expo apps.
  *
- * - Values over SecureStore's 2048-byte limit are split across keys. A write
- *   cut short, for example when the app is killed, keeps the previous value
- *   whole.
+ * - Values over 2048 bytes, which some iOS releases refuse to store, are
+ *   split across keys. A write cut short, for example when the app is killed,
+ *   keeps the previous value whole. A value over 128 KB fails to save, with
+ *   `PERSISTENCE_FAILED`.
  * - Reads are synchronous, so with a synchronous user schema the session is
  *   restored before the first render. Writes and removals are asynchronous.
  * - On iOS, a session left in the keychain by an earlier install is removed

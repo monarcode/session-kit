@@ -1,4 +1,4 @@
-name: Release alpha
+name: Release
 
 env:
    HUSKY: 0
@@ -7,7 +7,7 @@ on:
    workflow_dispatch:
       inputs:
          version:
-            description: Alpha version already committed in package.json (without v)
+            description: Alpha or release candidate version already committed in package.json (without v)
             required: true
             type: string
 
@@ -84,7 +84,7 @@ jobs:
          - name: Check npm supports trusted publishing
            run: |
               node --input-type=module -e 'import { execFileSync } from "node:child_process"; const [major, minor, patch] = execFileSync("npm", ["--version"], { encoding: "utf8" }).trim().split(".").map(Number); if (!(major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1))))) throw new Error("npm >=11.5.1 is required");'
-         - name: Publish alpha to npm
+         - name: Publish to npm
            env:
               RELEASE_VERSION: ${{ inputs.version }}
            run: npm publish "$RUNNER_TEMP/release/monarcode-session-kit-$RELEASE_VERSION.tgz" --tag latest --access public --ignore-scripts

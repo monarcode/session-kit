@@ -20,26 +20,29 @@ export type AuthErrorCode =
 	/**
 	 * The user couldn't be accepted. `issues` holds the schema's issues when
 	 * it rejected the user, and `cause` holds the error when something else
-	 * failed, such as an `updateUser` function or, in the browser of a
-	 * server-rendered app, signing in on the server. Otherwise `message` says
-	 * why, such as a user that isn't a plain JSON object.
+	 * failed, such as an `updateUser` function. Otherwise `message` says why,
+	 * such as a user that isn't a plain JSON object.
 	 */
 	| "USER_VALIDATION_FAILED"
 	/**
 	 * Tokens or a saved session that can't be used, such as an access token
-	 * that already expired at sign-in.
+	 * that already expired at sign-in, or a saved session that's malformed.
+	 * In the browser of a server-rendered app, your server answered with
+	 * something other than a session or an access token.
 	 */
 	| "INVALID_SESSION"
 	/**
-	 * Storage couldn't be read, written or cleared. In the browser of a
-	 * server-rendered app, signing out on the server failed.
+	 * Storage couldn't be read, written or cleared, or `locking.seal` failed.
+	 * In the browser of a server-rendered app, signing out on the server
+	 * failed.
 	 */
 	| "PERSISTENCE_FAILED"
 	/**
-	 * The refresh failed: your refresh callback threw, or there was no
-	 * `refresh` option or refresh token to use. In the browser of a
+	 * The refresh failed: your refresh callback threw or timed out, or there
+	 * was no `refresh` option or refresh token to use. In the browser of a
 	 * server-rendered app, reading the session or the access token from the
-	 * server failed.
+	 * server failed. On the server, the access token needed a refresh in a
+	 * request that can't set cookies.
 	 */
 	| "REFRESH_FAILED"
 	/**
@@ -60,7 +63,8 @@ export type AuthErrorCode =
 	| "UNLOCK_FAILED"
 	/**
 	 * An option or argument Session kit can't use, or a method called without
-	 * the option it needs.
+	 * the option it needs or where it can't work, such as a server `signIn` in
+	 * a request that can't set cookies.
 	 */
 	| "INVALID_OPTIONS";
 

@@ -1,25 +1,26 @@
 import { StrictMode } from "react";
-import {
-	createBrowserRouter,
-	Outlet,
-	RouterProvider,
-	useNavigate,
-	useRouteError,
-	useSearchParams,
-} from "react-router";
+import { createBrowserRouter, Outlet, useRouteError } from "react-router";
 
-import { safeReturnTo } from "@monarcode/session-kit";
+import { AuthProvider } from "@monarcode/session-kit/react";
 import {
-	redirectIfSignedIn,
-	requireSession,
+	redirectIfSignedInLoader,
+	requireSessionLoader,
 	SessionOutlet,
 	useAuthRevalidation,
 } from "@monarcode/session-kit/react-router";
 import { createRoot } from "react-dom/client";
+import { RouterProvider } from "react-router/dom";
 
 import { auth } from "./auth";
-import { AuthProvider } from "./hooks";
 import { LoginForm, Pending, Profile, Unavailable } from "./ui";
+
+// Types `AuthProvider` and the hooks from `@monarcode/session-kit/react`
+// with this client.
+declare module "@monarcode/session-kit" {
+	interface Register {
+		auth: typeof auth;
+	}
+}
 
 /**
  * Re-runs the guards in loaders after a sign-in, sign-out, account switch,
@@ -29,18 +30,6 @@ import { LoginForm, Pending, Profile, Unavailable } from "./ui";
 function Root() {
 	useAuthRevalidation();
 	return <Outlet />;
-}
-
-function Login() {
-	const navigate = useNavigate();
-	const [search] = useSearchParams();
-	return (
-		<LoginForm
-			onSignedIn={() =>
-				navigate(safeReturnTo(search.get("redirectTo")), { replace: true })
-			}
-		/>
-	);
 }
 
 function RouteError() {
@@ -54,20 +43,13 @@ const router = createBrowserRouter([
 		children: [
 			{
 				path: "/login",
-				loader: async ({ request }) => {
-					const redirectTo = new URL(request.url).searchParams.get(
-						"redirectTo",
-					);
-					await redirectIfSignedIn(auth, { redirectTo });
-					return null;
-				},
-				element: <Login />,
+				loader: redirectIfSignedInLoader(auth),
+				element: <LoginForm />,
 			},
 			{
-				loader: ({ request }) =>
-					requireSession(auth, { request, loginPath: "/login" }),
+				loader: requireSessionLoader(auth),
 				errorElement: <RouteError />,
-				element: <SessionOutlet loginPath="/login" pending={<Pending />} />,
+				element: <SessionOutlet pending={<Pending />} />,
 				children: [{ index: true, element: <Profile /> }],
 			},
 		],

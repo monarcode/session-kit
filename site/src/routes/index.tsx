@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")({
 	head: () => ({
 		meta: pageMeta(
 			"Session kit: the session layer for React apps",
-			"Your backend signs users in. Session kit handles everything after: it saves and restores the session, refreshes tokens, keeps tabs in step and guards your routes.",
+			"Define, validate, and manage application sessions with a schema-driven toolkit built for React and meta frameworks. It never signs users in.",
 		),
 	}),
 	component: Home,

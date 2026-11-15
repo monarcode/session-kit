@@ -14,9 +14,9 @@ import type { AuthStatus } from "../core/types.js";
 import type { AuthSource } from "../react/context.js";
 
 /**
- * Options for {@link rememberDeepLink}, the same as `safeReturnTo`'s. Set
- * `loginPath` when your sign-in screen isn't `/login`, so links to it are
- * dropped rather than kept.
+ * Options for {@link rememberDeepLink} and {@link deepLinkHandler}, the same
+ * as `safeReturnTo`'s. Set `loginPath` when your sign-in screen isn't
+ * `/login`, so links to it are dropped rather than kept.
  *
  * @example
  * ```ts
@@ -108,6 +108,10 @@ export function deepLinkPath(url: string): string {
  *   sign-in or unlock, once `SessionGate`'s `ready` is `true`.
  * - **A screen anyone may see**: drops it once that screen is showing.
  *
+ * Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`.
+ * Expo Router warns that a throw in `redirectSystemPath` can crash the app.
+ * {@link deepLinkHandler} throws when it's made instead.
+ *
  * @example
  * ```ts
  * // app/+native-intent.tsx
@@ -145,6 +149,69 @@ export function rememberDeepLink(
 		debug.secret({ path }),
 	);
 	linkOf(auth).set({ path, waiting: false });
+}
+
+/**
+ * The `redirectSystemPath` that {@link deepLinkHandler} makes, for
+ * `app/+native-intent.tsx`.
+ *
+ * @example
+ * ```ts
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import {
+ * 	deepLinkHandler,
+ * 	type DeepLinkHandler,
+ * } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * export const redirectSystemPath: DeepLinkHandler = deepLinkHandler(auth);
+ * ```
+ *
+ * @since 0.1.0
+ */
+export type DeepLinkHandler = (event: {
+	path: string;
+	initial: boolean;
+}) => string;
+
+/**
+ * Makes `redirectSystemPath` for `app/+native-intent.tsx`. It keeps each
+ * incoming link with {@link rememberDeepLink}, so `SessionGate` opens it
+ * after sign-in, and returns the path unchanged.
+ *
+ * Use `rememberDeepLink` itself when your `redirectSystemPath` does more,
+ * such as rewriting old links.
+ *
+ * Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`.
+ * It throws when it's made, so a link never meets the error.
+ *
+ * @example
+ * ```ts
+ * // app/+native-intent.tsx
+ * import type { AuthClient } from "@monarcode/session-kit";
+ * import { deepLinkHandler } from "@monarcode/session-kit/expo";
+ *
+ * declare const auth: AuthClient<{ name: string }, { name: string }>;
+ *
+ * export const redirectSystemPath = deepLinkHandler(auth);
+ * ```
+ *
+ * @see {@link RememberDeepLinkOptions} to set your sign-in screen's path
+ *
+ * @since 0.1.0
+ */
+export function deepLinkHandler(
+	auth: AuthSource,
+	options: RememberDeepLinkOptions = {},
+): DeepLinkHandler {
+	// Checked now: Expo Router warns that a throw on a link can crash the app,
+	// and with good options, remembering a link doesn't throw.
+	safeReturnTo("/", options);
+	return ({ path }) => {
+		rememberDeepLink(auth, path, options);
+		return path;
+	};
 }
 
 /**

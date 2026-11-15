@@ -284,6 +284,27 @@ test("a createMirrorAuth client is the Auth service, without updateUser", async 
 	assert.deepEqual(posted, [{ username: "alice" }]);
 	assert.equal(session.sessionId, "s1");
 
+	// The app's own sign-in error is a typed failure, not a defect.
+	const wrongPassword = new Error("Wrong password");
+	const refusing = createMirrorAuth({
+		name: "effect-mirror",
+		session: null,
+		revalidate: async () => null,
+		signIn: async (_data: { username: string }) => {
+			throw wrongPassword;
+		},
+		signOut: async () => {},
+	});
+	const refused = await Effect.runPromise(
+		Effect.provide(
+			Effect.flip(Auth.signIn({ username: "alice" } as never)),
+			Auth.layer(refusing),
+		),
+	);
+	assert.ok(refused instanceof AuthFailure);
+	assert.equal(refused.code, "USER_VALIDATION_FAILED");
+	assert.equal(refused.cause.cause, wrongPassword);
+
 	const plain = createMirrorAuth({
 		name: "effect-mirror",
 		session: null,
@@ -456,10 +477,11 @@ test("a request's server session is the Auth service", async (t) => {
 	assert.deepEqual(await runOn(request(), Auth.sessionOption), Option.none());
 });
 
-test("on a request's server session, signIn and updateUser die, and a read-only jar can't refresh", async (t) => {
+test("on a request's server session, signIn and updateUser die, and a read-only jar can't sign out or refresh", async (t) => {
 	t.mock.timers.enable({ apis: ["Date"] });
 	const { serverAuth, request } = serverSide("effect-server");
 	const signedIn = await serverAuth.signIn(request(), tokens());
+	// Its own signIn and updateUser take the server's input, not the browser's.
 	for (const effect of [
 		Auth.signIn(tokens() as never),
 		Auth.updateUser(user as never),
@@ -470,14 +492,22 @@ test("on a request's server session, signIn and updateUser die, and a read-only 
 		);
 		assert.ok(died instanceof AuthError);
 		assert.equal(died.code, "INVALID_OPTIONS");
-		assert.match(died.message, /serverAuth\./);
+		assert.match(died.message, /request's session/);
 	}
+	// A read-only jar can't clear the cookie.
+	const signOutDied = await defect(
+		serverAuth.forRequest(request(false)) as never,
+		Auth.signOut,
+	);
+	assert.ok(signOutDied instanceof AuthError);
+	assert.equal(signOutDied.code, "INVALID_OPTIONS");
+	const updated = signedIn;
 
 	t.mock.timers.tick(901_000);
 	const render = Auth.layer(serverAuth.forRequest(request(false)));
 	assert.deepEqual(
 		await Effect.runPromise(Effect.provide(Auth.session, render)),
-		signedIn,
+		updated,
 	);
 	const failed = await Effect.runPromise(
 		Effect.provide(Effect.flip(Auth.credentials), render),

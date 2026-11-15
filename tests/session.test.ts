@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createAuth, webStorage, type AuthError } from "@monarcode/session-kit";
+import {
+	createAuth,
+	isSignedIn,
+	webStorage,
+	type AuthError,
+	type AuthState,
+	type AuthStatus,
+} from "@monarcode/session-kit";
 import { z } from "zod";
 
 import {
@@ -250,15 +257,20 @@ test("malformed saved session fails closed and removes saved data", async () => 
 	await client().signIn(input());
 	const entry = saved();
 	values.set(SESSION, JSON.stringify({ ...entry, id: "" }));
-	assert.equal(await client().getSession(), null);
+	const auth = client();
+	assert.equal(await auth.getSession(), null);
 	assert.equal(values.size, 0);
+	assert.equal(auth.state.get().error?.code, "INVALID_SESSION");
 });
 
-test("sessions saved in an earlier format are removed, not restored", async () => {
+test("sessions saved in an earlier format are removed without an error", async () => {
 	await client().signIn(input());
 	values.set(SESSION, JSON.stringify({ ...saved(), v: 3 }));
-	assert.equal(await client().getSession(), null);
+	const auth = client();
+	assert.equal(await auth.getSession(), null);
 	assert.equal(values.size, 0);
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.equal(auth.state.get().error, null);
 });
 
 test("malformed stored user fails schema validation", async () => {
@@ -507,6 +519,44 @@ test("sign-out revokes the ended tokens after clearing them", async () => {
 	assert.equal(auth.state.get().error, null);
 });
 
+test("sign-out before restoring revokes the saved session", async () => {
+	await client().signIn(input());
+	const revoked: Array<string | undefined> = [];
+	const auth = client({
+		revoke: async ({ refreshToken }): Promise<void> => {
+			revoked.push(refreshToken);
+		},
+	});
+	assert.equal(auth.state.get().status, "initializing");
+	await auth.signOut();
+	assert.deepEqual(revoked, ["refresh-1"]);
+	assert.equal(values.has(SESSION), false);
+	assert.equal(auth.state.get().status, "unauthenticated");
+	// Nothing saved, nothing to revoke.
+	await client({
+		revoke: async (): Promise<void> => {
+			revoked.push("again");
+		},
+	}).signOut();
+	assert.deepEqual(revoked, ["refresh-1"]);
+});
+
+test("a sign-in during a sign-out before restoring stays saved", async () => {
+	await client().signIn(input());
+	const auth = client({
+		revoke: async (): Promise<void> => {
+			throw new Error("offline");
+		},
+	});
+	const out = auth.signOut();
+	await auth.signIn(input({ accessToken: "access-2" }));
+	await out;
+	assert.equal(auth.state.get().status, "authenticated");
+	assert.equal(saved()?.accessToken, "access-2");
+	// The old session's failed revoke isn't the new session's error.
+	assert.equal(auth.state.get().error, null);
+});
+
 test("a failed revocation is reported without failing sign-out", async () => {
 	const auth = client({
 		revoke: async () => {
@@ -642,4 +692,29 @@ test("mounting signs out of an invalid saved session at once, then discards it",
 	await flush();
 	assert.equal(auth.state.get().status, "unauthenticated");
 	assert.equal(values.size, 0);
+});
+
+test("isSignedIn is true while authenticated or refreshing, not locked", async () => {
+	const expected: Record<AuthStatus, boolean> = {
+		initializing: false,
+		authenticated: true,
+		refreshing: true,
+		locked: false,
+		unauthenticated: false,
+		unavailable: false,
+	};
+	for (const [status, signedIn] of Object.entries(expected))
+		assert.equal(
+			isSignedIn({ status } as AuthState<unknown>),
+			signedIn,
+			status,
+		);
+	const auth = client();
+	await auth.signIn(input());
+	const state = auth.state.get();
+	assert.ok(isSignedIn(state));
+	// Narrowed: the user is set.
+	assert.equal(state.user.email, user.email);
+	await auth.signOut();
+	assert.equal(isSignedIn(auth.state.get()), false);
 });

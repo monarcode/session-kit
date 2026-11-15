@@ -120,8 +120,9 @@ export type WebStorageOptions = {
 
 /**
  * Saves the session in the browser's `localStorage`, or in `sessionStorage`
- * with `{ area: "session" }`. Tabs follow each other's changes, such as a
- * sign-out, and take turns to refresh where the browser supports Web Locks.
+ * with `{ area: "session" }`. With `localStorage`, tabs follow each other's
+ * changes, such as a sign-out. Tabs take turns to refresh where the browser
+ * supports Web Locks.
  *
  * It touches browser storage only when auth reads or saves, so creating auth
  * in code that also runs on a server is safe. Reading the session on a server
