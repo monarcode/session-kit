@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.0-rc.1
+
+The Effect guide and example move to effetch and effetch-query `0.1.0-rc.3`.
+The public API is unchanged.
+
+### Changed
+
+- The `@monarcode/effetch` peer range is `^0.1.0-rc.3`, up from `rc.2`.
+  effetch-query 0.1.0-rc.3, which the Effect guide uses, needs it, and the
+  guide, the example and the tests use effetch's rc.3 APIs.
+
+### Docs
+
+- The Effect guide and the TanStack Start example with effetch use
+  effetch's and effetch-query's rc.3 APIs: the API client is a
+  `Fetch.Service`, effetch-query's `fromClient` reads its `defaultError`,
+  and the refresh turns a 401 or 403 into `null` with `Fetch.catchStatus`.
+- The Effect guide says what `sessionBearer` does that effetch's own
+  `bearer` doesn't, and that after a refresh it sends only a `GET` or `HEAD`
+  again, where `bearer` with a `refresh` option sends any method again.
+- `sessionBearer` says that streams work through it up to the response's
+  headers, and that a stream open when the user signs out keeps reading.
+
 ## 0.1.0-rc.0
 
 The first release candidate for `0.1.0`. The public API is now frozen, and

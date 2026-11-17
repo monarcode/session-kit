@@ -39,10 +39,10 @@ npm install @monarcode/session-kit effect @monarcode/effetch
 
 `effect` and `@monarcode/effetch` are optional peer dependencies of Session
 kit. `./effect` and `./effetch` need `effect` 4.1 or newer, and `./effetch`
-also needs `@monarcode/effetch`.
+also needs `@monarcode/effetch` 0.1.0-rc.3 or newer.
 
 To [cache with effetch-query](#cache-with-effetch-query), also install
-effetch-query 0.1.0-rc.2 or newer, and its `@effect/atom-react` peer for
+effetch-query 0.1.0-rc.3 or newer, and its `@effect/atom-react` peer for
 React:
 
 ```npm
@@ -126,11 +126,7 @@ export const refreshSession = (refreshToken: string, signal: AbortSignal) =>
         output: SessionTokens,
       });
     }).pipe(
-      Effect.catchTag("HttpError", (error) =>
-        error.status === 401 || error.status === 403
-          ? Effect.succeed(null)
-          : Effect.fail(error),
-      ),
+      Fetch.catchStatus([401, 403], () => Effect.succeed(null)),
       Effect.provide(FetchHttpClient.layer),
     ),
     { signal },
@@ -208,49 +204,53 @@ export const showGreeting = () =>
 
 ## 6. Call your API with effetch
 
-Make the app's API client with effetch's `Fetch.make`: the backend's base
+Make the app's API client as an effetch `Fetch.Service`: the backend's base
 URL, its error body, and the plugins every call goes through. The
 `sessionBearer` plugin does what [`createAuthFetch`](/docs/client/requests)
 does: it sends the access token, and refreshes after a 401.
 
 Put `sessionBearer` last, so that a retry reads the current token. Give it the
-client's `baseUrl`, since the token goes only to that origin. `Fetch.make`
-then needs the `Auth` service, once:
+client's `baseUrl`, since the token goes only to that origin. The client's
+layer then needs the `Auth` service, once:
 
 ```ts title="src/api.ts"
 import * as Fetch from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
-import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 
 import { API_BASE_URL, ApiError } from "./backend.js";
 
-const make = Fetch.make({
+export class ApiClient extends Fetch.Service<ApiClient>()("ApiClient", {
   baseUrl: API_BASE_URL,
   defaultError: ApiError,
   plugins: [retry(), sessionBearer({ baseUrl: API_BASE_URL, optional: true })],
-}).pipe(
-  // Effect adds tracing headers to every request, which fail the preflight
-  // of an API that doesn't allow them.
-  Effect.provideService(HttpClient.TracerPropagationEnabled, false),
-);
-
-export class ApiClient extends Context.Service<
-  ApiClient,
-  Effect.Success<typeof make>
->()("ApiClient") {}
+}) {}
 
 /** The API client, over whichever `Auth` is provided. */
-export const ApiClientLive = Layer.effect(ApiClient, make);
+export const ApiClientLive = ApiClient.layer.pipe(
+  // Effect adds tracing headers to every request, which fail the preflight
+  // of an API that doesn't allow them.
+  Layer.provide(Layer.succeed(HttpClient.TracerPropagationEnabled)(false)),
+);
 ```
 
 Calls can fail with `AuthFailure`. When one client serves public and private
 endpoints, as this one does, give the plugin `optional: true`: a call made
 while signed out is then sent without a token, and a private endpoint
 answers with its own 401. A locked client still fails with `LOCKED`.
+
+effetch's own `bearer` plugin can refresh after a 401 too, with its
+`refresh` option, but it doesn't know the session. `sessionBearer` reads it
+from Session kit. A call fails with `SESSION_CHANGED` if the account changes
+while it runs, and a second 401 signs the user out. Its
+[reference](/docs/reference/effetch#sessionbearer) lists the rest.
+
+After a refresh, `bearer` sends a request of any method again, a `POST`
+included. `sessionBearer` sends only a `GET` or `HEAD` again, as
+`createAuthFetch` does, and returns the 401 of any other request for you to
+retry.
 
 Effect code yields the client and calls its methods, such as `get` and
 `post`. The sign-in call skips the plugin with `sessionBearer: false`,
@@ -376,16 +376,14 @@ export const logStatus = Auth.changes.pipe(
 effetch-query caches endpoints: a route and its schemas, defined with
 `Fetch.endpoint`, which it calls with the app's API client. Its queries and
 mutations run with the app's runtime, so components never run an Effect by
-hand. Give it the client's `defaultError`, which an endpoint can't read from
-the client:
+hand. `fromClient` reads the client's `defaultError` from its class:
 
 ```ts title="src/query.ts"
 import { QueryClient } from "@monarcode/effetch-query";
-import { endpoints } from "@monarcode/effetch-query/effetch";
+import { fromClient } from "@monarcode/effetch-query/effetch";
 import type * as ManagedRuntime from "effect/ManagedRuntime";
 
 import { ApiClient } from "./api.js";
-import { ApiError } from "./backend.js";
 import { appRuntime, type AppRuntime } from "./runtime.js";
 
 declare module "@monarcode/effetch-query" {
@@ -394,7 +392,7 @@ declare module "@monarcode/effetch-query" {
   }
 }
 
-export const api = endpoints(ApiClient, { defaultError: ApiError });
+export const api = fromClient(ApiClient);
 
 export const makeQueryClient = () => QueryClient.make({ runtime: appRuntime });
 ```

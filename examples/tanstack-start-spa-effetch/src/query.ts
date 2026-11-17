@@ -1,9 +1,8 @@
 import { QueryClient } from "@monarcode/effetch-query";
-import { endpoints } from "@monarcode/effetch-query/effetch";
+import { fromClient } from "@monarcode/effetch-query/effetch";
 import type * as ManagedRuntime from "effect/ManagedRuntime";
 
 import { ApiClient } from "./api";
-import { ApiError } from "./backend";
 import { appRuntime, type AppRuntime } from "./runtime";
 
 declare module "@monarcode/effetch-query" {
@@ -13,7 +12,7 @@ declare module "@monarcode/effetch-query" {
 }
 
 /** Turns endpoints of the API client into queries and mutations. */
-export const api = endpoints(ApiClient, { defaultError: ApiError });
+export const api = fromClient(ApiClient);
 
 /**
  * Makes the query cache, which runs queries and mutations with `appRuntime`'s
