@@ -15,10 +15,12 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 import {
 	cleanups,
@@ -57,19 +59,13 @@ function serve(...statuses: number[]) {
 	return sent;
 }
 
-/** An effetch client with `sessionBearer` last, using `auth`. */
-const makeApi = (
+/** Runs `effect` with `auth` and the mocked `fetch`. */
+const runWith = <A, E>(
 	auth: TestClient,
-	options: Partial<SessionBearerOptions> = {},
+	effect: Effect.Effect<A, E, HttpClient.HttpClient | Auth>,
 ) =>
 	Effect.runPromise(
-		Fetch.make({
-			baseUrl,
-			plugins: [
-				retry({ times: 1, schedule: Schedule.spaced("0 millis") }),
-				sessionBearer({ baseUrl, ...options }),
-			],
-		}).pipe(
+		effect.pipe(
 			Effect.provide(
 				Layer.merge(FetchHttpClient.layer, Auth.layer(auth as never)),
 			),
@@ -78,6 +74,22 @@ const makeApi = (
 				globalThis.fetch(url, init),
 			),
 		),
+	);
+
+/** An effetch client with `sessionBearer` last, using `auth`. */
+const makeApi = (
+	auth: TestClient,
+	options: Partial<SessionBearerOptions> = {},
+) =>
+	runWith(
+		auth,
+		Fetch.make({
+			baseUrl,
+			plugins: [
+				retry({ times: 1, schedule: Schedule.spaced("0 millis") }),
+				sessionBearer({ baseUrl, ...options }),
+			],
+		}),
 	);
 
 /** The call's status: 200 when it succeeds, else its `HttpError`'s. */
@@ -395,11 +407,13 @@ test("on a request's server session, optional sends a signed-out call without a 
 	assert.equal(sent[0]?.authorization, null);
 });
 
-test("concurrent requests each build their API client over their own session", async () => {
-	const { serverAuth } = serverSide("effetch-server");
-	const users = 20;
-	const jars = await Promise.all(
-		Array.from({ length: users }, async (_, index) => {
+/** `count` cookie jars, each signed in with `token-<index>`. */
+const signedInJars = (
+	serverAuth: ReturnType<typeof serverSide>["serverAuth"],
+	count: number,
+) =>
+	Promise.all(
+		Array.from({ length: count }, async (_, index) => {
 			const cookies = new Map<string, string>();
 			const jar: CookieJar = {
 				writable: true,
@@ -414,13 +428,43 @@ test("concurrent requests each build their API client over their own session", a
 			return jar;
 		}),
 	);
-	// Later requests answer first, so the calls interleave the same way each run.
+
+/**
+ * Answers each request with the token it was sent, recording its headers.
+ * Later tokens answer first, so calls interleave the same way each run.
+ */
+function serveWhoami(count: number) {
+	const sent: Headers[] = [];
 	setGlobal("fetch", async (_url: URL | string, init: RequestInit = {}) => {
-		const token = new Headers(init.headers).get("authorization");
+		const headers = new Headers(init.headers);
+		sent.push(headers);
+		const token = headers.get("authorization");
 		const index = Number(token?.split("-")[1]);
-		await new Promise((resolve) => setTimeout(resolve, users - index));
+		await new Promise((resolve) => setTimeout(resolve, count - index));
 		return Response.json({ token });
 	});
+	return sent;
+}
+
+/** The server's runtime: what belongs to no user, with the mocked `fetch`. */
+const serverRuntime = () => {
+	const runtime = ManagedRuntime.make(
+		Layer.merge(
+			FetchHttpClient.layer,
+			Layer.succeed(FetchHttpClient.Fetch, (url, init) =>
+				globalThis.fetch(url, init),
+			),
+		),
+	);
+	cleanups.push(() => runtime.dispose());
+	return runtime;
+};
+
+test("concurrent requests each build their API client over their own session", async () => {
+	const { serverAuth } = serverSide("effetch-server");
+	const users = 20;
+	const jars = await signedInJars(serverAuth, users);
+	serveWhoami(users);
 
 	const Whoami = Schema.Struct({ token: Schema.NullOr(Schema.String) });
 	const whoami = Fetch.endpoint("GET /whoami", { output: Whoami });
@@ -444,15 +488,7 @@ test("concurrent requests each build their API client over their own session", a
 
 	// Built once: what belongs to no user. Per request: the session and the
 	// client that uses it.
-	const runtime = ManagedRuntime.make(
-		Layer.merge(
-			FetchHttpClient.layer,
-			Layer.succeed(FetchHttpClient.Fetch, (url, init) =>
-				globalThis.fetch(url, init),
-			),
-		),
-	);
-	cleanups.push(() => runtime.dispose());
+	const runtime = serverRuntime();
 	// One layer for every request, as an app declares it: each `Effect.provide`
 	// must still build it again.
 	const ApiClientLive = Layer.effect(ApiClient, make);
@@ -484,4 +520,142 @@ test("concurrent requests each build their API client over their own session", a
 		assert.deepEqual(result.sent, Array(3).fill(`Bearer token-${index}`));
 		assert.equal(result.user, sessions[index]?.sessionId);
 	});
+});
+
+const Tick = Schema.Struct({ n: Schema.Finite });
+
+/** 401 for `access-1`, else an event stream of two ticks. */
+function serveEvents() {
+	const sent: (string | null)[] = [];
+	setGlobal("fetch", async (_url: URL | string, init: RequestInit = {}) => {
+		const authorization = new Headers(init.headers).get("authorization");
+		sent.push(authorization);
+		if (authorization === "Bearer access-1")
+			return new Response(null, { status: 401 });
+		return new Response('data: {"n":1}\n\ndata: {"n":2}\n\n', {
+			headers: { "content-type": "text/event-stream" },
+		});
+	});
+	return sent;
+}
+
+test("a stream gets a 401, renews the token and is sent again", async () => {
+	const auth = renewing();
+	await auth.signIn(input());
+	const sent = serveEvents();
+	const api = await makeApi(auth);
+	const ticks = await Effect.runPromise(
+		api.sse("/events", { output: Tick }).pipe(
+			Stream.map((event) => event.data.n),
+			Stream.runCollect,
+		),
+	);
+	assert.deepEqual([...ticks], [1, 2]);
+	assert.deepEqual(sent, ["Bearer access-1", "Bearer access-2"]);
+});
+
+test("a stream endpoint of a Fetch.Service client is sent again after a 401", async () => {
+	const auth = renewing();
+	await auth.signIn(input());
+	const sent = serveEvents();
+	class Api extends Fetch.Service<Api>()("Api", {
+		baseUrl,
+		plugins: [sessionBearer({ baseUrl })],
+	}) {}
+	const events = Fetch.endpoint("GET /events", {
+		stream: "sse",
+		output: Tick,
+	});
+	class Feeds extends Fetch.Endpoints<Feeds>()("Feeds", Api, { events }) {}
+	const ticks = await runWith(
+		auth,
+		Effect.gen(function* () {
+			const feeds = yield* Feeds;
+			return yield* feeds.events().pipe(
+				Stream.map((event) => event.data.n),
+				Stream.runCollect,
+			);
+		}).pipe(Effect.provide(Feeds.layer.pipe(Layer.provideMerge(Api.layer)))),
+	);
+	assert.deepEqual([...ticks], [1, 2]);
+	assert.deepEqual(sent, ["Bearer access-1", "Bearer access-2"]);
+});
+
+test("a stream open when the user signs out keeps reading until it ends", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const encoder = new TextEncoder();
+	let finish = () => {};
+	setGlobal(
+		"fetch",
+		async () =>
+			new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(encoder.encode('data: {"n":1}\n\n'));
+						finish = () => {
+							controller.enqueue(encoder.encode('data: {"n":2}\n\n'));
+							controller.close();
+						};
+					},
+				}),
+				{ headers: { "content-type": "text/event-stream" } },
+			),
+	);
+	const api = await makeApi(auth);
+	const ticks = await Effect.runPromise(
+		api.sse("/events", { output: Tick }).pipe(
+			Stream.map((event) => event.data.n),
+			// Signs out after the first event, then sends the second.
+			Stream.tap((n) =>
+				n === 1
+					? Effect.promise(async () => {
+							await auth.signOut();
+							finish();
+						})
+					: Effect.void,
+			),
+			Stream.runCollect,
+		),
+	);
+	assert.equal(auth.state.get().status, "unauthenticated");
+	assert.deepEqual([...ticks], [1, 2]);
+});
+
+test("a Fetch.Service client built per request sends each request's token", async () => {
+	const { serverAuth } = serverSide("effetch-service");
+	const users = 10;
+	const jars = await signedInJars(serverAuth, users);
+	const headers = serveWhoami(users);
+
+	class Api extends Fetch.Service<Api>()("Api", {
+		baseUrl,
+		plugins: [sessionBearer({ baseUrl })],
+	}) {}
+	// As the Effect guide makes it: without tracing headers.
+	const ApiLive = Api.layer.pipe(
+		Layer.provide(Layer.succeed(HttpClient.TracerPropagationEnabled)(false)),
+	);
+	const runtime = serverRuntime();
+	const requestLayer = (jar: CookieJar) =>
+		ApiLive.pipe(Layer.provideMerge(Auth.layer(serverAuth.forRequest(jar))));
+	const Whoami = Schema.Struct({ token: Schema.NullOr(Schema.String) });
+	const program = Effect.gen(function* () {
+		const api = yield* Api;
+		return (yield* api.get("/whoami", { output: Whoami })).token;
+	});
+
+	const sent = await Promise.all(
+		jars.map((jar) =>
+			runtime.runPromise(Effect.provide(program, requestLayer(jar))),
+		),
+	);
+	assert.deepEqual(
+		sent,
+		jars.map((_, index) => `Bearer token-${index}`),
+	);
+	for (const sent of headers) {
+		assert.equal(sent.get("traceparent"), null);
+		assert.equal(sent.get("b3"), null);
+	}
 });

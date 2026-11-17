@@ -26,11 +26,7 @@ export const refreshSession = (refreshToken: string, signal: AbortSignal) =>
 				output: SessionTokens,
 			});
 		}).pipe(
-			Effect.catchTag("HttpError", (error) =>
-				error.status === 401 || error.status === 403
-					? Effect.succeed(null)
-					: Effect.fail(error),
-			),
+			Fetch.catchStatus([401, 403], () => Effect.succeed(null)),
 			Effect.provide(FetchHttpClient.layer),
 		),
 		{ signal },

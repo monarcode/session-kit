@@ -59,7 +59,7 @@ export interface SessionBearerOptions {
 
 /**
  * The plugin {@link sessionBearer} returns. Its calls can fail with
- * `AuthFailure`, and `Fetch.make` needs the `Auth` service.
+ * `AuthFailure`, and a client made with it needs the `Auth` service.
  *
  * A call can skip it with `plugins: { sessionBearer: false }`, or override
  * `optional` and `signOutOnRepeated401`.
@@ -114,6 +114,11 @@ const refuseRedirects = <A, E, R>(
  * If the session changes during a call, it fails with `SESSION_CHANGED`
  * rather than return a response meant for another account.
  *
+ * Streams, such as `api.sse` and stream endpoints, work the same way up to
+ * the response's headers. A stream that's open when the user signs out or
+ * switches accounts keeps reading until it ends. Stop it yourself if it
+ * mustn't outlive the session.
+ *
  * The token never leaves your API. A request on another origin, or with a
  * username or password in its URL, dies with `INVALID_OPTIONS`. With
  * Effect's `FetchHttpClient`, a redirect fails as a `NetworkError` rather
@@ -123,7 +128,7 @@ const refuseRedirects = <A, E, R>(
  * effetch's `bearer` does.
  *
  * Put it last in `plugins`, after `retry`, so each attempt reads the current
- * token. `Fetch.make` then needs the `Auth` service, but calls don't.
+ * token. The client then needs the `Auth` service, but calls don't.
  *
  * On the server, make the effetch client per request, and provide it the
  * `Auth` layer for that request's session (`RequestAuth`). It reads the
@@ -131,7 +136,7 @@ const refuseRedirects = <A, E, R>(
  *
  * @example
  * ```ts
- * import type * as Effect from "effect/Effect";
+ * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
  * import * as Fetch from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
@@ -140,20 +145,15 @@ const refuseRedirects = <A, E, R>(
  * const baseUrl = "https://api.example.com";
  * const Profile = Schema.Struct({ email: Schema.String });
  *
- * export const makeApi = Fetch.make({
+ * export class Api extends Fetch.Service<Api>()("Api", {
  * 	baseUrl,
  * 	plugins: [retry(), sessionBearer({ baseUrl })],
+ * }) {}
+ *
+ * export const getProfile = Effect.gen(function* () {
+ * 	const api = yield* Api;
+ * 	return yield* api.get("/me", { output: Profile });
  * });
- * type Api = Effect.Success<typeof makeApi>;
- *
- * export const getProfile = (api: Api) => api.get("/me", { output: Profile });
- *
- * // Signing in needs no token: skip the plugin.
- * export const login = (api: Api, username: string, password: string) =>
- * 	api.post("/login", {
- * 		body: { username, password },
- * 		plugins: { sessionBearer: false },
- * 	});
  * ```
  *
  * @see {@link SessionBearerOptions} for `optional` and `signOutOnRepeated401`

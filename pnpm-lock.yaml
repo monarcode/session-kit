@@ -19,11 +19,11 @@ importers:
         version: 1.7.0(react@19.3.1)
     devDependencies:
       '@monarcode/effetch':
-        specifier: 0.1.0-rc.2
-        version: 0.1.0-rc.2(effect@4.1.3)
+        specifier: 0.1.0-rc.3
+        version: 0.1.0-rc.3(effect@4.1.3)
       '@monarcode/effetch-query':
-        specifier: 0.1.0-rc.2
-        version: 0.1.0-rc.2(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.2(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)
+        specifier: 0.1.0-rc.3
+        version: 0.1.0-rc.3(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.3(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)
       '@tanstack/react-router':
         specifier: 1.170.46
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -408,11 +408,11 @@ importers:
         specifier: 4.1.3
         version: 4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0)
       '@monarcode/effetch':
-        specifier: 0.1.0-rc.2
-        version: 0.1.0-rc.2(effect@4.1.3)
+        specifier: 0.1.0-rc.3
+        version: 0.1.0-rc.3(effect@4.1.3)
       '@monarcode/effetch-query':
-        specifier: 0.1.0-rc.2
-        version: 0.1.0-rc.2(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.2(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)
+        specifier: 0.1.0-rc.3
+        version: 0.1.0-rc.3(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.3(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)
       '@monarcode/session-kit':
         specifier: workspace:*
         version: link:../..
@@ -1627,11 +1627,11 @@ packages:
   '@mdx-js/mdx@3.1.1':
     resolution: {integrity: sha512-f6ZO2ifpwAQIpzGWaBQT2TXxPv6z3RBzQKpVftEWN78Vl/YweF1uwussDx8ECAXVtr3Rs89fKyG9YlzUs9DyGQ==}
 
-  '@monarcode/effetch-query@0.1.0-rc.2':
-    resolution: {integrity: sha512-ylmxNLYrk8JzQZMQMZNJyrbVVq79ZooDtIoq7ZnZB1vJO7tVHKI4gQsaSUZ33VJfb+/gqXA4UE3FKr0rS9hEEQ==}
+  '@monarcode/effetch-query@0.1.0-rc.3':
+    resolution: {integrity: sha512-hfdW4AE7St9izEkHuvdejU/X5smmYwG6T8gRJZa+d8H4DYfpIPKFMHoOBfgXNpx0oXG6J5nWJEPoB0tXNmpTyg==}
     peerDependencies:
       '@effect/atom-react': ^4.1.0
-      '@monarcode/effetch': '>=0.1.0-rc.2 <0.2.0'
+      '@monarcode/effetch': '>=0.1.0-rc.3 <0.2.0'
       '@tanstack/react-router': '>=1.170.33 <2.0.0'
       effect: ^4.1.0
       react: '>=19.0.0 <20.0.0'
@@ -1645,8 +1645,8 @@ packages:
       react:
         optional: true
 
-  '@monarcode/effetch@0.1.0-rc.2':
-    resolution: {integrity: sha512-bsoJ7CJPOxCwm74yIQyOAdY23+8f88VfYFKUsKrbbbtCjKRoTep8x+ub3BSamHXxDHXoE4Hw/eV03VEsICzB8g==}
+  '@monarcode/effetch@0.1.0-rc.3':
+    resolution: {integrity: sha512-LHOELQLZGaouwwvIcMAkovTyvWZ4fbDYgtuN9Xt4QcPgUY8ajQAjIXJTZn5WrHBCl/qA9t1a/jq1TKkMju8uUg==}
     peerDependencies:
       effect: ^4.0.0
 
@@ -7278,16 +7278,16 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@monarcode/effetch-query@0.1.0-rc.2(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.2(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)':
+  '@monarcode/effetch-query@0.1.0-rc.3(@effect/atom-react@4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0))(@monarcode/effetch@0.1.0-rc.3(effect@4.1.3))(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(effect@4.1.3)(react@19.3.1)':
     dependencies:
       effect: 4.1.3
     optionalDependencies:
       '@effect/atom-react': 4.1.3(effect@4.1.3)(react@19.3.1)(scheduler@0.28.0)
-      '@monarcode/effetch': 0.1.0-rc.2(effect@4.1.3)
+      '@monarcode/effetch': 0.1.0-rc.3(effect@4.1.3)
       '@tanstack/react-router': 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react: 19.3.1
 
-  '@monarcode/effetch@0.1.0-rc.2(effect@4.1.3)':
+  '@monarcode/effetch@0.1.0-rc.3(effect@4.1.3)':
     dependencies:
       effect: 4.1.3
 

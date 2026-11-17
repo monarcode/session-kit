@@ -548,7 +548,8 @@ void [
 	effectMisuse,
 ];
 
-// effetch: make needs Auth once; calls fail with AuthFailure and can override.
+// effetch: the client needs Auth once; calls fail with AuthFailure and can
+// override.
 const sessionPlugin: SessionBearerPlugin = sessionBearer({
 	baseUrl: "https://api.example.com",
 	optional: undefined,
@@ -565,6 +566,22 @@ const madeWithAuth: Effect.Effect<
 // @ts-expect-error make needs the Auth service.
 const madeWithoutAuth: Effect.Effect<unknown, never, HttpClient.HttpClient> =
 	makeSessionApi;
+// A Fetch.Service client's layer needs Auth, as make does.
+class SessionApi extends Fetch.Service<SessionApi>()("SessionApi", {
+	baseUrl: "https://api.example.com",
+	plugins: [sessionPlugin],
+}) {}
+const serviceWithAuth: Layer.Layer<
+	SessionApi,
+	never,
+	HttpClient.HttpClient | Auth
+> = SessionApi.layer;
+// @ts-expect-error the client's layer needs the Auth service.
+const serviceWithoutAuth: Layer.Layer<
+	SessionApi,
+	never,
+	HttpClient.HttpClient
+> = SessionApi.layer;
 declare const sessionApi: Fetch.Client<readonly [SessionBearerPlugin]>;
 const sessionCall: Effect.Effect<unknown, AuthFailure | Fetch.FetchError> =
 	sessionApi.get("/me");
@@ -575,7 +592,13 @@ sessionApi.get("/me", {
 sessionApi.get("/feed", { plugins: { sessionBearer: { optional: true } } });
 // @ts-expect-error Calls can override only optional and signOutOnRepeated401.
 sessionApi.get("/me", { plugins: { sessionBearer: { baseUrl: "x" } } });
-void [madeWithAuth, madeWithoutAuth, sessionCall];
+void [
+	madeWithAuth,
+	madeWithoutAuth,
+	serviceWithAuth,
+	serviceWithoutAuth,
+	sessionCall,
+];
 
 // Server custody: the engine and the mirror client.
 const serverAuth = createServerAuth({
