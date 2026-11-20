@@ -1,4 +1,4 @@
-import type { DecodeError, HttpError, NetworkError } from "@monarcode/effetch";
+import type { Fetch } from "@monarcode/effetch";
 import type { AuthFailure } from "@monarcode/session-kit/effect";
 import * as Cause from "effect/Cause";
 import * as Match from "effect/Match";
@@ -7,9 +7,9 @@ import * as Option from "effect/Option";
 import type { ApiError } from "./backend";
 
 type ApiCallError =
-	| HttpError.With<ApiError>
-	| NetworkError
-	| DecodeError
+	| Fetch.HttpError.With<ApiError>
+	| Fetch.NetworkError
+	| Fetch.DecodeError
 	| AuthFailure;
 
 /**

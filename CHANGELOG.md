@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.0-rc.2
+
+For effetch `0.1.0-rc.4`, whose main entry now exports only the `Fetch`
+namespace, and effetch-query `0.1.0-rc.4`, which needs it. Session kit's own
+API is unchanged.
+
+### Changed
+
+- **Breaking for effetch users:** the `@monarcode/effetch` peer range is
+  `^0.1.0-rc.4`, up from `rc.3`. `./effetch` now imports effetch's `Fetch`
+  namespace, so it needs rc.4. Session kit `0.1.0-rc.1` and earlier fail to
+  load `./effetch` with effetch rc.4, though their peer ranges accept it.
+  Upgrade Session kit, effetch and effetch-query together.
+- In your own code, `import * as Fetch from "@monarcode/effetch"` becomes
+  `import { Fetch } from "@monarcode/effetch"`. effetch's `effetch-migrate`
+  rewrites these imports for you. Imports from Session kit stay the same.
+
+### Docs
+
+- The Effect guide, `sessionBearer`'s example and the TanStack Start example
+  with effetch import `{ Fetch }`, and the guide asks for effetch and
+  effetch-query `0.1.0-rc.4`.
+
 ## 0.1.0-rc.1
 
 The Effect guide and example move to effetch and effetch-query `0.1.0-rc.3`.

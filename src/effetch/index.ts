@@ -1,4 +1,4 @@
-import { plugin, type Plugin } from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Headers from "effect/http/Headers";
@@ -78,7 +78,7 @@ export interface SessionBearerOptions {
  *
  * @since 0.1.0
  */
-export type SessionBearerPlugin = Plugin<
+export type SessionBearerPlugin = Fetch.Plugin<
 	"sessionBearer",
 	AuthFailure,
 	Auth,
@@ -121,8 +121,8 @@ const refuseRedirects = <A, E, R>(
  *
  * The token never leaves your API. A request on another origin, or with a
  * username or password in its URL, dies with `INVALID_OPTIONS`. With
- * Effect's `FetchHttpClient`, a redirect fails as a `NetworkError` rather
- * than being followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
+ * Effect's `FetchHttpClient`, a redirect fails as a `Fetch.NetworkError`
+ * rather than being followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
  *
  * A request that already has an `Authorization` header is sent as it is, as
  * effetch's `bearer` does.
@@ -138,7 +138,7 @@ const refuseRedirects = <A, E, R>(
  * ```ts
  * import * as Effect from "effect/Effect";
  * import * as Schema from "effect/Schema";
- * import * as Fetch from "@monarcode/effetch";
+ * import { Fetch } from "@monarcode/effetch";
  * import { retry } from "@monarcode/effetch/plugins";
  * import { sessionBearer } from "@monarcode/session-kit/effetch";
  *
@@ -164,7 +164,7 @@ export function sessionBearer(
 	options: SessionBearerOptions,
 ): SessionBearerPlugin {
 	const { origin } = parseUrl(options.baseUrl);
-	return plugin({
+	return Fetch.plugin({
 		name: "sessionBearer",
 		defaults: {
 			optional: options.optional ?? false,

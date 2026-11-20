@@ -1,4 +1,4 @@
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import * as Schema from "effect/Schema";
 
 import { SessionTokens } from "./backend";

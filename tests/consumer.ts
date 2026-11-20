@@ -1,6 +1,6 @@
 import type { LoaderFunction, LoaderFunctionArgs } from "react-router";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import {
 	createRootRouteWithContext,
 	createRoute,
