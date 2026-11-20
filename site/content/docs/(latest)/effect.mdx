@@ -39,10 +39,10 @@ npm install @monarcode/session-kit effect @monarcode/effetch
 
 `effect` and `@monarcode/effetch` are optional peer dependencies of Session
 kit. `./effect` and `./effetch` need `effect` 4.1 or newer, and `./effetch`
-also needs `@monarcode/effetch` 0.1.0-rc.3 or newer.
+also needs `@monarcode/effetch` 0.1.0-rc.4 or newer.
 
 To [cache with effetch-query](#cache-with-effetch-query), also install
-effetch-query 0.1.0-rc.3 or newer, and its `@effect/atom-react` peer for
+effetch-query 0.1.0-rc.4 or newer, and its `@effect/atom-react` peer for
 React:
 
 ```npm
@@ -103,7 +103,7 @@ and fails for anything else, as [Refresh](/docs/configuration/refresh)
 explains. The server uses it too:
 
 ```ts title="src/refresh.ts"
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -214,7 +214,7 @@ client's `baseUrl`, since the token goes only to that origin. The client's
 layer then needs the `Auth` service, once:
 
 ```ts title="src/api.ts"
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 import { sessionBearer } from "@monarcode/session-kit/effetch";
 import * as HttpClient from "effect/http/HttpClient";
@@ -431,7 +431,7 @@ A feature defines the endpoints it caches, and its components use the
 queries and mutations made of them:
 
 ```tsx title="src/features/account.tsx"
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { useMutation, useQuery } from "@monarcode/effetch-query/react";
 import { useAuthClient } from "@monarcode/session-kit/react";
 import * as Exit from "effect/Exit";

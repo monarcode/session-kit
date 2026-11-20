@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import * as Fetch from "@monarcode/effetch";
+import { Fetch } from "@monarcode/effetch";
 import { retry } from "@monarcode/effetch/plugins";
 import { AuthError, createMirrorAuth } from "@monarcode/session-kit";
 import { Auth, AuthFailure } from "@monarcode/session-kit/effect";
