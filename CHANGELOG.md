@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Expo SDK 53 to 57:** signing in, refreshing, revoking and `updateUser`
+  failed on React Native 0.79 to 0.86. Their `AbortController` has no
+  `throwIfAborted` or `reason`, which the client relied on. It now keeps
+  the abort reason itself, so a sign-in cut short by a newer one still
+  rejects with `SESSION_CHANGED`. Expo SDK 58 wasn't affected.
+- **`createAuthFetch` on React Native:** redirects are refused there too.
+  The redirect mode is now passed in `init`, which Expo's `fetch` reads.
+  Before Expo SDK 58, `fetch` follows redirects anyway, so a response from
+  another origin or path rejects with a `TypeError`, as a refused redirect
+  does in browsers. The redirected request has already gone out by then.
+- **`createAuthFetch` keeps a `Request`'s `referrerPolicy` and
+  `referrer`.** Copying the request to add the token reset them.
+
+### Docs
+
+- The JSDoc names more of the cases behind each error code: what
+  `REFRESH_FAILED`, `INVALID_SESSION`, `USER_VALIDATION_FAILED`,
+  `SESSION_CHANGED`, `PERSISTENCE_FAILED` and `INVALID_OPTIONS` cover, and
+  what `credentials.renew` and `updateUser` reject with.
+- `keychainAccessible` no longer says a locked iOS keychain never signs the
+  user out: a refresh that can't save its tokens does.
+- `sessionBearer` says that `fetch` follows redirects on React Native before
+  Expo SDK 58.
+- The API reference shows each export's whole description and its `@see`
+  links, and lists the members of the client and server types with their
+  descriptions, which say what each method rejects with.
+
 ## 0.1.0-rc.2
 
 For effetch `0.1.0-rc.4`, whose main entry now exports only the `Fetch`

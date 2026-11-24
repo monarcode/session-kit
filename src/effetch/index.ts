@@ -122,7 +122,9 @@ const refuseRedirects = <A, E, R>(
  * The token never leaves your API. A request on another origin, or with a
  * username or password in its URL, dies with `INVALID_OPTIONS`. With
  * Effect's `FetchHttpClient`, a redirect fails as a `Fetch.NetworkError`
- * rather than being followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
+ * rather than being followed, except on React Native before Expo SDK 58,
+ * whose `fetch` follows redirects whatever it's told. An invalid `baseUrl`
+ * throws `INVALID_OPTIONS`.
  *
  * A request that already has an `Authorization` header is sent as it is, as
  * effetch's `bearer` does.

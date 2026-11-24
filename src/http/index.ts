@@ -110,6 +110,48 @@ async function discard(response: Response) {
 }
 
 /**
+ * Sends `request` without following a redirect, which could carry the token
+ * elsewhere. `redirect` goes in `init` too: Expo's `fetch` reads it only
+ * there. React Native's `fetch` before Expo SDK 58 follows redirects
+ * whatever it's told, so a response from another origin or path rejects
+ * as a refused redirect does in browsers.
+ */
+async function sendOnce(request: Request): Promise<Response> {
+	const sent = new Request(request, {
+		redirect: "error",
+		// A `Request` copied with an `init` loses these otherwise.
+		referrer: request.referrer,
+		referrerPolicy: request.referrerPolicy,
+	});
+	const response = await fetch(sent, { redirect: "error" });
+	if (followedRedirect(response, sent.url)) {
+		await discard(response);
+		throw new TypeError("authFetch doesn't follow redirects");
+	}
+	return response;
+}
+
+/**
+ * Whether `response` came from a redirect. Platforms spell the same URL
+ * differently, such as `[` or `%5B` in a query, so only the origin and the
+ * decoded path are compared.
+ */
+function followedRedirect(response: Response, sent: string): boolean {
+	if (response.redirected) return true;
+	if (typeof response.url !== "string" || response.url === "") return false;
+	try {
+		const final = new URL(response.url);
+		const asked = new URL(sent);
+		return (
+			final.origin !== asked.origin ||
+			decodeURI(final.pathname) !== decodeURI(asked.pathname)
+		);
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Creates a `fetch` for your API ({@link AuthFetch}) that sends the current
  * access token as `Authorization: Bearer`. After a 401, it gets a new access
  * token once. `GET` and `HEAD` requests are then sent again; other requests
@@ -126,9 +168,15 @@ async function discard(response: Response) {
  * The token never leaves your API. A request for another origin, with a
  * username or password in its URL, or with an invalid URL rejects with
  * `INVALID_OPTIONS`, as does a `Request` from another realm or a polyfill.
- * A redirect rejects rather than being followed. A
- * missing or invalid `baseUrl` throws `INVALID_OPTIONS`. While signed in, a
+ * A missing or invalid `baseUrl` throws `INVALID_OPTIONS`. While signed in, a
  * request's own `Authorization` header is replaced.
+ *
+ * A redirect isn't followed: the request rejects as `fetch` does when it
+ * refuses one, with a `TypeError` in browsers and Node.js. On React Native
+ * before Expo SDK 58, `fetch` follows a redirect whatever it's told. The
+ * response is still refused, with a `TypeError`, but the redirected request
+ * has already gone out, so don't let your API redirect requests that carry
+ * a token.
  *
  * `fetch`'s own failures, such as a network error, and an `init` that
  * `Request` refuses, reject as `fetch` and `Request` do.
@@ -203,15 +251,28 @@ export function createAuthFetch(
 
 		// Built once something will be sent: it uses up a `Request`'s body, and
 		// a call that rejects first must leave the caller's `Request` usable.
-		const request = new Request(given ?? url, init);
+		const request = new Request(
+			given ?? url,
+			given
+				? {
+						referrer: given.referrer,
+						referrerPolicy: given.referrerPolicy,
+						...init,
+					}
+				: init,
+		);
 		const canReplay = request.method === "GET" || request.method === "HEAD";
 
 		const send = async (session: Credentials) => {
 			if (!auth.isCurrent(session)) throw sessionChanged();
 			const headers = new Headers(request.headers);
 			headers.set("Authorization", `Bearer ${session.accessToken}`);
-			const response = await fetch(
-				new Request(request, { headers, redirect: "error" }),
+			const response = await sendOnce(
+				new Request(request, {
+					headers,
+					referrer: request.referrer,
+					referrerPolicy: request.referrerPolicy,
+				}),
 			);
 			if (!auth.isCurrent(session)) {
 				await discard(response);
@@ -221,9 +282,7 @@ export function createAuthFetch(
 		};
 
 		if (!captured) {
-			const response = await fetch(
-				new Request(request, { redirect: "error" }),
-			);
+			const response = await sendOnce(request);
 			// A 401 for the signed-out request must not reach a 401 handler that
 			// would then sign out the account that just signed in.
 			if (auth.state.get().sessionId !== null) {

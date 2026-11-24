@@ -3,17 +3,30 @@ title: "effetch"
 description: "An effetch plugin that sends the access token."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/effetch";
-```
-
-Guide: [Effect and effetch](/docs/effect).
+Import these from `@monarcode/session-kit/effetch`. To set it up, see
+[Effect and effetch](/docs/effect).
 
 ## Functions
 
 ### sessionBearer
 
 An effetch plugin that sends the current access token as `Authorization: Bearer`. After a 401, it gets a new access token once. `GET` and `HEAD` requests are then sent again; other requests return the 401 for you to retry. If the request sent again gets a 401 too, the user is signed out, unless `signOutOnRepeated401` is off. If the renewal ends the session, the call returns the 401.
+
+Calls fail with `AuthFailure`, before sending anything: `UNAUTHENTICATED` when signed out, unless `optional` sends them without a token, and `LOCKED` while locked. When a refresh fails, the call fails with that failure, such as `REFRESH_FAILED`.
+
+If the session changes during a call, it fails with `SESSION_CHANGED` rather than return a response meant for another account.
+
+Streams, such as `api.sse` and stream endpoints, work the same way up to the response's headers. A stream that's open when the user signs out or switches accounts keeps reading until it ends. Stop it yourself if it mustn't outlive the session.
+
+The token never leaves your API. A request on another origin, or with a username or password in its URL, dies with `INVALID_OPTIONS`. With Effect's `FetchHttpClient`, a redirect fails as a `Fetch.NetworkError` rather than being followed, except on React Native before Expo SDK 58, whose `fetch` follows redirects whatever it's told. An invalid `baseUrl` throws `INVALID_OPTIONS`.
+
+A request that already has an `Authorization` header is sent as it is, as effetch's `bearer` does.
+
+Put it last in `plugins`, after `retry`, so each attempt reads the current token. The client then needs the `Auth` service, but calls don't.
+
+On the server, make the effetch client per request, and provide it the `Auth` layer for that request's session (`RequestAuth`). It reads the token from the request's cookie and saves a renewed one.
+
+See [`SessionBearerOptions`](#sessionbeareroptions) for `optional` and `signOutOnRepeated401`.
 
 ## Types
 
@@ -30,3 +43,5 @@ Options for [`sessionBearer`](#sessionbearer).
 ### SessionBearerPlugin
 
 The plugin [`sessionBearer`](#sessionbearer) returns. Its calls can fail with `AuthFailure`, and a client made with it needs the `Auth` service.
+
+A call can skip it with `plugins: { sessionBearer: false }`, or override `optional` and `signOutOnRepeated401`.

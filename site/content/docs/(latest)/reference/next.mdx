@@ -3,11 +3,8 @@ title: "Next.js"
 description: "Server sessions for the Next.js App Router."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/next";
-```
-
-Guide: [Next.js](/docs/setups/next).
+Import these from `@monarcode/session-kit/next`. To set it up, see
+[Next.js](/docs/setups/next).
 
 ## Functions
 
@@ -15,17 +12,31 @@ Guide: [Next.js](/docs/setups/next).
 
 The `CookieJar` for `cookies()` from `next/headers`, to pass to `serverAuth` from `@monarcode/session-kit/server`.
 
+It's read-only unless you pass `writable: true`, which only a Server Function or a Route Handler may do, as Next throws when a Server Component sets a cookie. A read-only jar can't refresh, so refresh before rendering, in Proxy, with [`proxyJar`](#proxyjar).
+
+The read-only jar follows the writable jar for the same store, so a sign-in, sign-out or refresh through the writable one shows in it. The same store and `writable` always give the same jar.
+
 ### nextSession
 
 Gives a Next.js app its session ([`NextSession`](#nextsession)), over [`nextJar`](#nextjar) and [`proxyJar`](#proxyjar). Make it once, beside `serverAuth`, in a module only server code imports.
+
+Server Components read it with `get` and guard pages with `require`. Server Functions and Route Handlers sign in and out with `signIn` and `signOut`. `proxy.ts` refreshes with `refresh`, as rendering can't set cookies.
+
+Throws `INVALID_OPTIONS` without `cookies` or `redirect`, when `loginPath` doesn't start with `/`, or when `within` is negative.
 
 ### proxyJar
 
 The `CookieJar` for a request in Next's Proxy (`proxy.ts`). It reads `request`'s cookies and sets new ones on `response`. Use it with `serverAuth.refreshIfDue`, so the pages that render the request see a fresh token through [`nextJar`](#nextjar).
 
+Return `response` from Proxy, or the new cookies are lost. Pages on the Edge runtime may still read the old cookie. Every call with the same `response` returns the same jar.
+
 ### sessionRoute
 
 Makes the Route Handlers for your session route, which answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. Pass `cookies` from `next/headers` ([`NextSessionRouteOptions`](#nextsessionrouteoptions)).
+
+It answers this site's own pages only, as `sessionHandler` from `@monarcode/session-kit/server` explains, and serves the access token only when `createServerAuth` has `clientCredentials`. Sign-in stays your own Server Function.
+
+Throws `INVALID_OPTIONS` without `cookies`.
 
 ## Types
 
@@ -46,6 +57,18 @@ Options for [`nextJar`](#nextjar).
 ### NextSession
 
 The session in a Next.js app, made by [`nextSession`](#nextsession): reads and guards for Server Components, the request's session for Server Functions and Route Handlers, and the refresh for Proxy.
+
+Members:
+
+- `get`: Resolves who is signed in, from the cookie, or `null`. It doesn't set cookies, so it works in Server Components. Proxy refreshes first.
+- `require`: Resolves the session, or redirects to the sign-in page with `?redirectTo=` set to `path`, the page's own path, as Server Components don't know their URL. Next adds a `basePath` to redirects from pages and Server Functions, but not from Route Handlers. With a `basePath`, a Route Handler should read the session with `get` and answer 401 instead.
+- `redirectIfSignedIn`: For your sign-in page: redirects a signed-in user to `redirectTo`, usually the `redirectTo` search param, made safe with `safeReturnTo`. It resolves for a signed-out user, or when the session can't be read.
+- `readOnly`: The request's session for Server Components, which doesn't set cookies. Read its `credentials` to call your API while rendering.
+- `writable`: The request's session for Server Functions and Route Handlers, which sets cookies. `signIn`, `signOut` and `updateUser` are shortcuts to it. Use it for the rest, such as renewing the access token.
+- `signIn`: Signs in with your backend's tokens, setting the cookie, as `RequestAuth`'s `signIn` does over `writable()`. Use it in Server Functions and Route Handlers.
+- `signOut`: Signs out and clears the cookie, as `RequestAuth`'s `signOut` does over `writable()`. Use it in Server Functions and Route Handlers.
+- `refresh`: For Proxy: refreshes access that expires within `within` seconds, setting the new cookie on `response`, and resolves `response`. A failed refresh is left for the page, which reads the session as it is.
+- `updateUser`: Replaces the signed-in user in the cookie, such as after a profile edit, as `RequestAuth`'s `updateUser` does over `writable()`. Use it in Server Functions and Route Handlers.
 
 ### NextSessionOptions
 

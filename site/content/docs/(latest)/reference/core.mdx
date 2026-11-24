@@ -3,11 +3,8 @@ title: "Core"
 description: "The client and storage: create one auth client per app."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit";
-```
-
-Guide: [Getting started](/docs/getting-started).
+Import these from `@monarcode/session-kit`. To set it up, see
+[Getting started](/docs/getting-started).
 
 ## Functions
 
@@ -15,21 +12,50 @@ Guide: [Getting started](/docs/getting-started).
 
 Creates an auth client. It keeps the session your backend issued, saves it, refreshes its tokens, and tells your app when it changes.
 
+Create one client per `name`. Throws `INVALID_OPTIONS` for options it can't use. To keep sessions on your server instead, in a cookie, use `createServerAuth` from `@monarcode/session-kit/server`.
+
+The saved session is read on the first `mount()`, which `AuthProvider` and the router adapters call, or by the first method that needs it, such as `getSession()`. Until then, `state.status` is `initializing`.
+
+See [`AuthOptions`](#authoptions) for every option.
+
+See [`AuthClient`](#authclient) for what the client does.
+
 ### createMirrorAuth
 
 Creates a browser client ([`MirrorAuth`](#mirrorauth)) for a session your server keeps in an encrypted cookie, with `createServerAuth` from `@monarcode/session-kit/server`.
+
+It starts from the session the page was rendered with, so there's no loading state, and it never sees the refresh token. Create one per page load in the browser, and one per request on the server, never at module level. `useMirrorAuth` does this for you.
+
+Let TypeScript infer its types from the options. With an explicit `createMirrorAuth<User>(…)`, `signIn` drops out of the type. Throws `INVALID_OPTIONS` for options it can't use, and `INVALID_SESSION` for a `session` that isn't a session or `null`.
+
+See [`MirrorAuthOptions`](#mirrorauthoptions) for every option.
 
 ### fromAccessToken
 
 Reads the user from the access token, rather than from what `signIn` is given. Pass the result as `createAuth`'s `user` option.
 
+The `claims` schema checks the token's claims, and `map` turns them into the user. Without `map`, the claims are the user.
+
+The client then works a little differently:
+
+- `signIn` takes tokens only, and your refresh callback returns tokens only.
+- There's no `updateUser`. The user changes when the token does, so call `auth.refresh()` to pick up a change.
+
+`map` runs on every restore and every new token, so keep it pure and synchronous. The same claims must give the same user. Leave out claims that change on every refresh, such as `exp`, `iat` or `jti`. A token that can't be read, or whose claims the schema rejects, fails with `USER_VALIDATION_FAILED`.
+
+See [`FromAccessTokenOptions`](#fromaccesstokenoptions) to verify the token yourself.
+
 ### isSignedIn
 
 Whether someone is signed in: `true` while `authenticated` or `refreshing`. It narrows `state`, so `state.user` is set when it's `true`.
 
+Check this rather than `status === "authenticated"`, which is `false` for a moment while an expired access token refreshes. A `locked` session is `false`. It has a user, but no access until it's unlocked.
+
 ### loginHref
 
 Builds the sign-in page's URL, with `?redirectTo=` set to `returnTo`, so the user comes back after signing in. The guards use it. Use it in a guard of your own, such as in a route handler.
+
+`returnTo` is encoded as is. Pass a path you read from the request through [`safeReturnTo`](#safereturnto) first. Throws `INVALID_OPTIONS` when `loginPath` doesn't start with `/`.
 
 ### memoryStorage
 
@@ -39,15 +65,27 @@ Keeps the session in memory only. It ends when the page unloads, and other tabs 
 
 Makes a "send me back here after sign-in" path safe to redirect to, such as a `?redirectTo=` search param. It returns the path, normalized, when it leads somewhere in your app, query and fragment included.
 
+Anything else returns `"/"`:
+
+- Another site, including protocol-relative `//host` paths.
+- A path with backslashes, spaces or control characters.
+- The sign-in page itself, so a stale `redirectTo` can't loop.
+
+Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
+
 ### webStorage
 
 Saves the session in the browser's `localStorage`, or in `sessionStorage` with `{ area: "session" }`. With `localStorage`, tabs follow each other's changes, such as a sign-out. Tabs take turns to refresh where the browser supports Web Locks.
+
+It touches browser storage only when the client reads or saves, so creating a client in code that also runs on a server is safe. Reading the session on a server fails with `PERSISTENCE_FAILED`.
 
 ## Classes
 
 ### AuthError
 
 The error Session kit throws, rejects with, or shows in `state.error`.
+
+`code` says what went wrong ([`AuthErrorCode`](#autherrorcode)). `cause` holds what failed underneath, such as your refresh callback's error, and `issues` holds the schema's issues when the user was rejected.
 
 ## Types
 
@@ -58,6 +96,28 @@ A user read from the access token, made by [`fromAccessToken`](#fromaccesstoken)
 ### AuthClient
 
 The auth client that `createAuth` returns. It holds the session, saves it, refreshes it, and tells your app when it changes.
+
+`U` is the user ([`User`](#user)) and `I` is the user `signIn` accepts ([`UserInput`](#userinput)). With `fromAccessToken`, `I` is `never` and there's no `updateUser`. Write `typeof auth` rather than spelling out both.
+
+Members:
+
+- `state`: The current [`AuthState`](#authstate), and a way to listen for changes. In React, read it with `useAuth`. `subscribe` calls the listener on each later change, not with the current state. A listener that throws doesn't break auth. Its error is rethrown asynchronously.
+- `state.get`
+- `state.subscribe`
+- `signIn`: Signs in with the tokens your backend issued, and saves the session. It replaces any current session, even a locked one. Rejects with `INVALID_SESSION` for tokens it can't use, such as ones that already expired, and with `USER_VALIDATION_FAILED` for a user the schema rejects. The previous session then stays. If `signIn` or `signOut()` is called again while it's still checking the user, it rejects with `SESSION_CHANGED`, as the latest call wins. If the session can't be saved, it rejects with `PERSISTENCE_FAILED`, and no one is signed in.
+- `signOut`: Signs out at once, clears the saved session, then calls your `revoke` option and waits for it. Other tabs that share the storage sign out too, when it reports changes (`subscribe`) and `locking` is off. If `revoke` fails, `state.error` shows `REVOKE_FAILED`, and `signOut()` still resolves. If storage can't be cleared, it rejects with `PERSISTENCE_FAILED`. The app is signed out anyway, but the next load would restore the session, so call it again later.
+- `getSession`: Resolves who is signed in, or `null` when signed out. It reads the saved session first if needed, and refreshes an expired access token. After a refresh fails, it rejects with that failure until `retry()`, `signIn` or `signOut()`. Rejects with `PERSISTENCE_FAILED` when the saved session can't be read, with `SESSION_CHANGED` when the session changes while it runs, and with `LOCKED` while locked.
+- `retry`: Like `getSession()`, but tries a failed refresh again instead of rejecting with its error. Use it for a "Try again" button.
+- `refresh`: Refreshes the tokens now, even if the access token is still valid, for example to pick up changes to the user. Resolves `null` when signed out. Rejects with `REFRESH_FAILED` when there's no `refresh` option or no refresh token, and with `LOCKED` while locked.
+- `isCurrent`: Whether `session` is still the signed-in one, by its `sessionId`. Use it to drop a response that arrives after the user signed out or switched accounts.
+- `lock`: Locks the session (with `locking`). The tokens leave memory and timers stop, but the saved session and `state.user` stay. `state.status` turns `locked` at once. While locked, `getSession`, `retry`, `refresh`, `updateUser`, `credentials.get` and `credentials.renew` reject with `LOCKED`. Call `unlock()` to continue, or `signOut()`. A refresh already running still saves its tokens, and `lock()` resolves after that save. Keep the key `seal` needs until then. Does nothing when signed out or already locked. Rejects with `INVALID_OPTIONS` without `locking`.
+- `unlock`: Unlocks a `locked` session and resolves it. It reads the saved tokens and opens them with `locking.open`. When not locked, it acts like `getSession()`. Overlapping calls share one unlock. If `open` throws or doesn't return a string, it rejects with `UNLOCK_FAILED`, and the session stays locked. If storage can't be read, it rejects with `PERSISTENCE_FAILED`, and the session stays locked too. If the saved session can't be used, it signs out and rejects with `INVALID_SESSION`. If it's gone, or past `maxAge`, it signs out and resolves `null`. An expired access token is refreshed at once. If your backend rejects the refresh token, it signs out and resolves `null`. If the refresh fails otherwise, it rejects with `REFRESH_FAILED`. The session is then unlocked, but `unavailable` until `retry()`. Rejects with `INVALID_OPTIONS` without `locking`.
+- `mount`: Starts the background work: expiry timers, and following other tabs. Returns a function that stops it. `AuthProvider` and the router adapters call it for you. Calls are counted, and the work stops when the last one is stopped. Each call also checks the session again. It reads the saved session if that hasn't worked yet, and refreshes an access token that expired.
+- `credentials`: The access token ([`Credentials`](#credentials)), for code that sends it with requests, such as `createAuthFetch`.
+- `credentials.get`: Like `getSession()`, but resolves the current access token.
+- `credentials.renew`: Gets a new access token after your API rejected `credentials`, such as with a 401. Calls that overlap share one refresh. Without a `refresh` option or a refresh token, it signs out and resolves `null`. Rejects with the refresh's failure, such as `REFRESH_FAILED`, or `INVALID_SESSION` and `USER_VALIDATION_FAILED` for tokens or a user the client can't use. Rejects with `SESSION_CHANGED` when another session has replaced theirs, and with `LOCKED` while locked.
+- `credentials.reject`: Signs out because your API rejected `credentials` for good. Does nothing if they're no longer current, such as after a refresh.
+- `updateUser`: Replaces the signed-in user, such as after a profile edit. Pass the user, or an async function that fetches it. The session ID stays. Rejects with `UNAUTHENTICATED` when signed out, and with `USER_VALIDATION_FAILED` for a user the schema rejects, or when the function rejects or takes more than 15 seconds. If calls overlap, the latest wins and the others reject with `SESSION_CHANGED`. It reads the session as `getSession()` does first, so it rejects with `LOCKED` while locked, and with a refresh's failure, such as `REFRESH_FAILED`. If the new user can't be saved, it rejects with `PERSISTENCE_FAILED` and signs out.
 
 ### AuthDebug
 
@@ -70,7 +130,9 @@ What `createAuth`'s `debug` option takes:
 
 ### AuthDebugEvent
 
-One thing auth did, sent to the `debug` option ([`AuthDebug`](#authdebug)).
+One thing the client did, sent to the `debug` option ([`AuthDebug`](#authdebug)).
+
+Filter on `type`, which doesn't change between releases. `message` and `data` are for reading, and may change in any release. Events are frozen, so copy one before changing it.
 
 ### AuthDebugOptions
 
@@ -84,7 +146,9 @@ The object form of `createAuth`'s `debug` option ([`AuthDebug`](#authdebug)): wh
 
 ### AuthDebugType
 
-Which part of auth an [`AuthDebugEvent`](#authdebugevent) comes from, such as `refresh` or `storage`. These names don't change between releases, so filter on them.
+Which part of Session kit an [`AuthDebugEvent`](#authdebugevent) comes from, such as `refresh` or `storage`. These names don't change between releases, so filter on them.
+
+`sync` events report changes from other tabs and, with server rendering, from the server. `gate`, `deep-link` and `foreground` events come from `@monarcode/session-kit/expo`.
 
 ### AuthErrorCode
 
@@ -104,6 +168,13 @@ Options for creating an [`AuthError`](#autherror) yourself, such as in a test or
 
 Encrypts the saved tokens with a key your app holds, such as one behind Face ID. Pass it as the `locking` option of [`AuthOptions`](#authoptions).
 
+The client calls `seal` whenever it saves tokens, and `open` only from `unlock()`. The user and session ID are saved unencrypted, so a locked session can still show who is signed in.
+
+Members:
+
+- `seal`: Encrypts the tokens, given as a JSON string. If it throws while a session is saved, the save fails with `PERSISTENCE_FAILED`, which signs the user out.
+- `open`: Decrypts what `seal` returned. It must throw when it can't.
+
 ### AuthOptions
 
 Options for `createAuth`. The client's user types ([`User`](#user), [`UserInput`](#userinput)) are inferred from the `user` option.
@@ -118,6 +189,8 @@ Options for `createAuth`. The client's user types ([`User`](#user), [`UserInput`
 
 The current auth state, from `state.get()` or `useAuth()`. It holds no tokens.
 
+Check `status`, not `user`, to know whether requests can be made. `user` stays set while `locked`, when they can't. `isSignedIn` is that check. Checking `status` also narrows `user`, so TypeScript knows when it's set.
+
 ### AuthStatus
 
 Where the session stands: `state.status` ([`AuthState`](#authstate)).
@@ -129,9 +202,13 @@ Where the session stands: `state.status` ([`AuthState`](#authstate)).
 - `unauthenticated`: signed out.
 - `unavailable`: the access token expired or was rejected and couldn't be refreshed, or the saved session couldn't be read. `state.error` usually says why. On a client, `retry()` tries again.
 
+`user` is set while `authenticated`, `refreshing` or `locked`.
+
 ### AuthStorage
 
-Where auth saves the session: `createAuth`'s `storage` option. Use [`webStorage`](#webstorage) in browsers, `secureStorage()` from `@monarcode/session-kit/expo` in Expo apps, and [`memoryStorage`](#memorystorage) in tests. Implement it yourself for another store.
+Where Session kit saves the session: `createAuth`'s `storage` option. Use [`webStorage`](#webstorage) in browsers, `secureStorage()` from `@monarcode/session-kit/expo` in Expo apps, and [`memoryStorage`](#memorystorage) in tests. Implement it yourself for another store.
+
+Values are strings in a format Session kit owns. Methods may return promises. Session kit runs them one at a time, in order, so a store that answers out of order is still safe.
 
 <auto-type-table
   cwd
@@ -147,6 +224,12 @@ The access token as your server gives it to the browser, from `serverAuth.client
 
 The current access token, from `credentials.get()`, to send with your API requests. `createAuthFetch` from `@monarcode/session-kit/http` does this for you.
 
+Members:
+
+- `sessionId`
+- `accessToken`
+- `expiresAt`: When the access token expires, as Unix time in milliseconds on **this device's clock**, so you can compare it with `Date.now()`. `undefined` when the token has no known expiry.
+
 ### FromAccessTokenOptions
 
 Options for [`fromAccessToken`](#fromaccesstoken).
@@ -160,6 +243,26 @@ Options for [`fromAccessToken`](#fromaccesstoken).
 ### MirrorAuth
 
 The browser client that [`createMirrorAuth`](#createmirrorauth) returns. It mirrors a session your server keeps in a cookie.
+
+It works with `AuthProvider`, the hooks, the router guards, `createAuthFetch` and `sessionBearer`, as a `createAuth` client does. It has no `lock`, `unlock` or `updateUser`. `U` is the user, and `In` is what `signIn` takes (`never` without the `signIn` option).
+
+Members:
+
+- `state`: The current [`AuthState`](#authstate), and a way to listen for changes. It's only ever `authenticated` or `unauthenticated`. A failed revalidation shows in `error` and changes nothing else. `subscribe` calls the listener on each later change, not with the current state.
+- `state.get`
+- `state.subscribe`
+- `getSession`: Resolves the session this client holds, or `null`. It doesn't ask the server.
+- `retry`: Asks your server for the session again, with `revalidate` or `endpoint`, and resolves it. If that fails, it rejects and keeps the current session. The code is `REFRESH_FAILED`, or the session route's own code, such as `INVALID_OPTIONS` for a request it refused.
+- `refresh`: Same as `retry()`. The server refreshes tokens itself, so this only asks for the session again.
+- `isCurrent`: Whether `session` is still the signed-in one, by its `sessionId`. Use it to drop a response that arrives after the user signed out or switched accounts.
+- `signOut`: Signs out on your server, then in this tab and the others. If the server's sign-out fails, it rejects and keeps the session. The code is `PERSISTENCE_FAILED`, or the session route's own code.
+- `adopt`: Takes a session your server returned, such as from your own sign-in or a profile update, and tells other tabs. Route guards run again when the account or the user changed. Throws `INVALID_SESSION` for anything but a session or `null`.
+- `mount`: Starts watching for other tabs' changes, and asks the server for the session when the tab becomes visible again (unless it answered in the last 10 seconds). Returns a function that stops. Calls are counted, and watching stops when the last one is stopped. `AuthProvider` and the router adapters call it for you.
+- `credentials`: The access token ([`Credentials`](#credentials)), for `createAuthFetch` and `sessionBearer`. Needs `endpoint` or the `credentials` option, or `get` and `renew` reject with `INVALID_OPTIONS`. The token is kept in memory only, and fetched again shortly before it expires.
+- `credentials.get`: Resolves the current access token, or `null` when signed out. Calls that overlap share one request. Rejects with `REFRESH_FAILED` when your server fails, or with the session route's own code, such as `INVALID_OPTIONS` without `clientCredentials`. Rejects with `SESSION_CHANGED` when the session changed meanwhile, here or on the server.
+- `credentials.renew`: Asks your server for a new access token after your API rejected `credentials`. Calls that overlap share one request. Resolves `null` when the server has signed out. Rejects with `SESSION_CHANGED` when the server holds another account, and follows it.
+- `credentials.reject`: Signs out because your API rejected `credentials` for good. Does nothing if a newer token has replaced them.
+- `signIn`: Signs in on your server with the `signIn` option, then takes the session it resolves and tells other tabs. If the option throws, it rejects with that error, unchanged, as a sign-in in a single-page app does. If it resolves anything but a session, it rejects with `INVALID_SESSION`.
 
 ### MirrorAuthOptions
 
@@ -175,9 +278,15 @@ Options for [`createMirrorAuth`](#createmirrorauth). The client talks to your se
 
 How a [`MirrorAuth`](#mirrorauth) gets the access token from your server. It's the `credentials` option of [`MirrorAuthOptions`](#mirrorauthoptions).
 
+Both functions call your own server functions, on the same origin and protected against CSRF, which call `serverAuth.clientCredentials`.
+
 ### RefreshFn
 
 Exchanges a refresh token for new tokens. It's the `refresh` option of [`AuthOptions`](#authoptions).
+
+The client calls it whenever it needs a new access token: shortly before the current one expires (while mounted), once it has expired, when your API rejects it, on `refresh()`, and on `retry()` once it has expired. It never runs two at once. Callers that need a refresh while one runs share its result.
+
+See [`RefreshResult`](#refreshresult) for what to return or throw.
 
 ### RefreshResult
 
@@ -186,9 +295,19 @@ What your refresh callback ([`RefreshFn`](#refreshfn)) returns:
 - [`Tokens`](#tokens): the new tokens. They must last at least five seconds. Leave out `refreshToken` or `user` to keep the current one.
 - `null`: your backend rejected the refresh token. The user is signed out.
 
+For any other failure, such as a network error or a 5xx, throw. The session is kept, and the failure shows as a `REFRESH_FAILED` error whose `cause` is what you threw. An `AuthError` you throw keeps its own `code`.
+
+With `fromAccessToken`, return tokens only. The user is read from the new access token.
+
 ### Register
 
 Register your client's type here, once, so the hooks from `@monarcode/session-kit/react` and the Effect service carry your user. Without it, the user is typed `unknown`.
+
+Register the client you give `AuthProvider`: one from `createAuth`, or with server rendering from `createMirrorAuth`. Register a mirror client by the type its function returns, such as `ReturnType<typeof createAppAuth>`. Anything else types the hooks and the Effect service as `never`.
+
+A TanStack Router app doesn't need it for its hooks: those from `@monarcode/session-kit/tanstack-router` are typed by the Router.
+
+See [`RegisteredAuth`](#registeredauth) for the type it gives.
 
 ### RegisteredAuth
 
@@ -197,6 +316,10 @@ The client registered in [`Register`](#register), or a client with an `unknown` 
 ### RevokeFn
 
 Asks your backend to revoke the tokens of a session that just signed out. It's the `revoke` option of [`AuthOptions`](#authoptions).
+
+`signOut()` calls it after the user is already signed out, so a UI that follows the state never waits for it. `signOut()` itself resolves once it settles. If it fails, `state.error` shows `REVOKE_FAILED`, and `signOut()` still resolves.
+
+It isn't called when your backend ended the session itself, or when a `locked` session signs out, as its tokens aren't in memory.
 
 ### SafeReturnToOptions
 
@@ -212,9 +335,20 @@ Options for [`safeReturnTo`](#safereturnto).
 
 Who is signed in: the session ID and the user, from `getSession()`. It holds no tokens, so it's safe to keep in route context or pass around.
 
+See [`Credentials`](#credentials) for the access token.
+
+Members:
+
+- `sessionId`: Identifies this sign-in. It stays the same across refreshes and profile updates, and is new on every sign-in.
+- `user`
+
 ### SessionOf
 
 The session type of a client: what its `getSession` resolves, without `null`. It takes any client: one from `createAuth` or `createMirrorAuth`, the server's from `createServerAuth`, or a request's session from it.
+
+The browser can take its types from the server's. An `import type` of the server's module is left out of the browser bundle.
+
+See [`UserOf`](#userof) for the user alone.
 
 ### SignInInput
 
@@ -223,6 +357,16 @@ What `signIn` takes: the [`Tokens`](#tokens), plus the `user` when a schema vali
 ### Tokens
 
 The tokens your backend issues. Pass them to `signIn`, and return them from your refresh callback ([`RefreshFn`](#refreshfn)).
+
+When the access token expires comes from the first of these that is set:
+
+1. `expiresIn` or `expiresAt`. Pass one, not both.
+2. A JWT access token's `exp - iat`, counted from when the client receives it.
+3. A JWT access token's `exp` alone, compared with the device's clock.
+
+With none of them, the token never expires on its own. It's replaced only after your API rejects it.
+
+Prefer `expiresIn`, or a JWT with `iat`. Device clocks can be minutes off, and a clock that runs fast makes a fixed deadline look already passed, so `signIn` would reject the tokens.
 
 <auto-type-table
   cwd
@@ -234,9 +378,13 @@ The tokens your backend issues. Pass them to `signIn`, and return them from your
 
 The signed-in user's type, inferred from the `user` option: what `state.user` and `session.user` hold.
 
+See [`UserInput`](#userinput) for the user that `signIn` accepts.
+
 ### UserInput
 
 The user that `signIn` and `updateUser` accept, inferred from the `user` option. It differs from [`User`](#user) when the schema has defaults or transforms.
+
+It's `never` with `fromAccessToken`. The user is then read from the token, so `signIn` takes tokens only.
 
 ### UserOf
 

@@ -3,11 +3,8 @@ title: "Expo"
 description: "Secure storage, the session gate and deep links for Expo Router."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/expo";
-```
-
-Guide: [Expo Router](/docs/setups/expo).
+Import these from `@monarcode/session-kit/expo`. To set it up, see
+[Expo Router](/docs/setups/expo).
 
 ## Functions
 
@@ -15,19 +12,53 @@ Guide: [Expo Router](/docs/setups/expo).
 
 Makes `redirectSystemPath` for `app/+native-intent.tsx`. It keeps each incoming link with [`rememberDeepLink`](#rememberdeeplink), so `SessionGate` opens it after sign-in, and returns the path unchanged.
 
+Use `rememberDeepLink` itself when your `redirectSystemPath` does more, such as rewriting old links.
+
+Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`. It throws when it's made, so a link never meets the error.
+
+See [`RememberDeepLinkOptions`](#rememberdeeplinkoptions) to set your sign-in screen's path.
+
 ### rememberDeepLink
 
 Keeps an incoming deep link, so `SessionGate` can open it after the user signs in. Without it, `Stack.Protected` sends a signed-out user from a guarded screen to one they may see, and the link is lost.
 
+Call it from `redirectSystemPath` in `app/+native-intent.tsx`, which Expo Router calls with every URL that opens the app. `url` can be a full URL or a path. Return the path unchanged, so a signed-in user still lands on it.
+
+The path is checked with `safeReturnTo`, so the sign-in path, the root, and anything that could leave the app are ignored. A newer link replaces an older one. The link is kept in memory only, so an app restart forgets it. What `SessionGate` does with it:
+
+- **Signed in already**: drops it, since Expo Router opens it as usual.
+- **Signed out or locked**: opens it with `router.replace` after the next sign-in or unlock, once `SessionGate`'s `ready` is `true`.
+- **A screen anyone may see**: drops it once that screen is showing.
+
+Throws `INVALID_OPTIONS` for a `loginPath` that doesn't start with `/`. Expo Router warns that a throw in `redirectSystemPath` can crash the app. [`deepLinkHandler`](#deeplinkhandler) throws when it's made instead.
+
 ### secureStorage
 
 Saves the session with `expo-secure-store`: in the iOS keychain, and encrypted with an Android Keystore key on Android. Pass it as `createAuth`'s `storage` in Expo apps.
+
+- Values over 2048 bytes, which some iOS releases refuse to store, are split across keys. A write cut short, for example when the app is killed, keeps the previous value whole. A value over 128 KB fails to save, with `PERSISTENCE_FAILED`.
+- Reads are synchronous, so with a synchronous user schema the session is restored before the first render. Writes and removals are asynchronous.
+- On iOS, a session left in the keychain by an earlier install is removed unless `clearOnReinstall` is `false`. A marker file in the app's documents directory, which deleting the app removes, tells installs apart.
+- Data that can't be decrypted, as after Android restores a backup onto another device, reads as signed out and is removed. Other read failures, such as a locked iOS keychain, make the session `unavailable`.
+
+Unlike `webStorage`, it has no `subscribe` or `lock`, because an app has no other tabs to follow or to share refreshes with.
+
+See [`SecureStorageOptions`](#securestorageoptions) for iOS keychain access and reinstalls.
 
 ## Components
 
 ### SessionGate
 
 Wraps the root navigator in `app/_layout.tsx`. It adds what Expo Router's `Stack.Protected` lacks: a splash screen held while the session is restored, a screen for when access is unavailable, and deep links kept for after sign-in.
+
+Render it inside `AuthProvider`, or pass a `client`, which it mounts. Without either, it throws `INVALID_OPTIONS`.
+
+- **While the session is restored**, and until `ready`, it renders nothing, so the splash screen stays up, and hides the splash screen once both are done. The navigator mounts only then, so a cold-start deep link isn't sent to the sign-in screen first. Call `SplashScreen.preventAutoHideAsync()` at the top of the root layout.
+- **While access is unavailable** it renders `unavailable({ error, retry })` instead of the navigator. Without `unavailable`, it hides the splash screen and throws the error to the root layout's `ErrorBoundary`.
+- **While locked** it renders the navigator, so its guards can show an unlock screen. Neither unlocking nor a password sign-in from the lock screen remounts the navigator.
+- **When the app returns to the foreground** it re-checks the session, because timers don't run while iOS suspends the app. An access token that expired meanwhile is refreshed. A refresh that already failed stays failed until `retry()`.
+- **After a sign-in or unlock** it opens the deep link `rememberDeepLink` kept, with `router.replace`, once `ready`.
+- **When one account replaces another** without a sign-out between them, it remounts the navigator, so no screen keeps the previous account's component state. The screens that were open stay open. A sign-out already removes the guarded screens.
 
 ## Types
 

@@ -1,8 +1,9 @@
 import { AuthError } from "./errors.js";
 
 /**
- * Which part of auth an {@link AuthDebugEvent} comes from, such as `refresh`
- * or `storage`. These names don't change between releases, so filter on them.
+ * Which part of Session kit an {@link AuthDebugEvent} comes from, such as
+ * `refresh` or `storage`. These names don't change between releases, so
+ * filter on them.
  *
  * `sync` events report changes from other tabs and, with server rendering,
  * from the server. `gate`, `deep-link` and `foreground` events come from
@@ -37,7 +38,7 @@ export type AuthDebugType =
 	| "lock";
 
 /**
- * One thing auth did, sent to the `debug` option ({@link AuthDebug}).
+ * One thing the client did, sent to the `debug` option ({@link AuthDebug}).
  *
  * Filter on `type`, which doesn't change between releases. `message` and
  * `data` are for reading, and may change in any release. Events are frozen,
@@ -62,7 +63,7 @@ export type AuthDebugType =
 export type AuthDebugEvent = Readonly<{
 	/** The `name` option of the client that reports it. */
 	name: string;
-	/** Which part of auth it comes from. */
+	/** Which part of Session kit it comes from. */
 	type: AuthDebugType;
 	/** One readable line, such as `started (proactive)`. */
 	message: string;
