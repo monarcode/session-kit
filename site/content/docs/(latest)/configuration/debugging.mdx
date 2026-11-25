@@ -3,24 +3,50 @@ title: Debugging
 description: Log what the client does, or send each event to your error reporting, without exposing tokens.
 ---
 
-`createAuth`'s `debug` option reports what the client does: restores,
-refreshes and why they ran, timers, storage operations and how long they
-took, other tabs' changes, state changes, and what ended a session. Use it to
-find out why a session ended, or why a refresh ran.
+A user was signed out and you don't know why, or a refresh ran when you
+didn't expect one. `createAuth`'s `debug` option reports what the client
+does, so you can follow it step by step:
+
+- restores, and refreshes with the reason they ran;
+- timers;
+- storage operations, and how long they took;
+- other tabs' changes;
+- state changes, and what ended a session.
+
+This page shows how to log these events, send them to your error reporting,
+and keep tokens out of them.
 
 ## Log to the console
 
-To log each event as one `console.info` line, pass `debug: true`. A refresh
-logs a line like this one:
+To log each event as one `console.info` line, pass `debug: true`. To keep
+logging out of production, pass a development flag instead, such as Vite's
+`import.meta.env.DEV` or Expo's `__DEV__`.
+
+Each line starts with `[session-kit:<name>] <type>: <message>`, where
+`<name>` is your client's `name`. Any details follow as an object, which the
+console formats. For example, a sign-in followed by an early refresh logs
+lines like these in Node.js, among others:
 
 ```text
-[session-kit:my-app] refresh: started (proactive) { sessionId: "…", reason: "proactive" }
+[session-kit:my-app] sign-in: signed in { sessionId: '54940f07-…' }
+[session-kit:my-app] timer: early refresh fired
+[session-kit:my-app] refresh: started (proactive) {
+  sessionId: '54940f07-…',
+  reason: 'proactive'
+}
+[session-kit:my-app] refresh: saved new tokens {
+  sessionId: '54940f07-…',
+  durationMs: 3,
+  expiresInMs: 900000
+}
 ```
+
+A browser console shows the same lines, with each object ready to expand.
 
 ## Send events to your error reporting
 
-To receive each event instead of logging it, pass a function. For example, to
-leave breadcrumbs in your error reporting:
+To receive each event instead of logging it, pass a function. For example,
+to leave breadcrumbs in your error reporting:
 
 ```ts title="src/debug.ts"
 import type { AuthDebug } from "@monarcode/session-kit";
@@ -40,21 +66,33 @@ export const debug: AuthDebug = (event) =>
   });
 ```
 
-## Tokens and user data
+## Keep tokens and user data out
 
-Events leave out tokens, saved values and the user's fields. A session
-appears as its `sessionId`, and an error as its code and message, without
-its `cause` or `issues`.
+By default, events leave out tokens, saved values and the user's fields. A
+session appears as its `sessionId`, and an error as its code and message,
+without its `cause` or `issues`.
 
 To include them, pass `{ sensitive: true }`. Anyone who reads such logs can
 act as the user, so keep it to development builds. To set both, pass
 `{ log, sensitive }`, where `log` is your function.
 
-## What stays stable
+## Filter on the event type
 
 An event's `type` is one of a fixed set, such as `"refresh"` or `"storage"`,
-so you can filter on it. The wording of `message` and the fields in `data`
-may change in any release.
+so you can filter on it. [`AuthDebugType`](/docs/reference/core#authdebugtype)
+lists them all. The wording of `message` and the fields in `data` can change
+in any release, so read them, but don't match on them.
 
-A storage adapter can add its own events through the optional `debug` member
-of `AuthStorage`, as [`secureStorage()`](/docs/setups/expo#debugging) does.
+A store can add its own events through the optional `debug` member of
+[`AuthStorage`](/docs/reference/core#authstorage). They arrive with the type
+`"storage"`, beside the client's own storage events. `secureStorage()` uses
+it to report, for example, a saved session it removed after a reinstall, as
+the [Expo guide](/docs/setups/expo#debugging) shows.
+
+## Next steps
+
+- [Errors](/docs/configuration/errors): show the failures the log reports to
+  your users.
+- [Refresh](/docs/configuration/refresh): see when each kind of refresh runs.
+- [`AuthDebugEvent` reference](/docs/reference/core#authdebugevent): every
+  field an event carries.

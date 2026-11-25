@@ -2,16 +2,21 @@
 	"title": "Latest",
 	"root": "version",
 	"pages": [
+		"---Get started---",
 		"index",
 		"installation",
 		"getting-started",
-		"setups",
-		"server-rendering",
+		"---Setups---",
+		"...setups",
+		"---Guides---",
 		"client",
 		"configuration",
+		"server-rendering",
 		"effect",
-		"reference",
+		"---Going further---",
+		"security",
 		"faq",
-		"security"
+		"---Reference---",
+		"...reference"
 	]
 }

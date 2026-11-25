@@ -1,34 +1,74 @@
 ---
 title: Authenticated requests
-description: A fetch that sends the access token to one API, refreshes on a 401, and never leaks the token.
+description: Call your API with the access token, get a new one after a 401, and keep the token away from every other server.
 ---
 
-`createAuthFetch(auth, { baseUrl })` returns a `fetch` for one API. It's
-built so that a token can't leak and a user can't be signed out by accident:
+Your API wants the access token on every request, and it answers 401 when the
+token has expired or been revoked. `createAuthFetch` gives you a `fetch` that
+adds the token, gets a new one after a 401, and sends the token only to your
+API, so your request code doesn't have to.
 
-| When…                                                                       | `authFetch`…                                                                 |
-| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| The request is for another origin, or has a username or password in its URL | Rejects with `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.   |
-| The response is a redirect                                                  | Rejects rather than following it.                                            |
-| The response is a 401                                                       | Refreshes once, then sends a GET or HEAD again with the new token.           |
-| Any other method gets a 401                                                 | Refreshes, and resolves the 401. It never sends a write twice on its own.    |
-| The replayed request gets a 401 too                                         | Signs out, unless `signOutOnRepeated401` is `false`.                         |
-| The session changes during the request                                      | Rejects with `SESSION_CHANGED` rather than resolve another account's answer. |
-| Nobody is signed in                                                         | Rejects with `UNAUTHENTICATED`, unless `optional` is `true`.                 |
-| The session is locked                                                       | Rejects with `LOCKED`, even when `optional` is `true`.                       |
-| A refresh fails                                                             | Rejects with that failure, such as `REFRESH_FAILED`.                         |
-| The network fails                                                           | Rejects as `fetch` does, unchanged.                                          |
+This page shows how to send requests with it, what happens after a 401, and
+when it rejects. It builds on the `authFetch` from
+[Getting started](/docs/getting-started#5-call-your-api).
 
-Call it with a path, which is resolved against `baseUrl` as a link is
-against a page's address. End `baseUrl` with `/`, so that
-`authFetch("orders")` lands under it. It also takes a `URL` or a `Request`,
-as `fetch` does, so an HTTP client with a `fetch` option can send its
-requests through it. See [Other HTTP clients](/docs/client/other-http-clients).
-A `Request` with a body can be sent once, as with `fetch`. To retry a write
-after a 401, send a clone you kept.
+## Send a request
 
-Because a write is never replayed for you, retry it yourself where sending it
-twice is safe. By then the token has been refreshed:
+`authFetch` takes the same arguments as `fetch`. Pass a path, and it's
+resolved against `baseUrl`, the way a link is resolved against a page's
+address:
+
+```ts title="src/orders.ts"
+import { authFetch } from "./api.js";
+
+export async function loadOrders(userId: number) {
+  // https://dummyjson.com/auth/carts/user/1, with the access token.
+  const response = await authFetch(`auth/carts/user/${userId}`);
+  if (!response.ok) throw new Error(`Orders failed (${response.status})`);
+  return response.json();
+}
+```
+
+Here's what to know about the URL and the headers:
+
+- `baseUrl` must be an absolute URL. End it with `/`, so that
+  `authFetch("orders")` lands under it rather than beside it.
+- `authFetch` also takes a `URL` or a `Request`, so an HTTP client with a
+  `fetch` option can send its requests through it. See
+  [Other HTTP clients](/docs/client/other-http-clients).
+- While the user is signed in, `authFetch` sets `Authorization: Bearer …`. It
+  replaces any `Authorization` header the request already has.
+- A `Request` with a body can be sent only one time, as with `fetch`. To send
+  a write again, keep a clone.
+
+## After a 401
+
+When your API answers 401, `authFetch` gets a new access token and sends the
+request again. It does that only for `GET` and `HEAD`, which are safe to send
+twice. A `POST` or any other method comes back with its 401, for you to
+decide.
+
+The rest of the 401 handling:
+
+- Requests that get a 401 at the same time share one refresh. If another
+  request or another tab has already replaced the token, `authFetch` uses the
+  new one without a refresh.
+- If the request sent again gets a 401 too, your API has rejected the new
+  token as well, so the user is signed out. If your API also answers 401 for
+  other reasons, set `signOutOnRepeated401` to `false`, as
+  [below](#keep-users-signed-in-after-a-second-401).
+- Without a refresh token or a `refresh` option, there's nothing to refresh
+  with, so the first 401 signs the user out, whatever `signOutOnRepeated401`
+  is.
+- If your backend rejects the refresh token, the user is signed out, and
+  `authFetch` resolves the original 401. If the user signs out or switches
+  account while the refresh runs, it rejects with `SESSION_CHANGED`.
+
+## Retry a write
+
+Because `authFetch` never sends a write twice, retry it yourself where
+sending it twice is safe. After the 401, the token has already been
+refreshed:
 
 ```ts title="src/add-to-cart.ts"
 import { authFetch } from "./api.js";
@@ -51,7 +91,38 @@ export async function addToCart(userId: number, productId: number) {
 }
 ```
 
-Two more options change the defaults:
+## When it rejects
+
+`authFetch` rejects rather than send the token somewhere it shouldn't go, or
+resolve a response meant for another account. Here's when it rejects, and
+with what:
+
+| When…                                                                                | `authFetch` rejects with…                                                                                               |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| The URL is on another origin, has a username or password in it, or isn't a valid URL | `INVALID_OPTIONS`. The token goes only to `baseUrl`'s origin.                                                           |
+| The `Request` comes from a polyfill or another realm, such as an iframe              | `INVALID_OPTIONS`                                                                                                       |
+| The user is signed out                                                               | `UNAUTHENTICATED`, unless `optional` is `true`                                                                          |
+| The session is locked                                                                | `LOCKED`, even when `optional` is `true`                                                                                |
+| The saved session can't be read                                                      | `PERSISTENCE_FAILED`                                                                                                    |
+| A refresh fails                                                                      | That failure, such as `REFRESH_FAILED`, until a retry, a refresh, new tokens from another tab, or a sign-in or sign-out |
+| The user signs out or switches account while the request runs                        | `SESSION_CHANGED`                                                                                                       |
+| The response is a redirect                                                           | A `TypeError`, as `fetch` gives when it refuses a redirect                                                              |
+| The network fails                                                                    | `fetch`'s own error, usually a `TypeError`                                                                              |
+
+The last two aren't `AuthError`s, so code that matches on `code` doesn't
+catch them. To show these failures, see [Errors](/docs/configuration/errors).
+
+A redirect isn't followed, so the token never reaches a server your API
+redirects to. On React Native before Expo SDK 58, `fetch` follows a redirect
+whatever it's told. `authFetch` still refuses the response, but the
+redirected request has already gone out. Don't let your API
+redirect requests that carry a token.
+
+## Send requests while signed out
+
+Some apps call one API for public and private endpoints alike. With
+`optional: true`, a signed-out request goes out without a token instead of
+rejecting:
 
 ```ts title="src/public-api.ts"
 import { createAuthFetch } from "@monarcode/session-kit/http";
@@ -61,15 +132,36 @@ import { API } from "./backend.js";
 
 export const publicFetch = createAuthFetch(auth, {
   baseUrl: `${API}/`,
-  // One `fetch` for public and private endpoints: signed out, requests are
-  // sent without a token instead of rejecting.
   optional: true,
-  // For APIs that answer 401 for reasons other than a rejected token, so a
-  // second 401 from one of those endpoints doesn't sign users out.
+});
+```
+
+A request sent without a token keeps its own `Authorization` header, if it
+has one. A 401 to it comes back as it is, with no refresh and no sign-out.
+
+## Keep users signed in after a second 401
+
+Some APIs answer 401 for reasons other than a rejected token, such as a
+resource the user can't see. With `signOutOnRepeated401: false`, a second
+401 to the same request comes back as it is, and the user stays signed in:
+
+```ts title="src/reports-api.ts"
+import { createAuthFetch } from "@monarcode/session-kit/http";
+
+import { auth } from "./auth.js";
+import { API } from "./backend.js";
+
+export const reportsFetch = createAuthFetch(auth, {
+  baseUrl: `${API}/`,
   signOutOnRepeated401: false,
 });
 ```
 
-Without a refresh token or a `refresh` option, there's nothing to refresh
-with, so the first 401 signs the user out, whatever `signOutOnRepeated401`
-is.
+## Next steps
+
+- [Other HTTP clients](/docs/client/other-http-clients): send ky, axios or
+  openapi-fetch requests through `authFetch`, or add the token yourself.
+- [Errors](/docs/configuration/errors): show a failed refresh or an outage to
+  the user.
+- [`createAuthFetch` reference](/docs/reference/http#createauthfetch): every
+  option and error.

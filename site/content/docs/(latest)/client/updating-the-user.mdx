@@ -1,17 +1,48 @@
 ---
 title: Updating the user
-description: Replace the signed-in user without ending the session, safely across account switches.
+description: Replace the signed-in user without ending the session, and handle each way it can fail.
 ---
 
-`auth.updateUser` replaces the user and keeps the session. When you already
-have the new user, such as from a form's response, pass it directly:
-`auth.updateUser(user)`.
+After a profile edit, the signed-in user has changed but the session hasn't.
+Signing in again would be wrong: the tokens are still good. `auth.updateUser`
+replaces the user, saves it and keeps the session, so every component that
+reads the user shows the change.
+
+This page shows the two ways to call it, what happens when calls overlap, and
+each way it can fail.
+
+## Pass the new user
+
+When you already have the new user, such as after your backend saved a
+profile form, pass it to `updateUser`:
+
+```ts title="src/rename.ts"
+import { authFetch } from "./api.js";
+import { auth } from "./auth.js";
+
+/** Saves a new first name, then shows it without signing in again. */
+export async function rename(firstName: string) {
+  const session = await auth.getSession();
+  if (!session) return;
+  const response = await authFetch(`users/${session.user.id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ firstName }),
+  });
+  if (!response.ok) throw new Error(`Rename failed (${response.status})`);
+  await auth.updateUser({ ...session.user, firstName });
+}
+```
+
+The user is checked against your user schema, as on sign-in. The session ID
+stays the same, so data you [cached under it](/docs/client/state) stays
+valid.
+
+## Fetch the new user
 
 When the new user comes from a request, pass a function that fetches it
-instead. The client notes the session before the function runs. If the
-session changes meanwhile, `updateUser` rejects with `SESSION_CHANGED`, and
-the user it fetched never lands on another account. `fetchProfile` is the
-request from [Getting started](/docs/getting-started#5-call-your-api):
+instead. `fetchProfile` is the request from
+[Getting started](/docs/getting-started#5-call-your-api):
 
 ```ts title="src/profile.ts"
 import { fetchProfile } from "./api.js";
@@ -19,3 +50,56 @@ import { auth } from "./auth.js";
 
 export const reloadProfile = () => auth.updateUser(fetchProfile);
 ```
+
+The client notes the session before the function runs. If the user signs
+out or switches account while it runs, `updateUser` rejects with
+`SESSION_CHANGED`, and the user it fetched never lands on another account.
+The function has 15 seconds to finish.
+
+## Overlapping calls
+
+When `updateUser` calls overlap, such as two quick saves of a form, the latest
+call wins. The earlier ones reject with `SESSION_CHANGED`, so an older user
+never replaces a newer one.
+
+A token refresh that runs at the same time keeps the updated user, even when
+your refresh callback returns a user of its own.
+
+## When `updateUser` rejects
+
+`updateUser` rejects rather than save a user to the wrong session. Here's
+when, and with what:
+
+| When…                                                                                        | `updateUser` rejects with…                       |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| No one is signed in                                                                          | `UNAUTHENTICATED`                                |
+| The session is [locked](/docs/client/locking)                                                | `LOCKED`                                         |
+| The access token expired, and refreshing it failed                                           | That failure, such as `REFRESH_FAILED`           |
+| The saved session can't be read                                                              | `PERSISTENCE_FAILED`                             |
+| The user schema rejects the user                                                             | `USER_VALIDATION_FAILED`                         |
+| The function rejects, or takes more than 15 seconds                                          | `USER_VALIDATION_FAILED`, with the cause         |
+| The user signs out or switches account, or the access token expires, while the function runs | `SESSION_CHANGED`                                |
+| A newer `updateUser` call starts                                                             | `SESSION_CHANGED`                                |
+| The new user can't be saved                                                                  | `PERSISTENCE_FAILED`, and the user is signed out |
+
+Only the last case changes the session. In the others, `updateUser` leaves
+the user as it was.
+
+A function that rejects with an `AuthError` keeps its code. If the
+`authFetch` call in `fetchProfile` rejects with `LOCKED`, for example, so
+does `updateUser`.
+
+## With users from the access token
+
+A client that reads the user from the access token, with
+[`fromAccessToken`](/docs/client/users-from-tokens), has no `updateUser`. The
+token is the only source of the user there, so call `auth.refresh()` to pick
+up a change.
+
+## Next steps
+
+- [State](/docs/client/state): scope cached data to `sessionId`, which an
+  update keeps.
+- [Errors](/docs/configuration/errors): show a failure to the user.
+- [`AuthClient` reference](/docs/reference/core#authclient): `updateUser`
+  and the client's other methods.

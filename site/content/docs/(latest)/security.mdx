@@ -3,9 +3,13 @@ title: Security
 description: What Session kit protects, what stays your backend's job, and where tokens live in each setup.
 ---
 
-Session kit saves the tokens your backend issues and manages the session
-around them. This page explains what stays your backend's job, where tokens
-live in each setup, and where the client sends them.
+Your app holds tokens that act for the user, so you need to know who can read
+them and where they're sent. Session kit saves the tokens your backend issues
+and manages the session around them. It doesn't decide what a user may do.
+
+This page shows what stays your backend's job, where the tokens live in each
+setup, how the session route refuses other sites, and where the access token
+goes.
 
 ## Your backend decides what's allowed
 
@@ -13,63 +17,104 @@ Your backend must authenticate every request and authorize private
 operations. Route guards, screen guards and the user's fields in the client
 decide what to show, not what's allowed.
 
-With server rendering, `signIn` seals what it's given. If the browser signs
-in with your backend and sends the tokens and the user, the cookie's user is
-what the browser sent, until a refresh or `updateUser` replaces it. Use it to
-show who is signed in. Let your backend authorize requests with the access
-token, or check the tokens before `signIn`.
+With server rendering, `signIn` seals what it's given into the cookie. If the
+browser signs in with your backend and sends the tokens and the user to your
+server, the cookie's user is what the browser sent, until a refresh or
+`updateUser` replaces it. Use that user to show who is signed in. Let your
+backend authorize requests with the access token, or check the tokens before
+`signIn`.
 
 ## Where tokens live
 
-Each setup saves the tokens in a different place:
+Each setup saves the tokens in a different place, and each place protects
+them differently:
 
-| Setup                                      | Where the tokens live                                       |
-| ------------------------------------------ | ----------------------------------------------------------- |
-| Browser app                                | `localStorage` or `sessionStorage`, through `webStorage()`  |
-| [Server rendering](/docs/server-rendering) | An encrypted `httpOnly` cookie                              |
-| [Expo app](/docs/setups/expo)              | The iOS keychain, or encrypted with an Android Keystore key |
-
-Each place protects the tokens differently:
-
-- **In a browser app**, any JavaScript on your origin can read the tokens, as
-  with any credential a browser saves. They never go in cookies, so the
+- **In a browser app**, `webStorage()` saves them in `localStorage` or
+  `sessionStorage`. Any JavaScript on your origin can read them there, as it
+  can read anything else in that storage. They never go in cookies, so the
   browser doesn't send them on its own.
-- **With server rendering**, page scripts can't read the cookie. Only the
-  access token reaches page scripts, and only with `clientCredentials`.
-- **In an Expo app**, the `expo-secure-store` config plugin keeps the
-  session out of Android backups. `secureStorage()` removes a session that
-  an earlier install left in the iOS keychain.
+- **With [server rendering](/docs/server-rendering)**, they're sealed in an
+  encrypted `httpOnly` cookie, which page scripts can't read. That includes
+  the refresh token. Only the access token reaches page scripts, and only
+  with `clientCredentials`: see
+  [The access token in the browser](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
+- **In an [Expo app](/docs/setups/expo)**, `secureStorage()` saves them in the
+  iOS keychain, or encrypted with an Android Keystore key. The
+  `expo-secure-store` config plugin keeps the session out of Android backups.
+  By default, `secureStorage()` also removes a session that an earlier
+  install left in the iOS keychain (its `clearOnReinstall` option). See
+  [Reinstalls and Android backups](/docs/setups/expo#reinstalls-and-android-backups).
+
+To keep tokens off disk in a browser, `memoryStorage()` holds them in memory,
+and the session ends when the page unloads.
+[Storage](/docs/configuration/storage) lists every store.
 
 ## The session route
 
-With server rendering, the browser's client signs out and gets the access
-token through your session route, and reads the session there in most
-setups. `sessionHandler` from `@monarcode/session-kit/server` answers it,
-through each framework's `sessionRoute`.
+With server rendering, the browser's client calls a route in your app, the
+session route, to sign out and to get the access token. In most setups, it
+reads the session there too. `sessionHandler` from
+`@monarcode/session-kit/server` answers it, through each framework's
+`sessionRoute`.
 
-It answers your own site's pages only, so another site can't sign the user
-out or ask for the access token. It makes two checks, and answers 403 to a
-request that fails one:
+The session route answers your own site's pages only, so another site can't
+sign the user out or ask for the access token. It makes two checks, and
+answers 403 to a request that fails either one:
 
 - A `Sec-Fetch-Site` header, when the request has one, must be
   `same-origin`. Browsers send it with requests to https and localhost sites.
-- On plain http, where browsers don't send that header, a `POST` must have
-  an `Origin` header that matches the request's URL. A `GET` passes: it
-  changes nothing, and another site can't read the answer.
+- On plain http, where browsers don't send that header, a `POST` must have an
+  `Origin` header that matches the request's URL. A `GET` passes: it changes
+  nothing, and another site can't read the answer.
+
+These checks stop other sites, not a script injected into your own pages. Such
+a script passes them, so it can sign the user out, and with
+`clientCredentials`, get the access token. Protect your pages against
+cross-site scripting (XSS), for example with a Content Security Policy.
+
+### Check your own routes
 
 Signing in stays your own server code. A route of your own that changes the
-session must refuse other sites too, where the framework doesn't check. Make
-the same two checks there.
+session must refuse other sites too, wherever your framework doesn't check
+for you. Session kit doesn't export its check, so copy it into your app:
+
+```ts title="src/same-site.ts"
+/**
+ * Whether a request comes from this site's own pages, by the same two checks
+ * as the session route.
+ */
+export function fromThisSite(request: Request): boolean {
+  const site = request.headers.get("Sec-Fetch-Site");
+  if (site !== null) return site === "same-origin";
+  // Plain http: let a GET through, so change the session on POST only.
+  if (request.method === "GET") return true;
+  return request.headers.get("Origin") === new URL(request.url).origin;
+}
+```
+
+Call it first in the route's handler or action, with the incoming `Request`.
+When it returns `false`, answer 403 and change nothing. Change the session
+only on a `POST`: on plain http, the check lets any `GET` through, as the
+session route does.
 
 ## Where tokens go
 
 [`createAuthFetch`](/docs/client/requests) and the effetch plugin
-[`sessionBearer`](/docs/effect#6-call-your-api-with-effetch) send the access
-token only to your API's origin:
+`sessionBearer` send the access token only to your API's origin:
 
-- A request to another origin, or with a username or password in its URL,
-  fails with `INVALID_OPTIONS` before anything is sent.
-- A redirect fails rather than carrying the token on.
+- A request to another origin, or with a username or password in its URL, is
+  refused before anything is sent. `authFetch` rejects with
+  `INVALID_OPTIONS`. With `sessionBearer`, the Effect dies with it, so
+  `Effect.catch` doesn't catch it.
+- A redirect isn't followed, so the token doesn't reach the server it points
+  to. On React Native before Expo SDK 58, `fetch` follows a redirect whatever
+  it's told, so the redirected request has already gone out.
+  `authFetch` still refuses the response, and `sessionBearer` returns it.
+  Don't let your API redirect requests that carry a token.
+
+[Authenticated requests](/docs/client/requests) has the full list of what
+`authFetch` refuses, and [Effect and effetch](/docs/effect#how-sessionbearer-differs-from-createauthfetch)
+how `sessionBearer` differs.
 
 [Debug events](/docs/configuration/debugging) leave out tokens unless you
 turn on `sensitive`.
@@ -79,3 +124,12 @@ turn on `sensitive`.
 Sessions, the auth state, route context and the loader results Session kit
 makes hold no tokens: a `Session` has the user and its `sessionId` only.
 Don't put tokens in loader results or hydrated page data yourself.
+
+## Next steps
+
+- [Server rendering](/docs/server-rendering): keep the tokens in an
+  `httpOnly` cookie, out of page scripts' reach.
+- [Storage](/docs/configuration/storage): choose where a browser or Expo app
+  saves the session.
+- [Authenticated requests](/docs/client/requests): send the access token to
+  your API, and only there.

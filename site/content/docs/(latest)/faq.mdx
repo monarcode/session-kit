@@ -3,13 +3,15 @@ title: Common questions
 description: Short answers about refresh tokens, expiry, storing tokens, caches, bundle size, and other ways to sign in.
 ---
 
-These are short answers to questions that come up when you adopt Session kit.
-Each links to the page with the full answer.
+These questions come up when you adopt Session kit. Each answer is short, and
+links to the page that covers the subject in full.
 
 ## Do I need a refresh token?
 
 No. Without a refresh token or a `refresh` callback, the user is signed out
-when the access token expires or your API rejects it.
+when the access token expires, or when `authFetch` gets a 401. See
+[Authenticated requests](/docs/client/requests) for what happens after a 401,
+and [Refresh](/docs/configuration/refresh) to add a refresh later.
 
 ## What if my backend doesn't say when the token expires?
 
@@ -19,8 +21,12 @@ the client looks for the expiry, and what it does when it finds none.
 ## Is it safe to keep tokens in `localStorage`?
 
 Any script on your origin can read them, as [Security](/docs/security)
-explains. If that isn't acceptable, keep the session on the server with
-[server rendering](/docs/server-rendering).
+explains. If that isn't acceptable for your app, you have two options:
+
+- Keep the session on the server, in an `httpOnly` cookie, with
+  [server rendering](/docs/server-rendering).
+- Keep the tokens off disk with `memoryStorage()`. The session then ends when
+  the page unloads. See [Storage](/docs/configuration/storage).
 
 ## How do I use it with TanStack Query, or another cache?
 
@@ -39,11 +45,11 @@ does.
 
 ## What if some endpoints answer 401 for other reasons?
 
-Set `signOutOnRepeated401: false` in `createAuthFetch`'s options, beside
-`baseUrl`, so that a second 401 from those endpoints, after a refresh,
-doesn't sign users out. Without a refresh token or a `refresh` callback,
-any 401 still signs the user out. See
-[Authenticated requests](/docs/client/requests).
+Turn off `signOutOnRepeated401` in `createAuthFetch`'s options. A second 401
+from those endpoints then comes back to your code instead of signing the user
+out. Without a refresh token or a `refresh` callback, the first 401 still
+signs the user out. See
+[Keep users signed in after a second 401](/docs/client/requests#keep-users-signed-in-after-a-second-401).
 
 ## How much does it add to my bundle?
 
@@ -57,3 +63,10 @@ the server, it's about 5 kB. The routers you don't use add nothing: see
 Yes, through your backend. Whatever your backend does to sign a user in,
 Session kit starts from the tokens it answers with. See
 [What it doesn't do](/docs#what-it-doesnt-do).
+
+## Next steps
+
+- [Security](/docs/security): what Session kit protects, and what stays your
+  backend's job.
+- [Compatibility](/docs/reference/compatibility): the runtimes and versions
+  Session kit supports.

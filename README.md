@@ -35,13 +35,16 @@ server with TanStack Start, Next.js, and React Router, and comes with an
 
 ## Installation
 
+Install the package and a schema library:
+
 ```sh
 npm install @monarcode/session-kit zod
 ```
 
 Any [Standard Schema](https://standardschema.dev) library describes users.
 The examples use Zod. Peer dependencies such as React and your router are
-optional: install the ones your setup uses.
+optional: install the ones your setup uses. Session kit needs TypeScript 5.4
+or newer (Effect asks for 5.9), and
 [Compatibility](https://session-kit.pages.dev/docs/reference/compatibility)
 lists the supported versions.
 
@@ -52,7 +55,7 @@ and read the [release notes](./CHANGELOG.md) before upgrading.
 
 Your backend keeps its sign-in and refresh endpoints. Session kit takes the
 tokens they return and manages the session from there. A React app needs
-three files.
+three files, plus your own sign-in form.
 
 **1. Create the client.** It checks every user against your schema, saves the
 session, and calls your `refresh` before the access token expires:
@@ -163,25 +166,14 @@ function Home() {
 To call your API, `createAuthFetch` from `@monarcode/session-kit/http` adds
 the access token to each request and refreshes it after a 401.
 [Getting started](https://session-kit.pages.dev/docs/getting-started) builds
-this app step by step against a real test backend, and the guides below add
+this app step by step against a real test backend, and the setup guides add
 your router's guards or server rendering.
 
 ## Pick your setup
 
-Each setup has a guide:
-
-| Setup                                                          | Guide                                                                               |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| React without a router                                         | [Getting started](https://session-kit.pages.dev/docs/getting-started)               |
-| TanStack Router, and TanStack Start as a single-page app (SPA) | [TanStack Router](https://session-kit.pages.dev/docs/setups/tanstack-router)        |
-| TanStack Start with server rendering                           | [TanStack Start](https://session-kit.pages.dev/docs/setups/tanstack-start)          |
-| React Router: declarative, data, framework SPA                 | [React Router](https://session-kit.pages.dev/docs/setups/react-router)              |
-| React Router, framework mode with server rendering             | [React Router with SSR](https://session-kit.pages.dev/docs/setups/react-router-ssr) |
-| Next.js 16, App Router                                         | [Next.js](https://session-kit.pages.dev/docs/setups/next)                           |
-| Expo Router on iOS and Android, SDK 53+                        | [Expo Router](https://session-kit.pages.dev/docs/setups/expo)                       |
-| Effect and effetch, with any setup                             | [Effect and effetch](https://session-kit.pages.dev/docs/effect)                     |
-
-All but the first have a runnable app in [`examples/`](./examples).
+Each setup, from plain React to Next.js, Expo Router and Effect, has a guide:
+see [Pick your setup](https://session-kit.pages.dev/docs/installation#pick-your-setup).
+Every setup but plain React has a runnable app in [`examples/`](./examples).
 
 ## Contributing
 

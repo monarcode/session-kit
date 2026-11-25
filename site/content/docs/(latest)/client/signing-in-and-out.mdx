@@ -3,19 +3,88 @@ title: Signing in and out
 description: Save a new session, end it in every tab, and revoke the ended tokens on your backend.
 ---
 
-`auth.signIn({ ...tokens, user })` validates and saves a new session,
-replacing any current one, even a locked one. With
-[`fromAccessToken`](/docs/client/users-from-tokens), leave out `user`. The
-latest call wins, and invalid input keeps the previous session.
-[Expiry](/docs/configuration/expiry) covers how the token's lifetime is
-found.
+Your backend signs the user in and answers with tokens. From there, the
+client takes over: `auth.signIn` saves the session, and `auth.signOut` ends
+it, in this tab and the others. Session kit never checks a password itself.
 
-`auth.signOut()` ends the session and clears storage. Other tabs sign out too
-when the storage reports changes, as `webStorage()` does, and `locking` is
-off.
+This page shows what each call does, when it rejects, and how to revoke the
+ended tokens on your backend.
 
-If your backend can revoke tokens, give the client a `revoke` callback. It
-receives the ended tokens after the user is signed out:
+## Sign in
+
+Pass `auth.signIn` the tokens your backend issued and the user, as
+`signInWithPassword` does in
+[Getting started](/docs/getting-started#2-create-the-client):
+
+```ts title="src/switch-account.ts"
+import { auth } from "./auth.js";
+import { login } from "./backend.js";
+
+/** Signs in as another user, replacing the current session. */
+export async function switchAccount(username: string, password: string) {
+  const { accessToken, refreshToken, user } = await login(username, password);
+  await auth.signIn({ accessToken, refreshToken, user });
+}
+```
+
+`signIn` checks the tokens and the user first, then saves the new session in
+place of any current one, even a [locked](/docs/client/locking) one. With
+[`fromAccessToken`](/docs/client/users-from-tokens), leave out `user`: the
+client reads it from the access token. [Expiry](/docs/configuration/expiry)
+covers how the client finds out when the access token expires.
+
+`signIn` doesn't navigate. The state changes, and your guards or your
+components render from it, so a sign-in page has nothing to do when it
+succeeds.
+
+## When `signIn` rejects
+
+A failed check leaves the current session as it was, so a mistake in a
+sign-in never signs anyone out. A failed save is different. Here's when
+`signIn` rejects, and what happens to the session:
+
+| When…                                                              | `signIn` rejects with…   | The session afterwards |
+| ------------------------------------------------------------------ | ------------------------ | ---------------------- |
+| The tokens can't be used, such as an access token that has expired | `INVALID_SESSION`        | Unchanged              |
+| The user schema rejects the user                                   | `USER_VALIDATION_FAILED` | Unchanged              |
+| Another `signIn` or a `signOut()` starts while it checks the user  | `SESSION_CHANGED`        | The latest call's      |
+| The session can't be saved                                         | `PERSISTENCE_FAILED`     | Signed out             |
+
+The latest call wins: a newer `signIn` or `signOut()` makes a pending sign-in
+reject, so an earlier, slower sign-in never replaces a later one.
+
+With a [`locking`](/docs/client/locking) option that has `seal`, every save
+seals the tokens. If your `seal` throws, as it does without its key, the save fails with
+`PERSISTENCE_FAILED` and no one is signed in.
+
+## Sign out
+
+`auth.signOut()` signs the user out at once, then clears the saved session:
+
+```ts title="src/sign-out.ts"
+import { auth } from "./auth.js";
+
+export async function signOutAndLeave() {
+  // Resolves after `revoke`, if you set it, has finished.
+  await auth.signOut();
+  window.location.assign("/login");
+}
+```
+
+Other tabs that share the storage sign out too, when the storage reports
+changes, as `webStorage()` does, and `locking` is off.
+[Tabs](/docs/configuration/tabs) explains how tabs follow each other.
+
+If the saved session can't be cleared, `signOut()` rejects with
+`PERSISTENCE_FAILED`. The app is signed out anyway, but the next load would
+restore the session, so call `signOut()` again later.
+
+## Revoke tokens on your backend
+
+Signing out in the app doesn't end the tokens on your backend: until they
+expire, anyone holding them can still use them. If your backend can revoke
+tokens, give `createAuth` a `revoke` option. It receives the ended tokens
+after the user is signed out:
 
 ```ts title="src/revoke.ts"
 import type { RevokeFn } from "@monarcode/session-kit";
@@ -33,9 +102,30 @@ export const revoke: RevokeFn = async ({ refreshToken, signal }) => {
 };
 ```
 
-`signOut()` resolves once `revoke` settles, so await it before a full-page
-redirect, which would cancel the request.
+The user is signed out before `revoke` runs, so a UI that follows the state
+never waits for it. `signOut()` itself resolves after `revoke` settles, or
+after 15 seconds, when `signal` aborts. Await it before a full-page redirect,
+which would cancel the request.
 
-A failed revocation shows in `state.error` as `REVOKE_FAILED`, and the
-sign-out stands. The user asked to leave, and has. The client doesn't revoke
-a session the backend already rejected.
+A failed revocation shows in `state.error` as `REVOKE_FAILED`, and
+`signOut()` still resolves. The sign-out stands: the user asked to leave, and
+has.
+
+`revoke` isn't called in two cases:
+
+- **The backend already ended the session,** such as by rejecting the
+  refresh token.
+- **The session is locked,** whether it was restored locked or locked by a
+  `lock()` that has resolved. Its tokens aren't in memory.
+
+A sign-out before the saved session has been read still revokes that saved
+session, unless `locking` is on.
+
+## Next steps
+
+- [Tabs](/docs/configuration/tabs): how a sign-in or sign-out reaches every
+  tab.
+- [Updating the user](/docs/client/updating-the-user): change the user
+  without signing in again.
+- [Errors](/docs/configuration/errors): show `REVOKE_FAILED` and other
+  failures.

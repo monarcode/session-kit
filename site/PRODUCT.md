@@ -57,13 +57,13 @@ those same checked examples, so the code shown is code that compiles.
   `/docs/…`; older lines are snapshots at `/docs/<line>/…`, switched with a
   version dropdown. The live site shows the newest release (Cloudflare's
   production branch `site`); `main` deploys as a preview.
-- The site ships with `0.1.0-rc.0`. The package is pre-1.0: alpha releases
-  until now, release candidates next.
+- The package is pre-1.0 and in release candidates: the 0.1 API is frozen,
+  and later 0.1 releases only add to it.
 
 ## Capabilities and Constraints
 
 - Fumadocs on TanStack Start, fully prerendered to static files
-  (`site/dist/client`), hosted on Cloudflare Pages. Light and dark mode, full
+  (`site/dist/client`), hosted on Cloudflare Pages. Dark only, full
   text search, per-version search, `llms.txt`.
 - Guides live in `site/content/docs/(latest)/` as MDX. A `ts` or `tsx` block
   with `title="path"` is a checked example; each page's examples compile as
@@ -108,7 +108,7 @@ those same checked examples, so the code shown is code that compiles.
 
 ## Evidence on Hand
 
-- The test suite: 415 tests, run with both synchronous and asynchronous
+- The test suite, run with both synchronous and asynchronous
   storage (`tests/`), plus type tests against the built package.
 - Type-checked examples in the site's pages, the README and the JSDoc
   (`scripts/check-docs.mjs`).

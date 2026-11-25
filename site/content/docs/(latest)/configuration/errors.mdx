@@ -1,24 +1,50 @@
 ---
 title: Errors
-description: How Session kit's errors reach your app, how to show them to users, and the storage failures that need your decision.
+description: Where Session kit's errors appear, how to show them to users, and the storage failures that need your decision.
 ---
 
-Every error from Session kit's own logic is an `AuthError`, whether a method
-throws it, rejects with it, or publishes it in `state.error`. This page shows
-how to match on them, how to turn them into messages for your users, and the
-storage failures you need to handle.
+Sooner or later a refresh fails because your backend is down, or the browser
+refuses to save the session. Your app needs to notice, and tell the user
+something useful. Every error from Session kit's own logic is an
+`AuthError`, with a `code` you can match on.
 
-## Error codes
+This page shows where errors appear, how to turn them into messages, and the
+failures that need a decision from you.
 
-Match on an error's `code`, not its message, which may change in any
-release. [Error codes](/docs/reference/error-codes) lists every code and what
-it means.
+## Where errors appear
+
+A failure shows up in one of two places, or in both:
+
+- **The call rejects** when you asked for something the client couldn't do,
+  such as `signIn` with a user your schema rejects.
+- **`state.error` shows it** when the session itself is affected, such as a
+  refresh that failed. Your components read it with `useAuth`, so it reaches
+  the screen even when no call of yours was waiting.
+
+Here's where each common failure appears:
+
+| When…                                                   | The call rejects                                                      | `state.error` shows it |
+| ------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------- |
+| `signIn` or `updateUser` gets a user the schema rejects | Yes                                                                   | No                     |
+| `unlock()` fails with `UNLOCK_FAILED`                   | Yes                                                                   | No                     |
+| An early refresh fails in the background                | No call is waiting                                                    | Yes                    |
+| A refresh the session needed fails                      | Yes, every call waiting for it, such as `getSession()` or `authFetch` | Yes                    |
+| The saved session can't be read                         | Yes, every call that needs it, such as `getSession()` or `retry()`    | Yes                    |
+| The session can't be saved                              | Yes, the call that saved it, such as `signIn`                         | Yes                    |
+| The saved session can't be cleared on sign-out          | Yes, `signOut()`                                                      | Yes                    |
+| `revoke` fails after a sign-out                         | No: `signOut()` resolves                                              | Yes, `REVOKE_FAILED`   |
+| Another tab saves a user this tab's schema rejects      | No call is waiting                                                    | Yes                    |
+
+`state.error` holds the latest failure. The next successful change clears
+it, such as a refresh that works, a sign-in or a sign-out. While a retry
+runs, the error stays until the retry succeeds.
 
 ## Show errors to users
 
-An error's `cause` holds whatever failed underneath, such as the error your
-refresh callback threw. To keep messages out of your components, map codes
-to your own wording:
+Match on an error's `code`, not its message, which can change in any
+release. [Error codes](/docs/reference/error-codes) lists every code and what
+it means. To keep wording out of your components, map codes to your own
+messages:
 
 ```ts title="src/error-message.ts"
 import { AuthError, type AuthErrorCode } from "@monarcode/session-kit";
@@ -35,22 +61,89 @@ export function errorMessage(error: unknown): string {
 }
 ```
 
-`authFetch` passes on the failures of `fetch` and `Request`, such as a
-network error, unchanged. With server rendering, the browser client's
-`signIn` passes on what your sign-in function threw, unchanged too. These
-usually aren't `AuthError`s, so `errorMessage` shows their own message.
+Then show `state.error` near the top of your app, with a way to try again
+when access is `unavailable`:
+
+```tsx title="src/session-alert.tsx"
+import { useAuth, useAuthClient } from "@monarcode/session-kit/react";
+
+import { errorMessage } from "./error-message.js";
+
+export function SessionAlert() {
+  const { status, error } = useAuth();
+  const client = useAuthClient();
+  if (!error) return null;
+  return (
+    <div role="alert">
+      <p>{errorMessage(error)}</p>
+      {status === "unavailable" && (
+        <button onClick={() => void client.retry().catch(() => {})}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+`retry()` rejects again if it fails, and the new failure shows in
+`state.error`, so the button can ignore the rejection.
+
+An error's `cause` holds whatever failed underneath, such as the error your
+refresh callback threw. Log it, or send it to your error reporting.
+
+A few failures pass through unchanged, so they usually aren't `AuthError`s,
+and `errorMessage` shows their own message:
+
+- `authFetch` passes on the failures of `fetch` and `Request`, such as a
+  network error.
+- With server rendering, the browser client's `signIn` passes on what your
+  sign-in function threw.
 
 ## Handle storage failures
 
-Three storage failures need a decision from you:
+Storage can fail: a full disk, a browser that blocks storage, or an iOS
+keychain that's locked. Each of these three failures needs a decision from
+you:
 
 - **Storage can't be read.** `status` becomes `unavailable`, with the error
   in `state.error`. The saved session stays as it is, and the next
-  `getSession()` or `retry()` reads it again.
-- **Storage can't be written.** The client ends the session and publishes
-  the error. That way, no one stays signed in to a session that would vanish
-  on reload.
+  `getSession()` or `retry()` reads it again. Show a **Try again** button
+  that calls `retry()`, as `SessionAlert` does.
+- **Storage can't be written.** The client signs the user out, clears the
+  saved session, and publishes the error. That way, no one stays signed in
+  to a session that would vanish on reload. This happens on a refresh too,
+  when its new tokens can't be saved: on iOS, a refresh while the keychain is
+  locked signs the user out. Show the error, and let the user sign in again.
 - **Storage can't be cleared.** Sign-out still takes effect in this tab, but
   `signOut()` rejects and `state.error` keeps the error. The saved
   credentials could restore the session on reload, so call `signOut()` again
-  once storage works.
+  after storage works again.
+
+## Saved sessions the client can't use
+
+Sometimes storage works, but the session it holds can't be used. When the
+client restores such a session, it signs the user out and clears it:
+
+- **A malformed saved session**, such as one edited by hand, gives
+  `INVALID_SESSION` in `state.error`.
+- **A saved user your schema rejects**, such as after a deploy that changed
+  the schema, gives `USER_VALIDATION_FAILED` in `state.error`. See
+  [User schemas](/docs/configuration/user-schemas#change-the-schema-safely)
+  to avoid it.
+- **A session past `maxAge`**, or saved in another format by an older or
+  newer version of Session kit, signs out with no error. Running out is
+  routine, as
+  [Storage](/docs/configuration/storage#how-long-a-saved-session-lasts)
+  explains.
+
+In each case, the user signs in again.
+
+## Next steps
+
+- [Error codes](/docs/reference/error-codes): what each code means, and
+  which calls give it.
+- [Refresh](/docs/configuration/refresh#when-a-refresh-fails): what happens
+  when a refresh fails, and how long the failure lasts.
+- [Debugging](/docs/configuration/debugging): log what the client did before
+  an error appeared.

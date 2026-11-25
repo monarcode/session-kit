@@ -3,37 +3,43 @@ title: TanStack Router
 description: Keep the client in Router context, guard private routes before they load, and use the hooks without a provider.
 ---
 
-In this guide, you add TanStack Router to the app from Getting started: a
-sign-in route, private routes that redirect signed-out users, and hooks that
-read the client from the Router. Guards run in `beforeLoad`, before a private
-route loads or renders. The hooks come from
-`@monarcode/session-kit/tanstack-router`, typed by the Router you register,
-and need no `AuthProvider`.
+Your app uses TanStack Router, and some of its routes are for signed-in users
+only. In this guide, you add Session kit to the app from Getting started: a
+sign-in route, private routes that send signed-out users to it, and hooks that
+read the client from the Router. The guards run in `beforeLoad`, so a private
+route never loads or renders for someone who isn't signed in.
 
-A complete app is in
+The hooks come from `@monarcode/session-kit/tanstack-router`. They're typed by
+the Router you register, and they need no `AuthProvider`. A complete app is in
 [`examples/tanstack-router`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-router).
-[TanStack Start in SPA mode](#tanstack-start-in-spa-mode) lists what changes
-for Start. For TanStack Start with server rendering, follow
-[TanStack Start](/docs/setups/tanstack-start) instead.
+
+For TanStack Start in SPA mode, follow this guide with
+[the changes for Start](#tanstack-start-in-spa-mode). For TanStack Start with
+server rendering, follow [TanStack Start](/docs/setups/tanstack-start)
+instead.
 
 ## Before you begin
 
-Follow [Getting started](/docs/getting-started) through step 3. This guide
-uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
+- A Vite app with React, using `@vitejs/plugin-react`. Installation adds a
+  plugin to its `vite.config.ts`.
+- The app from [Getting started](/docs/getting-started), through step 3. This
+  guide uses its client in `src/auth.ts` and its form in `src/sign-in.tsx`.
 
 ## Installation
 
-To install the packages, run the following commands:
+Install Session kit, the Router and Zod, and the Router's Vite plugin as a
+dev dependency:
 
 ```npm
 npm install @monarcode/session-kit @tanstack/react-router zod
 npm install -D @tanstack/router-plugin
 ```
 
-This page uses file-based routing, so add the Router plugin before the React
-plugin in `vite.config.ts`:
+This guide uses file-based routing: the plugin generates
+`src/routeTree.gen.ts` from the files under `src/routes`. Add it to
+`vite.config.ts`, before the React plugin, or the build fails:
 
-```ts
+```ts title="vite.config.ts"
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -46,12 +52,11 @@ export default defineConfig({
 });
 ```
 
-The plugin generates `src/routeTree.gen.ts` from the files under `src/routes`.
-
 ## 1. Type the root route
 
 The root route declares that Router context holds the client, so every guard
-gets a typed `context.auth`:
+gets a typed `context.auth`. It stays mounted while pages come and go, which
+makes it the place to show auth errors:
 
 ```tsx title="src/routes/__root.tsx"
 import { useAuth } from "@monarcode/session-kit/tanstack-router";
@@ -76,11 +81,14 @@ function Root() {
 }
 ```
 
+`useAuth` reads the client's state from Router context. It's typed with your
+user after you register the Router in step 4, and it's typed `never` until
+then.
+
 ## 2. Add the sign-in route
 
 The sign-in route renders the form from Getting started. Its guard sends a
-signed-in user on to the page they asked for, and it runs again after a
-sign-in, so the form doesn't navigate:
+user who's already signed in on to the page they asked for:
 
 ```tsx title="src/routes/login.tsx"
 import { safeReturnTo } from "@monarcode/session-kit";
@@ -99,17 +107,21 @@ export const Route = createFileRoute("/login")({
 });
 ```
 
-`safeReturnTo` accepts only same-origin paths and returns `/` for anything
-else, including the sign-in page itself, so a stale `redirectTo` can't loop.
-If sign-in isn't at `/login`, pass the same `{ loginPath }` to
-`safeReturnTo`, `redirectIfSignedIn` and `requireSession`.
-`redirectIfSignedIn` sends signed-in users on to `redirectTo`, checked the
-same way. `connectAuth` runs it again after a sign-in.
+The form doesn't navigate after it signs in, because this guard does it.
+When the session changes, the Router runs the guard again, and it sends the
+signed-in user on. Step 4 sets that up.
+
+`redirectTo` is the search param that the private routes' guard sets.
+`safeReturnTo` turns it into a path that's safe to send the user to. Anything
+that leads out of your app, or back to the sign-in page, becomes `/`, so a
+stale `redirectTo` can't loop. `redirectIfSignedIn` checks it the same way.
+The [`safeReturnTo` reference](/docs/reference/core#safereturnto) lists every
+rule.
 
 ## 3. Guard private routes
 
-Guard private routes with a pathless layout. Its child routes are guarded
-without `authenticated` appearing in their URLs:
+Guard private routes with a pathless layout route. Its child routes are
+guarded without `_authenticated` appearing in their URLs:
 
 ```tsx title="src/routes/_authenticated.tsx"
 import {
@@ -129,7 +141,7 @@ export const Route = createFileRoute("/_authenticated")({
   component: () => <SessionOutlet pending={<p>Checking session…</p>} />,
 });
 
-/** Shown after a failed refresh; a repeated failure stays in state.error. */
+/** Shown after a failed refresh; a repeated failure shows here again. */
 function SessionError({ error }: ErrorComponentProps) {
   const auth = useAuthClient();
   return (
@@ -141,17 +153,24 @@ function SessionError({ error }: ErrorComponentProps) {
 }
 ```
 
-`requireSession` redirects signed-out users to `/login`, or the `loginPath`
-you pass, with `redirectTo` set to where they were going, and puts
-`{ session }` in route context. A
-failed refresh reaches the error component instead of a redirect, because the
-user is still signed in.
+`requireSession` lets a signed-in user through, and puts `{ session }` in
+route context. It sends a signed-out user to `/login`, or the `loginPath` you
+pass, with `redirectTo` set to where they were going. A signed-out user who
+opens `/orders?tab=2` lands on `/login?redirectTo=%2Forders%3Ftab%3D2`, and
+returns to `/orders?tab=2` after signing in.
 
-`SessionOutlet` renders child routes while the session the guard accepted is
-still the signed-in one. After a sign-out or an account switch it shows
-`pending` until the guard runs again, and remounts child routes for the new
-account, so nothing from the previous one stays on screen. Profile updates and
-token refreshes keep child routes mounted.
+A session that can't be used isn't a sign-out. When the access token has
+expired and a refresh fails, such as while your backend is down, the status
+is `unavailable`. The saved session is kept, and `auth.retry()` can restore
+access. So `requireSession` doesn't redirect: it throws the error to the
+route's error component, which offers a retry. If the retry fails too, the
+new error shows there again.
+
+`SessionOutlet` renders the child routes while the session the guard accepted
+is still the signed-in one. After a sign-out or an account switch, it shows
+`pending` until the guard runs again. It also remounts the child routes for
+the new account, so nothing from the previous one stays on screen. Profile
+updates and token refreshes keep them mounted.
 
 Child routes read the session from route context, where `user` is typed and
 never `null`:
@@ -177,6 +196,9 @@ function Home() {
   );
 }
 ```
+
+A sign-out that fails shows in the root route's alert from step 1, so the
+button can ignore the rejection.
 
 ## 4. Create and connect the Router
 
@@ -207,17 +229,21 @@ declare module "@tanstack/react-router" {
 ```
 
 `connectAuth` does for the Router what `AuthProvider` does for a plain React
-app, and one thing more. When the session changes, it runs the guards again,
-so a sign-out in another tab redirects this one.
+app: it restores the saved session, starts the refresh timer, and follows
+other tabs. When the session changes, it does two more things:
 
-Registering the Router also types `useAuth` and `useAuthClient` with your
-client. Until it's registered, they're typed `never`.
+- It clears the Router's cached and preloaded route data, so one account's
+  data never shows for the next.
+- It runs the guards again, so a sign-in on the sign-in page sends the user
+  on, and a sign-out in another tab redirects this one.
+
+Registering the Router types `useAuth` and `useAuthClient` with your client.
 
 ## 5. Render the app
 
-Render the Router:
+Render the Router in `src/main.tsx`:
 
-```tsx title="src/main.tsx"
+```tsx title="src/main.tsx" app="vite"
 import { StrictMode } from "react";
 
 import { RouterProvider } from "@tanstack/react-router";
@@ -234,9 +260,10 @@ createRoot(document.getElementById("root")!).render(
 
 To check the app:
 
-1. Signed out, open `/`. The Router sends you to `/login`.
+1. Signed out, open `/`. The Router sends you to `/login?redirectTo=%2F`.
 2. Sign in. You're back on `/`, with the welcome message.
-3. Open a second tab and sign out there. The first tab goes to `/login`.
+3. Reload the page. You're still signed in.
+4. Open a second tab and sign out there. The first tab goes to `/login`.
 
 ## Layouts around guarded pages
 
@@ -257,7 +284,7 @@ export function Dashboard() {
   return (
     <div className="dashboard">
       <header>{user ? `Signed in as ${user.firstName}` : null}</header>
-      {/* Keyed by session, so one account's choices never show for the next. */}
+      {/* Keyed by session: one account's choices never show for the next. */}
       <Sidebar key={sessionId} />
       <main>
         <SessionOutlet pending={<p>Checking session…</p>} />
@@ -295,21 +322,95 @@ route's guard accepted. Three things follow from where it sits:
 
 ## TanStack Start in SPA mode
 
-TanStack Start's SPA mode is TanStack Router with a build-time shell. Steps 2
-and 3 apply as they are. Installation, step 1, step 4 and step 5 change:
+TanStack Start's SPA mode is TanStack Router with an HTML shell that the build
+prerenders. Start renders the whole document from the root route, and the
+browser takes over from there. Steps 2 and 3 apply as they are. In place of
+Installation and steps 1, 4 and 5, follow these steps. Complete apps are in
+[`examples/tanstack-start-spa`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa)
+and, written with Effect and effetch, in
+[`examples/tanstack-start-spa-effetch`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa-effetch).
 
-- Install `@tanstack/react-start` instead of `@tanstack/router-plugin`.
-- In `vite.config.ts`, use Start's plugin, with SPA mode on, instead of the
-  Router plugin:
-  `plugins: [tanstackStart({ spa: { enabled: true } }), react()]`.
-- Give the root route a `shellComponent` that renders `<html>`,
-  `<HeadContent />` and `<Scripts />`, as the example app does. Start renders
-  the app from it, so there is no `src/main.tsx`.
+### 1. Install Start
 
-In `src/router.tsx`, create the Router and connect auth inside
-`getRouter()`, which Start calls:
+Install Session kit, the Router and Zod, and Start in place of the Router's
+Vite plugin:
 
-```tsx
+```npm
+npm install @monarcode/session-kit @tanstack/react-router zod
+npm install @tanstack/react-start
+```
+
+### 2. Use Start's Vite plugin
+
+In `vite.config.ts`, use Start's plugin with SPA mode on, in place of the
+Router plugin:
+
+```ts title="vite.config.ts" app="start"
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [tanstackStart({ spa: { enabled: true } }), react()],
+});
+```
+
+### 3. Render the document from the root route
+
+Give the root route a `shellComponent` that renders the document, with
+`<HeadContent />` and `<Scripts />`. Start renders the app from it, so delete
+`src/main.tsx` and `index.html`:
+
+```tsx title="src/routes/__root.tsx" app="start"
+import type { ReactNode } from "react";
+
+import { useAuth } from "@monarcode/session-kit/tanstack-router";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Outlet,
+  Scripts,
+} from "@tanstack/react-router";
+
+import type { AppAuth } from "../auth.js";
+
+export const Route = createRootRouteWithContext<{ auth: AppAuth }>()({
+  shellComponent: Document,
+  component: Root,
+});
+
+function Document({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        {children}
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+function Root() {
+  // Shows failures that outlive the page that caused them.
+  const error = useAuth((state) => state.error);
+  return (
+    <>
+      {error && <p role="alert">{error.message}</p>}
+      <Outlet />
+    </>
+  );
+}
+```
+
+### 4. Create the Router in `getRouter`
+
+Start creates the Router itself, by calling `getRouter()` from
+`src/router.tsx`. Create the Router and connect auth there:
+
+```tsx title="src/router.tsx" app="start"
 import { connectAuth } from "@monarcode/session-kit/tanstack-router";
 import { createRouter } from "@tanstack/react-router";
 
@@ -334,9 +435,18 @@ declare module "@tanstack/react-router" {
 }
 ```
 
-And turn server rendering off for routes, in `src/start.ts`:
+`connectAuth` does nothing while the Router renders on a server, so the shell
+that the build prerenders shows your pending component. `getRouter()` doesn't
+keep the function that `connectAuth` returns, because the Router lasts as
+long as the page.
 
-```ts title="src/start.ts"
+### 5. Turn off server rendering for routes
+
+Start's own server still answers requests in SPA mode, and it has no saved
+session to check. Turn server rendering off for routes in `src/start.ts`, so
+the guards run in the browser:
+
+```ts title="src/start.ts" app="start"
 import { createStart } from "@tanstack/react-start";
 
 // The session is in browser storage, so guards must run in the browser.
@@ -345,28 +455,21 @@ export const startInstance = createStart(() => ({
 }));
 ```
 
-Start's own server still answers requests in SPA mode, and it has no saved
-session to check. `connectAuth` does nothing while the Router renders on a
-server, so the build-time shell shows your pending component. Complete apps
-are in [`examples/tanstack-start-spa`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa) and,
-written with Effect and effetch, in
-[`examples/tanstack-start-spa-effetch`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa-effetch).
-
 ## Things to know
 
-- **The first render.** With synchronous storage and a synchronous schema,
-  `connectAuth` restores the saved session before the first render, so a
-  signed-in user never sees the sign-in page.
+- **Another sign-in page.** If sign-in isn't at `/login`, pass the same
+  `loginPath` to `requireSession`, `redirectIfSignedIn` and `safeReturnTo`.
+- **The first render.** The guards wait for the saved session, so a signed-in
+  user never sees the sign-in page. With synchronous storage and a
+  synchronous schema, the session is restored
+  [before the first paint](/docs#what-it-does).
 - **Stopping.** Call `disconnectAuth` on app teardown or hot-module disposal.
-  It stops background work without signing out. In Start's SPA mode,
-  `getRouter()` doesn't keep it, as the Router lasts as long as the page.
-- **A failed refresh is not a redirect.** `requireSession` rethrows it for the
-  route's error component, which can offer `auth.retry()`. The user is still
-  signed in.
+  It stops background work without signing out.
 - **Locked sessions.** [Locking](/docs/client/locking) is for native apps, so
   the guards treat a locked session as signed out.
-- **Cached data.** `state.sessionId` is new on every sign-in. Scope private
-  cached data, such as TanStack Query results, to it.
+- **Cached data.** `connectAuth` clears the Router's own cache. Scope your
+  other private caches, such as TanStack Query results, to `state.sessionId`,
+  which is new on every sign-in. See [State](/docs/client/state).
 
 ## Next steps
 
@@ -374,6 +477,9 @@ written with Effect and effetch, in
   in Getting started, or with
   [ky, axios or openapi-fetch](/docs/client/other-http-clients). It works
   unchanged with the Router.
-- [Using the client](/docs/client): updating the user, signing out, and the
+- [Using the client](/docs/client): update the user, sign out, and use the
   client's other methods.
-- [Effect and effetch](/docs/effect): the same client as an Effect service.
+- [Effect and effetch](/docs/effect): use the same client as an Effect
+  service.
+- [TanStack Router reference](/docs/reference/tanstack-router): every option
+  of the guards, `SessionOutlet` and `connectAuth`.

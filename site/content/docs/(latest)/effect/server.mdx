@@ -1,0 +1,261 @@
+---
+title: Use Effect on the server
+description: Run Effects with each request's session in server functions, actions and route handlers, sign in on the server, and render queries per request.
+---
+
+With server rendering, your server functions, actions and route handlers
+run Effects too. There, the session is the encrypted cookie the server
+keeps ([Server sessions](/docs/server-rendering/server-sessions)), and each
+request has its own. This guide runs your Effects with that request's
+session, so `Auth.session`, `Auth.credentials` and `sessionBearer` work on
+the server as they do in the browser. `sessionBearer` sends the cookie's
+access token, and saves a renewed one after a 401.
+
+Each framework's adapter gives one request's session (`RequestAuth`), and
+`Auth.layer` takes it. The rule that shapes this page: a request's session
+belongs to that request, and so does everything that uses it.
+
+## Before you begin
+
+- Follow your framework's guide, which creates the server engine and
+  registers the browser's `createMirrorAuth` client:
+  [TanStack Start](/docs/setups/tanstack-start),
+  [Next.js](/docs/setups/next) or
+  [React Router](/docs/setups/react-router-ssr).
+- Follow steps 1, 2 and 6 of
+  [Use Effect in the browser](/docs/effect/browser). The server's files
+  build on the `src/backend.ts`, `src/refresh.ts`, `src/api.ts` and
+  `src/user.ts` they add.
+- Effect asks for TypeScript 5.9 or newer.
+- To render queries with effetch-query in step 5, you need React 19: its
+  React bindings don't support React 18.
+  [Compatibility](/docs/reference/compatibility) lists every version.
+
+## 1. Create the server engine
+
+On the server, the session comes from `createServerAuth`, with the user
+schema the app registers and the same refresh as the browser. Your
+framework's guide creates `serverAuth`. Build it from `userSchema` and
+`refreshSession`, as this `src/server/auth.ts` does:
+
+```ts title="src/server/auth.ts"
+import { createServerAuth } from "@monarcode/session-kit/server";
+
+import { userSchema } from "../backend.js";
+import { refreshSession } from "../refresh.js";
+
+declare const secret: string; // from the environment
+
+export const serverAuth = createServerAuth({
+  name: "app",
+  user: userSchema,
+  secret,
+  refresh: ({ refreshToken, signal }) => refreshSession(refreshToken, signal),
+});
+
+/** One request's session, as your framework's adapter gives it. */
+export type ServerSession = ReturnType<typeof serverAuth.forRequest>;
+```
+
+## 2. Run Effects per request
+
+Build the session's layer and the API client per request, and keep one
+runtime for what belongs to no user:
+
+```ts title="src/server/run.ts"
+import { Auth } from "@monarcode/session-kit/effect";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+
+import { type ApiClient, ApiClientLive } from "../api.js";
+import type { ServerSession } from "./auth.js";
+
+/** Built once: what belongs to no user. */
+const serverRuntime = ManagedRuntime.make(FetchHttpClient.layer);
+
+/** Built per request: its session, and the API client that uses it. */
+export const requestLayer = (session: ServerSession) =>
+  ApiClientLive.pipe(Layer.provideMerge(Auth.layer(session)));
+
+/** Runs `effect` with the request's `session`. */
+export function runRequest<A, E>(
+  session: ServerSession,
+  effect: Effect.Effect<A, E, ApiClient | Auth>,
+): Promise<A> {
+  return serverRuntime.runPromise(
+    Effect.provide(effect, requestLayer(session)),
+  );
+}
+```
+
+The runtime has no `Auth` and no API client. So an Effect that needs them
+doesn't compile until it goes through `runRequest`, and nothing a service
+keeps outlives its request.
+
+## 3. Call your API from a server function
+
+Each framework's adapter gives the request's session in the server
+function, action or handler. Pass it to `runRequest` with the Effect:
+
+```ts title="src/server/profile.ts"
+import { currentUser } from "../user.js";
+import type { ServerSession } from "./auth.js";
+import { runRequest } from "./run.js";
+
+// TanStack Start: startAuth(serverAuth). React Router:
+// routerAuth(serverAuth)(context). Next.js, from
+// nextSession(serverAuth, { cookies, redirect }): await session.writable()
+// in a Server Function, or await session.readOnly() in a Server Component.
+export const profileFor = (session: ServerSession) =>
+  runRequest(session, currentUser);
+```
+
+[A request's session](/docs/server-rendering/server-sessions#a-requests-session)
+explains each adapter.
+
+## 4. Sign in on the server
+
+`Auth.signIn` and `Auth.updateUser` take what the browser client's methods
+take, so they aren't available on a request's session. Sign in with the
+session's own `signIn`, which takes the tokens and the user, and update the
+user with its own `updateUser`. Ask your backend with an Effect, then save
+what it returns with the session's `signIn`:
+
+```ts title="src/server/sign-in.ts"
+import { login } from "../user.js";
+import type { ServerSession } from "./auth.js";
+import { runRequest } from "./run.js";
+
+export async function signIn(
+  session: ServerSession,
+  username: string,
+  password: string,
+) {
+  const { accessToken, refreshToken, ...user } = await runRequest(
+    session,
+    login(username, password),
+  );
+  return session.signIn({ accessToken, refreshToken, user });
+}
+```
+
+## 5. Optional: Render queries on the server
+
+To render a page with its data from effetch-query, make a query client per
+request, on the server, over that request's layer:
+
+```ts title="src/server/query-client.ts"
+import { QueryClient } from "@monarcode/effetch-query";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+import type { ServerSession } from "./auth.js";
+import { requestLayer } from "./run.js";
+
+export const queryClientFor = (session: ServerSession) =>
+  QueryClient.make({
+    layer: requestLayer(session).pipe(Layer.provide(FetchHttpClient.layer)),
+  });
+```
+
+Give it no `memoMap`: [Things to know](#things-to-know) says why. Pass it to
+`QueryProvider` as `client` while the page renders, and dispose of it after
+the page is sent. For a server that answers with a streamed `Response`,
+`QueryClient.disposeAfter` does that:
+
+```ts title="src/server/respond.ts"
+import { QueryClient } from "@monarcode/effetch-query";
+
+import type { ServerSession } from "./auth.js";
+import { queryClientFor } from "./query-client.js";
+
+/** `render` gives `<QueryProvider client={queryClient}>` its tree. */
+export async function respondWithQueries(
+  session: ServerSession,
+  render: (queryClient: QueryClient.QueryClient) => Promise<Response>,
+): Promise<Response> {
+  const queryClient = queryClientFor(session);
+  try {
+    return QueryClient.disposeAfter(queryClient, await render(queryClient));
+  } catch (error) {
+    await queryClient.dispose();
+    throw error;
+  }
+}
+```
+
+Each framework has its own place for the client and its disposal, which
+effetch-query's
+[Frameworks](https://github.com/monarcode/effetch-query#frameworks) section
+shows:
+
+- **TanStack Start:** make the client in `getRouter`, and
+  `connectQueryClient` disposes it when the request ends.
+- **Next.js:** make it with React's `cache()`, and dispose of it in
+  `after()`.
+- **React Router:** make it in middleware, and wrap the response in
+  `QueryClient.disposeAfter`, as `respondWithQueries` does.
+
+A page's render can't always save a renewed cookie: a Next.js Server
+Component never can, and TanStack Start loses a cookie set after the page
+starts streaming. So refresh before the page renders, in middleware or
+Proxy, as each framework guide does. In TanStack Start, a prefetch that
+runs before the page starts streaming can also save a renewed cookie. In
+the browser, the cache is the
+owned one from
+[Give each account its own cache](/docs/effect/browser#optional-give-each-account-its-own-cache),
+over the mirror client.
+
+## Things to know
+
+- **One registration.** An app with server rendering registers its mirror
+  client, and that registration types `Auth` on the server too.
+  `Auth.layer` takes a request's session whose user is the registered one.
+  In the browser, build `Auth.layer(mirror)` where the mirror is created.
+  There, `Auth.signIn` needs the mirror's `signIn` option, and
+  `Auth.updateUser` isn't available, since the user comes from the server.
+  `sessionBearer` in the browser needs `clientCredentials: true` in
+  `createServerAuth`, or the mirror's `credentials` option
+  ([The access token in the browser](/docs/server-rendering/server-sessions#the-access-token-in-the-browser)).
+- **Keep server modules free of the browser client.** In this guide, the
+  server's files import only `src/backend.ts`, `src/refresh.ts`,
+  `src/api.ts` and `src/user.ts`, which create no Session kit client. Keep
+  it that way in your app. A module the server imports, such as the one
+  that defines `ApiClientLive` or the user schema, mustn't also create a
+  browser client or its layer, or the server loads it too.
+- **Name the services in `runRequest`'s signature,** as `src/server/run.ts`
+  does, rather than inferring them from `requestLayer`. With a mirror
+  registered, the registration depends on the server functions the mirror
+  calls, which call `runRequest`, and TypeScript reports a circular type.
+  For the same reason, the server functions the mirror is made from, such
+  as its `revalidate` and `signIn`, read the request's session directly,
+  not `Auth.session`.
+- **Keep a request's layer off a shared `memoMap`,** such as the runtime's
+  or one passed to `QueryClient.make`. Layers are shared by identity there,
+  so overlapping requests can get one build. A service that keeps `Auth`
+  when it's built would then serve one request's session to another.
+- **Requests that can't set cookies,** such as a Next.js Server
+  Component's. `Auth.session` returns the cookie's session as it is.
+  `Auth.credentials` and `sessionBearer` fail with `REFRESH_FAILED` after
+  the access token has expired, or after a 401, since nothing new can be
+  saved. Refresh first, in middleware or Proxy, as the framework guides do.
+  `Auth.signOut` dies there with `INVALID_OPTIONS`, so sign out in an
+  action or route handler.
+  [A request's session](/docs/server-rendering/server-sessions#a-requests-session)
+  lists which requests these are.
+- **Only `Auth`'s Effects.** A request's session isn't your browser client,
+  so don't reach for client methods through `Auth.use` there.
+- **`Auth.layer` binds a session from `startAuth`** to the request that's
+  current when it's called, so call it per request, as `requestLayer` does.
+  Outside a request, it throws `INVALID_OPTIONS`.
+
+## Next steps
+
+- [Server sessions](/docs/server-rendering/server-sessions): how the server
+  keeps the session in a cookie, and refreshes it.
+- [Effect and effetch](/docs/effect): what `Auth` covers, and how
+  `sessionBearer` differs from `createAuthFetch`.
+- [`./effect` reference](/docs/reference/effect): `Auth.layer` and every
+  other export.

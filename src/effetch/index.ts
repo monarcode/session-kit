@@ -101,10 +101,11 @@ const refuseRedirects = <A, E, R>(
 /**
  * An effetch plugin that sends the current access token as
  * `Authorization: Bearer`. After a 401, it gets a new access token once.
- * `GET` and `HEAD` requests are then sent again; other requests return the
- * 401 for you to retry. If the request sent again gets a 401 too, the user
- * is signed out, unless `signOutOnRepeated401` is off. If the renewal ends
- * the session, the call returns the 401.
+ * `GET` and `HEAD` requests are then sent again. Other requests keep their
+ * 401, which effetch fails the call with as an `HttpError`, for you to
+ * retry. If the request sent again gets a 401 too, the user is signed out,
+ * unless `signOutOnRepeated401` is off. If the renewal ends the session, the
+ * call fails with the 401 too.
  *
  * Calls fail with `AuthFailure`, before sending anything: `UNAUTHENTICATED`
  * when signed out, unless `optional` sends them without a token, and

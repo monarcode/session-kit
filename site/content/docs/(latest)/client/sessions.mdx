@@ -3,10 +3,19 @@ title: Sessions and credentials
 description: Ask the client who is signed in, and keep the access token apart from code that only needs the user.
 ---
 
-A **session** is who is signed in, `{ sessionId, user }`, and never holds
-tokens. `getSession()` is how code outside React asks for it. It waits for a
-restore or a refresh that is under way, so a loader never acts on a stale
-answer:
+A route loader or an event handler often needs to know who is signed in
+before it does anything. Reading the state isn't always enough: right after a
+reload, the saved session might not have been read yet, and the access token
+might have expired. `auth.getSession()` takes care of both, then answers.
+
+This page shows how to ask for the session, what to do when that fails, and
+how the access token is kept apart from code that only needs the user.
+
+## Ask who is signed in
+
+A **session** is who is signed in: `{ sessionId, user }`. It holds no tokens,
+so it's safe to keep in route context or pass around. Ask for it with
+`getSession()`, which resolves `null` when no one is signed in:
 
 ```ts title="src/cart.ts"
 import { authFetch } from "./api.js";
@@ -22,13 +31,58 @@ export async function loadCart(): Promise<unknown> {
 }
 ```
 
-**Credentials** are the access token, `{ sessionId, accessToken, expiresAt }`,
-kept apart so that code which only needs the user never holds one.
-[`createAuthFetch`](/docs/client/requests) reads them for you, and so does
-an HTTP client that takes `authFetch` as its `fetch`. Code that sends
-requests another way uses `auth.credentials`, as
-[Other HTTP clients](/docs/client/other-http-clients#clients-without-a-fetch-option)
-shows.
+`getSession()` waits for the saved session to be read. If the access token
+has expired, it refreshes it first, or waits for the refresh that's already
+running. While the token still works, it answers at once, even if an early
+refresh is running in the background.
 
-`auth.isCurrent({ sessionId })` tells whether a session you're holding is
-still the signed-in one, for work that might finish after an account switch.
+## When `getSession` rejects
+
+`getSession()` rejects rather than answer with a session it can't vouch for.
+Here's when it rejects, and with what:
+
+| When…                                                     | `getSession()` rejects with…                                                                                            |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| The saved session can't be read                           | `PERSISTENCE_FAILED`                                                                                                    |
+| The access token expired, and the refresh failed          | That failure, such as `REFRESH_FAILED`, until a retry, a refresh, new tokens from another tab, or a sign-in or sign-out |
+| The session is [locked](/docs/client/locking)             | `LOCKED`                                                                                                                |
+| The session changes while it waits, such as a new sign-in | `SESSION_CHANGED`                                                                                                       |
+
+When the refresh of an expired access token fails, the session is
+`unavailable`, and `getSession()` rejects with the same failure without
+trying again. `auth.retry()` resolves
+the session as `getSession()` does, but tries the refresh again first. Use it
+for a "Try again" button. [Errors](/docs/configuration/errors) shows how to
+present these failures.
+
+## Keep the access token apart
+
+**Credentials** are the access token, with the session it belongs to:
+`{ sessionId, accessToken, expiresAt }`. The client keeps them apart from the
+session, so code that only needs the user never holds a token.
+
+Most code never reads credentials itself:
+
+- [`createAuthFetch`](/docs/client/requests) reads them for every request.
+- An HTTP client that takes `authFetch` as its `fetch` gets them the same
+  way.
+- Code that sends requests another way uses `auth.credentials`, as
+  [Other HTTP clients](/docs/client/other-http-clients#clients-without-a-fetch-option)
+  shows.
+
+## Check the session after slow work
+
+The user can sign out, or switch account in another tab, while your code
+waits. `auth.isCurrent(session)` checks whether a session you're holding, or
+the credentials a request was sent with, is still the signed-in one. Check it
+before you show the result of work that took a while, so one account's
+result never appears for another. `authFetch` makes that check for its own
+requests.
+
+## Next steps
+
+- [Authenticated requests](/docs/client/requests): call your API with the
+  access token, and refresh after a 401.
+- [State](/docs/client/state): scope cached data to `sessionId`.
+- [Errors](/docs/configuration/errors): show a failed refresh, and offer
+  `retry()`.

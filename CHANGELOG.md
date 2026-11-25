@@ -30,6 +30,19 @@
 - The API reference shows each export's whole description and its `@see`
   links, and lists the members of the client and server types with their
   descriptions, which say what each method rejects with.
+- `sessionBearer` says that a 401 it doesn't send again fails the call as
+  an `HttpError`, and `updateUser` that an `AuthError` its function throws
+  keeps its own code.
+- The docs site is rewritten. Every page was checked against the source,
+  and every code sample on it compiles, the setup guides' config files
+  included. The sidebar is grouped into Get started, Setups, Guides, Going
+  further and Reference. Effect has three pages (`/docs/effect`, `/browser`
+  and `/server`), and Expo has an "Unlock with biometrics" guide
+  (`/docs/setups/expo-locking`). Every old page URL still works. Some
+  section anchors changed, such as the old `/docs/effect` steps; no link in
+  the docs, the README or the examples points at one.
+- Compatibility states the TypeScript floor (5.4, and 5.9 for Effect), the
+  framework's own Node.js and React floors, and which runtimes CI tests.
 
 ## 0.1.0-rc.2
 

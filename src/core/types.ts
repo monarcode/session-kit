@@ -634,7 +634,8 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 				 *
 				 * Rejects with `UNAUTHENTICATED` when signed out, and with
 				 * `USER_VALIDATION_FAILED` for a user the schema rejects, or when
-				 * the function rejects or takes more than 15 seconds. If calls
+				 * the function rejects or takes more than 15 seconds. An
+				 * `AuthError` the function throws keeps its own `code`. If calls
 				 * overlap, the latest wins and the others reject with
 				 * `SESSION_CHANGED`.
 				 *

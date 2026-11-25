@@ -3,27 +3,32 @@ title: Configuring the client
 description: Every option createAuth takes, with a page for each part of the client you can configure.
 ---
 
-`createAuth` builds the client from a few options. This section explains each
-one, for when the defaults in [Getting started](/docs/getting-started) no
-longer fit your app.
+The client from [Getting started](/docs/getting-started) sets a few
+options and leaves the rest to their defaults. When your app outgrows them,
+because your backend sends tokens differently, sessions must last longer, or
+you need to see why a user was signed out, the options passed to
+`createAuth` are where you change it.
+
+This page lists every option, and the pages in this section explain each
+part of the client in turn.
 
 ## Options
 
 `createAuth` takes three required options and five optional ones:
 
-| Option    | Required | What it sets                                                                                                                        |
-| --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `name`    | Yes      | Names the saved session and the refresh lock: letters, digits, `_` or `-`, up to 64 characters. Keeps two apps on one origin apart. |
-| `user`    | Yes      | A [user schema](/docs/configuration/user-schemas), or [`fromAccessToken`](/docs/client/users-from-tokens).                          |
-| `storage` | Yes      | [Where the session is saved](/docs/configuration/storage).                                                                          |
-| `refresh` | No       | [How to get new tokens](/docs/configuration/refresh). Without it, an expired token signs the user out.                              |
-| `revoke`  | No       | [Revokes the ended tokens](/docs/client/signing-in-and-out) on your backend after a sign-out.                                       |
-| `maxAge`  | No       | How long a saved session can be restored, in seconds. Default: 30 days, counted again from each save.                               |
-| `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                                                        |
-| `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.                                        |
+| Option    | Required | What it sets                                                                                                                                        |
+| --------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`    | Yes      | Names the saved session and the refresh lock: letters, digits, `_` or `-`, up to 64 characters. Keeps two apps on one origin apart.                 |
+| `user`    | Yes      | A [user schema](/docs/configuration/user-schemas), or [`fromAccessToken`](/docs/client/users-from-tokens).                                          |
+| `storage` | Yes      | [Where the session is saved](/docs/configuration/storage).                                                                                          |
+| `refresh` | No       | [How to get new tokens](/docs/configuration/refresh). Without it, the user is signed out when the access token expires or your API rejects it.      |
+| `revoke`  | No       | [Revokes the ended tokens](/docs/client/signing-in-and-out) on your backend after a sign-out.                                                       |
+| `maxAge`  | No       | [How long a saved session lasts](/docs/configuration/storage#how-long-a-saved-session-lasts), in seconds. Default: 30 days, counted from each save. |
+| `debug`   | No       | [Reports what the client does](/docs/configuration/debugging). Default: off.                                                                        |
+| `locking` | No       | [Restores a saved session as `locked`](/docs/client/locking), for native apps. Default: off.                                                        |
 
-`createAuth` throws an `AuthError` with the code `INVALID_OPTIONS` for an
-option it can't use, such as a `name` with other characters, or a `maxAge`
+`createAuth` throws an `AuthError` with the code `INVALID_OPTIONS` when it
+can't use an option, such as a `name` with other characters, or a `maxAge`
 that isn't a positive whole number.
 
 ## Pages in this section
@@ -35,12 +40,12 @@ tokens, saves the session, follows other tabs, and reports what happens.
   <Card
     title="User schemas"
     href="/docs/configuration/user-schemas"
-    description="When the schema checks users, and the rules restoring a session sets for it."
+    description="When the schema checks users, and what restoring a session asks of it."
   />
   <Card
     title="Refresh"
     href="/docs/configuration/refresh"
-    description="What the refresh callback returns, and when a refresh runs."
+    description="What the refresh callback returns, when a refresh runs, and what happens when it fails."
   />
   <Card
     title="Expiry"
@@ -50,17 +55,17 @@ tokens, saves the session, follows other tabs, and reports what happens.
   <Card
     title="Storage"
     href="/docs/configuration/storage"
-    description="Where the session is saved: localStorage, sessionStorage, the device, or your own store."
+    description="Where the session is saved, how long it lasts, and how to write your own store."
   />
   <Card
     title="Tabs"
     href="/docs/configuration/tabs"
-    description="How tabs follow each other's sign-ins, and share one refresh."
+    description="How tabs follow each other's sign-ins, and take turns to refresh."
   />
   <Card
     title="Errors"
     href="/docs/configuration/errors"
-    description="How errors reach your app, and the failures that need a decision from you."
+    description="Where errors appear, how to show them, and the failures that need a decision from you."
   />
   <Card
     title="Debugging"
@@ -68,3 +73,12 @@ tokens, saves the session, follows other tabs, and reports what happens.
     description="Log what the client does, or send it to your error reporting."
   />
 </Cards>
+
+## Next steps
+
+- [Refresh](/docs/configuration/refresh): check that your refresh callback
+  tells a rejected token from an outage.
+- [Storage](/docs/configuration/storage): choose where the session is saved,
+  and for how long.
+- [Errors](/docs/configuration/errors): show failed refreshes and storage
+  problems to your users.

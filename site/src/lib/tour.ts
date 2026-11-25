@@ -8,7 +8,7 @@ import type { Element, ElementContent } from "hast";
 
 import { codeThemes } from "@/lib/shared";
 
-import { MARKERS } from "../../../scripts/docs-pages.mjs";
+import { APP, MARKERS } from "../../../scripts/docs-pages.mjs";
 
 /**
  * The landing page's code tour: one app, the TanStack Router setup, which
@@ -50,8 +50,9 @@ async function readExample(page: string, file: string): Promise<string> {
 		join("content/docs/(latest)", `${page}.mdx`),
 		"utf8",
 	);
+	// The page's main version, not a named app's version of the file.
 	const example = [...text.matchAll(MARKERS.mdx)].find(
-		(match) => match[1] === file,
+		(match) => match[1] === file && !APP.test(match[0].split("\n")[0]!),
 	);
 	if (!example) throw new Error(`${page}.mdx has no example titled ${file}`);
 	return example[2]!;

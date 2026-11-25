@@ -3,9 +3,18 @@ title: Users from the access token
 description: Read the user from a JWT access token's claims, instead of from your backend's sign-in response.
 ---
 
-If your backend puts the user in a JWT access token, read it from there with
-`fromAccessToken`. `signIn` then takes tokens only, the refresh callback
-returns them, and the user changes whenever the token does:
+Some backends answer a sign-in with tokens only, and put the user in the
+access token: a JWT whose claims hold the user's ID, email and roles. Then
+there's no user object to pass to `signIn`, and the user can change on every
+refresh. `fromAccessToken` reads the user from the token's claims instead.
+
+This page shows how to set it up, what changes for the client, and how to
+verify the token on a server.
+
+## Read the user from the token
+
+Pass `fromAccessToken` as the `user` option. Its first argument is a schema
+for the claims, and its second turns them into the user your app sees:
 
 ```ts title="src/token-auth.ts"
 import {
@@ -33,20 +42,84 @@ export const signInWithTokens = (tokens: {
 }) => tokenAuth.signIn(tokens);
 ```
 
+`signIn` takes tokens only, and your refresh callback returns tokens only.
+Without the second argument, the claims are the user.
+
+## What changes
+
 Reading the user from the token changes a few things:
 
+- **The user is read from every token:** on sign-in, on each refresh, from
+  tokens another tab saved, and on every load. Only the tokens are saved, so
+  the user is read again each time the session is restored.
 - **No `updateUser`.** The token is the only source of the user, so call
   `auth.refresh()` to pick up a change.
-- **The signature isn't verified.** That suits a browser, which trusts a user
-  object in a JSON response to the same degree. Pass `{ decode }` as the third
-  argument to verify or decode the token yourself.
-- **Leave out claims that change on every refresh**, such as `exp`, `iat`, or
-  `jti`, so the user stays the same object across refreshes.
+- **Locking isn't available.** A locked session shows its user without
+  opening its tokens, so [locking](/docs/client/locking) needs a user schema.
+  `createAuth` throws `INVALID_OPTIONS` when you pass both.
 - **For backends you control.** OAuth providers can change their access token
   format without notice.
+
+## Keep the mapping stable
+
+The mapping runs every time a token is read, so it has to give the same user
+for the same claims:
+
+- **Keep it pure and synchronous.** Don't fetch or read the clock in it.
+- **Leave out claims that change on every refresh,** such as `exp`, `iat` or
+  `jti`. Then the user stays the same object across refreshes, and
+  components that compare users don't re-render.
+
+## When the token can't be read
+
+A token that isn't a readable JWT, or whose claims the schema rejects, fails
+with `USER_VALIDATION_FAILED`. What happens next depends on where the token
+came from:
+
+| The token came from…       | What happens                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
+| `signIn`                   | `signIn` rejects, and the current session stays.                                         |
+| The saved session, on load | The user is signed out, and `state.error` shows the error.                               |
+| Another tab                | The user is signed out, and `state.error` shows the error.                               |
+| A refresh                  | The refresh fails with that error, and the session is kept, as after any failed refresh. |
+
+## Verify the token on a server
+
+By default, the claims are read without checking the token's signature. That
+suits a browser, which trusts a user object in a JSON response from its own
+backend just as much. On a server, such as with
+[server sessions](/docs/server-rendering), verify the token: pass a `decode`
+function as the third argument:
+
+```ts title="src/verified-user.ts"
+import { fromAccessToken } from "@monarcode/session-kit";
+import { z } from "zod";
+
+// Your own check, with your JWT library: it throws for a bad signature.
+declare function verifyJwt(accessToken: string): Promise<unknown>;
+
+export const verifiedUser = fromAccessToken(
+  z.object({ sub: z.string(), email: z.string() }),
+  (claims) => ({ id: claims.sub, email: claims.email }),
+  { decode: verifyJwt },
+);
+```
+
+`decode` returns the claims, and the schema checks them as before. It may
+return a promise, as `verifyJwt` does. In a browser, that stops a saved
+session from showing before the first render.
 
 The
 [`tanstack-start-spa`](https://github.com/monarcode/session-kit/tree/main/examples/tanstack-start-spa)
 and
 [`react-router-data`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-data)
-examples read their user this way.
+examples read their user from the access token.
+
+## Next steps
+
+- [Signing in and out](/docs/client/signing-in-and-out): what `signIn` does
+  with the tokens.
+- [Refresh](/docs/configuration/refresh): return tokens from your refresh
+  callback, and handle a failed refresh.
+- [`fromAccessToken` reference](/docs/reference/core#fromaccesstoken): its
+  arguments and options.

@@ -1,36 +1,77 @@
 ---
 title: Tabs
-description: How open tabs follow each other's sign-ins and sign-outs, and share one refresh between them.
+description: How open tabs follow each other's sign-ins and sign-outs, and take turns to refresh.
 ---
 
-In a browser, each open tab runs its own client over the same saved session.
-This page explains how the tabs stay in step, and how they share one refresh.
+Users open your app in several tabs, then sign out in one and expect the
+others to follow. In a browser with `webStorage()`, which saves the session
+in `localStorage`, each open tab runs its own client over the same saved
+session, and the tabs keep each other in step.
 
-## Sign-ins and sign-outs
+This page shows what tabs share, how they take turns to refresh, and the
+setups where tabs don't follow each other.
 
-While the client is [mounted](/docs/client), each tab follows the others
-through `storage` events:
+## How tabs stay in step
+
+While the client is [mounted](/docs/client), each tab follows the changes
+the others save:
 
 - A sign-out in one tab signs out every tab.
 - A sign-in or an account switch switches every tab.
 - A profile update or a refresh shows in every tab.
 
-With server rendering, `createMirrorAuth` clients follow each other over a
-`BroadcastChannel` instead, as [Server rendering](/docs/server-rendering)
-explains.
+A tab hears about these through the browser's `storage` events, which the
+store's `subscribe` member listens to. A tab that mounts again checks the
+saved session, so it catches up on anything it missed while unmounted.
+
+Tabs share a session only when they share the store:
+
+- **`webStorage({ area: "session" })`** gives each tab its own
+  `sessionStorage`, so each tab has its own session and nothing to follow.
+- **`memoryStorage()`** keeps the session in one page, and no other tab can
+  read it.
+- **Your own store** needs a `subscribe` member that reports other tabs'
+  changes, as [Storage](/docs/configuration/storage#write-your-own-store)
+  explains.
 
 ## One refresh at a time
 
-The client refreshes under the `<name>:auth:refresh`
-[Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API). One tab
-at a time spends the refresh token, and the others reuse the tokens it saved.
-Rotating refresh tokens therefore work with several tabs open.
+Tabs that share a session also share its refresh token. The client refreshes
+under the `<name>:auth:refresh`
+[Web Lock](https://developer.mozilla.org/docs/Web/API/Web_Locks_API), through
+the store's `lock` member. One tab at a time spends the refresh token, and
+the others reuse the tokens it saved. Rotating refresh tokens therefore work
+with several tabs open.
 
 Without Web Locks, two tabs that refresh at the same instant can both spend
 the token. A short reuse window on your backend covers that case.
 
+## Server rendering
+
+With server rendering, the session lives in a cookie, and the browser's
+`createMirrorAuth` clients don't use storage events. When one tab signs in or
+out, it tells the others over a `BroadcastChannel`, and they ask the server
+for the session again. [Server rendering](/docs/server-rendering) has the
+rest.
+
+## Locking
+
+With [`locking`](/docs/client/locking), tabs stop following each other. A
+sign-in, sign-out or lock in one tab doesn't reach the others. With rotating
+refresh tokens, two tabs that refresh the same session can sign one of them
+out. Locking is meant for native apps, which have no tabs.
+
 ## Expo apps
 
-An Expo app has one JavaScript context, so it has no tabs to follow and needs
-no lock. In a browser, [`locking`](/docs/client/locking) stops tabs from
-following each other.
+An Expo app has one JavaScript context, so it has no tabs to follow and
+needs no lock. `secureStorage()` has no `subscribe` or `lock` member for
+that reason.
+
+## Next steps
+
+- [Storage](/docs/configuration/storage): choose a store, or write one that
+  several tabs can share.
+- [Refresh](/docs/configuration/refresh): see when a refresh runs, and what
+  happens when it fails.
+- [Server rendering](/docs/server-rendering): keep the session on the server
+  instead.
