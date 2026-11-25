@@ -3,11 +3,8 @@ title: "React"
 description: "React hooks and the provider that read a client's state."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/react";
-```
-
-Guide: [Read the session in React](/docs/getting-started#4-read-the-session-in-react).
+Import these from `@monarcode/session-kit/react`. To set it up, see
+[Read the session in React](/docs/getting-started#4-read-the-session-in-react).
 
 ## Functions
 
@@ -15,23 +12,47 @@ Guide: [Read the session in React](/docs/getting-started#4-read-the-session-in-r
 
 Creates React hooks typed for one auth client. Use it when an app has several clients: each call has its own context, so call it once per client. With one client, register it and use [`useAuth`](#useauth), [`useAuthClient`](#useauthclient) and [`AuthProvider`](#authprovider) instead.
 
+See [`AuthHooksOptions`](#authhooksoptions) to find the client without `AuthProvider`.
+
 ### useAuth
 
 Reads the current auth state, or the part `selector` picks, and re-renders when it changes. With a selector, it re-renders only when that part changes.
+
+The part is compared with `Object.is`. A selector that returns a new object or array each time re-renders on every change.
+
+It reads the client of the nearest [`AuthProvider`](#authprovider), typed by the client you register in `Register`, from `@monarcode/session-kit`.
+
+Throws `INVALID_OPTIONS` without an `AuthProvider` above. With TanStack Router, use the hooks from `@monarcode/session-kit/tanstack-router` instead: they read Router context, and need no `AuthProvider`.
 
 ### useAuthClient
 
 Returns the client of the nearest [`AuthProvider`](#authprovider), for actions such as `signIn` and `signOut`. It's typed by the client you register in `Register`, from `@monarcode/session-kit` ([`ProvidedAuth`](#providedauth)).
 
+Throws `INVALID_OPTIONS` without an `AuthProvider` above, as [`useAuth`](#useauth) does.
+
 ### useMirrorAuth
 
 Creates a `createMirrorAuth` client once, from the session the page was rendered with, and keeps it in step with your server. Call it in the component that renders `AuthProvider`.
+
+When a new server render brings another session, such as after a server action signs in or out, the client takes it and tells other tabs. When the session changes in the browser, it calls `onChange`.
+
+Throws `INVALID_OPTIONS` without a `create` or an `onChange` function.
+
+Creating the client here, rather than at module level, keeps one per request during server rendering.
+
+See [`UseMirrorAuthOptions`](#usemirrorauthoptions) for `create`, `session` and `onChange`.
 
 ## Components
 
 ### AuthProvider
 
 Gives a client to the hooks below it, and mounts it while rendered, which starts expiry timers and following other tabs. Render it once, around your app.
+
+Mounting restores the saved session, before the first paint with synchronous storage and schemas. On a server, nothing starts, as effects don't run there.
+
+Its `client` is typed by the client you register in `Register`, from `@monarcode/session-kit`. Until you register one, it takes any client ([`ProvidedAuth`](#providedauth)).
+
+See [`useAuth`](#useauth) to read the session below it.
 
 ## Types
 
@@ -66,6 +87,8 @@ What the React bindings need from an auth client: its `state`, and `mount` to st
 ### ProvidedAuth
 
 The client `AuthProvider` takes and `useAuthClient` returns: the one you register in `Register`, from `@monarcode/session-kit`.
+
+Until you register one, it's any client, with what every client has: its state, `mount`, `getSession`, `signOut`, `isCurrent` and `credentials`. Its user is then `unknown`.
 
 ### StateOf
 

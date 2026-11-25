@@ -4,14 +4,14 @@ import { AuthError } from "./errors.js";
 type MaybePromise<T> = T | Promise<T>;
 
 /**
- * Where auth saves the session: `createAuth`'s `storage` option. Use
+ * Where Session kit saves the session: `createAuth`'s `storage` option. Use
  * {@link webStorage} in browsers, `secureStorage()` from
  * `@monarcode/session-kit/expo` in Expo apps, and {@link memoryStorage} in
  * tests. Implement it yourself for another store.
  *
- * Values are strings in a format auth owns. Methods may return promises. Auth
- * runs them one at a time, in order, so a store that answers out of order is
- * still safe.
+ * Values are strings in a format Session kit owns. Methods may return
+ * promises. Session kit runs them one at a time, in order, so a store that
+ * answers out of order is still safe.
  *
  * @example
  * ```ts
@@ -124,9 +124,9 @@ export type WebStorageOptions = {
  * changes, such as a sign-out. Tabs take turns to refresh where the browser
  * supports Web Locks.
  *
- * It touches browser storage only when auth reads or saves, so creating auth
- * in code that also runs on a server is safe. Reading the session on a server
- * fails with `PERSISTENCE_FAILED`.
+ * It touches browser storage only when the client reads or saves, so
+ * creating a client in code that also runs on a server is safe. Reading the
+ * session on a server fails with `PERSISTENCE_FAILED`.
  *
  * @example
  * ```ts

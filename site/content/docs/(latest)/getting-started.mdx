@@ -3,24 +3,27 @@ title: Getting started
 description: Build a small app that signs in, stays signed in across reloads and tabs, calls an API, and signs out.
 ---
 
-In this guide, you build a small React app that signs in, stays signed in
-across reloads and tabs, calls an API, and signs out. The web router guides
-build on this app. Server-rendered apps create their client differently, so
-start from [Server rendering](/docs/server-rendering) instead.
+Your backend signs users in and answers with an access token and a refresh
+token. In this tutorial, you build a small React app around those tokens. It
+signs in, stays signed in across reloads and tabs, calls an API with the
+access token, and signs out.
 
 The code signs in against
 [DummyJSON's auth API](https://dummyjson.com/docs/auth), a public test
-backend, so it runs as written.
+backend, so it runs as written. The web router guides build on this app. If
+your app renders on the server, it creates its client differently: start
+from [Server rendering](/docs/server-rendering) instead.
 
 ## Before you begin
 
-In a React app, install Session kit and Zod, as
-[Installation](/docs/installation) shows.
+- A React app. A router is optional: step 6 links to the guide for yours.
+- Session kit and Zod, installed as [Installation](/docs/installation)
+  shows.
 
 ## 1. Talk to your backend
 
 Session kit never calls your backend for you, so start with the two requests
-you would write anyway: one that signs in, and one that exchanges a refresh
+you'd write anyway. One signs in, and the other exchanges a refresh
 token for new tokens. Nothing in this file imports Session kit:
 
 ```ts title="src/backend.ts"
@@ -71,8 +74,12 @@ export async function refresh(refreshToken: string, signal: AbortSignal) {
 ```
 
 The schemas do two jobs. They check what the backend sent, and they give the
-rest of the app its types. Requests omit `credentials: "include"`, because
-Session kit keeps tokens out of cookies and attaches them itself.
+rest of the app its types.
+
+DummyJSON's docs add `credentials: "include"` to these requests, to send its
+cookies. This file leaves it out: Session kit keeps the tokens in storage,
+not in cookies, and in step 5 `authFetch` adds the access token to your API
+calls.
 
 ## 2. Create the client
 
@@ -104,15 +111,19 @@ export async function signInWithPassword(username: string, password: string) {
 export type AppAuth = typeof auth;
 ```
 
-`refresh` tells two failures apart. `null` means the backend rejected the
-refresh token, so the user is signed out. A throw means something else failed,
-so the session is kept and the error reported. That split is why an outage
-doesn't sign anyone out. [Refresh](/docs/configuration/refresh) has the
-details, and [Storage](/docs/configuration/storage) lists the other places a
-session can be saved.
+Create the client one time, at module level, as this file does. If an app has
+more than one client, give each its own `name`.
 
-Create the client once, at module level, as this file does. Give each client
-in an app its own `name`.
+`refresh` tells two failures apart, so an outage doesn't sign anyone out:
+
+- `null` means the backend rejected the refresh token, so the user is signed
+  out.
+- A throw means something else failed, such as the network. The session is
+  kept, and the error reported.
+
+[Refresh](/docs/configuration/refresh) has the details, and
+[Storage](/docs/configuration/storage) lists the other places a session can
+be saved.
 
 DummyJSON's tokens are JWTs, so their expiry comes from the `exp` and `iat`
 claims. [Expiry](/docs/configuration/expiry) covers backends that say it
@@ -120,8 +131,8 @@ another way.
 
 ## 3. Add a sign-in form
 
-`signInWithPassword` is all a form needs. The form has no Session kit code
-of its own:
+The form calls `signInWithPassword` from `src/auth.ts`, and has no Session
+kit code of its own:
 
 ```tsx title="src/sign-in.tsx"
 import { useState, type FormEvent } from "react";
@@ -173,18 +184,19 @@ export function SignIn() {
 }
 ```
 
-The form doesn't have to do anything when it succeeds. Signing in changes the
-client's state, and the next step renders from that state. With a router, the
-sign-in page's guard runs again and sends the user on.
+The form doesn't navigate after it signs in. Signing in changes the client's
+state, and the next step renders from that state. With a router, the sign-in
+page's guard runs again and sends the user on.
 
 ## 4. Read the session in React
 
 The hooks come from `@monarcode/session-kit/react`. Register your client's
-type once, where you render `AuthProvider`, and they carry your user.
+type one time, in the file that renders `AuthProvider`, and the hooks carry
+your user's type.
 
 Then render by `status`. Each case is one of the states in
 [How it works](/docs#how-it-works). By the last case, TypeScript has narrowed
-`user` to a value that's set:
+`user`, so it's never `null` there:
 
 ```tsx title="src/app.tsx"
 import {
@@ -206,7 +218,7 @@ declare module "@monarcode/session-kit" {
 export function App() {
   return (
     <AuthProvider client={auth}>
-      <AuthError />
+      <AuthErrorMessage />
       <Screen />
     </AuthProvider>
   );
@@ -242,7 +254,7 @@ function Screen() {
 }
 
 /** The latest failure, such as a refresh the backend couldn't answer. */
-function AuthError() {
+function AuthErrorMessage() {
   const error = useAuth((state) => state.error);
   return error ? <p role="alert">{error.message}</p> : null;
 }
@@ -253,16 +265,25 @@ Each part of this file has a job:
 - `AuthProvider` mounts the client. It restores the saved session, starts the
   refresh timer, and follows other tabs.
 - `useAuth()` returns the whole state. `useAuth(selector)` returns a part of
-  it, and re-renders only when that part changes, as `AuthError` does.
-- `useAuthClient()` returns the client, for actions.
+  it, and re-renders only when that part changes, as `AuthErrorMessage` does.
+- `useAuthClient()` returns the client, for actions such as `retry` and
+  `signOut`.
+- `AuthErrorMessage` shows `state.error`, where failures appear.
+
+The buttons ignore a rejection because `AuthErrorMessage` already shows the
+failure. `retry` rejects when it fails, and the failure also appears in
+`state.error`. `signOut` signs the user out even when your backend can't
+revoke the tokens: that failure only appears in `state.error`. `signOut`
+rejects only when it can't clear the saved session.
+[Errors](/docs/configuration/errors) covers where each failure appears.
+
+Two more helpers are useful as the app grows:
+
+- `isSignedIn(state)`, from `@monarcode/session-kit`, is `true` while the
+  status is `authenticated` or `refreshing`. Pass it to `useAuth` to read only
+  that: `useAuth(isSignedIn)`.
 - With more than one client in an app, create hooks for each with
-  `createAuthHooks<typeof client>()` instead.
-- `isSignedIn(state)` is `true` while `authenticated` or `refreshing`. Pass it
-  to `useAuth` to read only that: `useAuth(isSignedIn)`. It comes from
-  `@monarcode/session-kit`.
-- `retry` and `signOut` reject when they fail, and publish the same failure in
-  `state.error`. `AuthError` shows it, so the handlers have nothing left to
-  do.
+  `createAuthHooks<typeof client>()` instead of registering one.
 
 With [`locking`](/docs/client/locking), give `locked` a case of its own. It
 has a user too, but no usable access.
@@ -276,8 +297,8 @@ That's a working app. To check it:
 
 ## 5. Call your API
 
-`createAuthFetch` makes a `fetch` that sends the access token to one origin,
-and to no other:
+Your API wants the access token on each request. `createAuthFetch` makes a
+`fetch` that adds it, and sends it to your API's origin and to no other:
 
 ```ts title="src/api.ts"
 import { createAuthFetch } from "@monarcode/session-kit/http";
@@ -295,13 +316,48 @@ export async function fetchProfile() {
 }
 ```
 
-When a request gets a 401, `authFetch` refreshes, then sends a GET or HEAD
-again. Other methods are never sent twice.
+When a request gets a 401, `authFetch` refreshes, then sends a `GET` or
+`HEAD` again. It never sends other methods twice.
 [Authenticated requests](/docs/client/requests) covers the rest of its
-behaviour and its options.
+behavior and its options.
 
-Using ky, axios or openapi-fetch? Pass `authFetch` as the client's `fetch`:
-see [Other HTTP clients](/docs/client/other-http-clients).
+To see it work, add a button that loads the profile:
+
+```tsx title="src/profile.tsx"
+import { useState } from "react";
+
+import { fetchProfile } from "./api.js";
+
+export function ProfileButton() {
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+
+  async function load() {
+    setError("");
+    try {
+      setEmail((await fetchProfile()).email);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load");
+    }
+  }
+
+  return (
+    <section>
+      <button onClick={() => void load()}>Load my profile</button>
+      {email && <p>{email}</p>}
+      {error && <p role="alert">{error}</p>}
+    </section>
+  );
+}
+```
+
+Render `<ProfileButton />` in `Screen`'s signed-in case, under the welcome
+message. Sign in, then select **Load my profile**. Emily's email address
+appears, from a request that carried the access token.
+
+ky, axios and openapi-fetch can each send their requests through
+`authFetch`. [Other HTTP clients](/docs/client/other-http-clients) shows
+how for each one.
 
 ## 6. Protect your routes
 
@@ -315,7 +371,7 @@ your router:
   framework mode with `ssr: false`.
 - [Expo Router](/docs/setups/expo), for iOS and Android. Its guide starts from
   scratch.
-- Without a router, you are done. Render by `status`, as `Screen` does.
+- Without a router, you're done. Render by `status`, as `Screen` does.
 
 With Effect, the same client becomes a service: see
 [Effect and effetch](/docs/effect).
@@ -325,3 +381,5 @@ With Effect, the same client becomes a service: see
 - [Using the client](/docs/client): what else the client does, such as
   updating the user and locking.
 - [Configuring the client](/docs/configuration): the rest of its options.
+- [Security](/docs/security): what Session kit protects, and what stays your
+  backend's job.

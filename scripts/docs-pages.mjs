@@ -63,8 +63,8 @@ declare module "@tanstack/react-router" {
 `;
 
 /**
- * The parts of `@noble/ciphers` and `expo-crypto` the Expo guide's locking
- * example uses. They are the app's dependencies, not session-kit's.
+ * The parts of `@noble/ciphers` and `expo-crypto` the Unlock with biometrics
+ * page uses. They are the app's dependencies, not session-kit's.
  */
 const LOCKING_DEPS = `
 declare module "@noble/ciphers/aes.js" {
@@ -129,6 +129,125 @@ declare module "@tanstack/react-router" {
 }
 `;
 
+/**
+ * The Start guide's own routes: `START_ROUTE_TREE`, plus its sign-in route.
+ * The Hybrid page keeps `START_ROUTE_TREE`, as it has no sign-in route.
+ */
+const START_GUIDE_ROUTE_TREE = `
+import { Route as rootRoute } from "./routes/__root";
+import { Route as loginRouteImport } from "./routes/login";
+import { Route as authenticatedRouteImport } from "./routes/_authenticated";
+import { Route as apiSessionRouteImport } from "./routes/api/session";
+
+const loginRoute = loginRouteImport.update({
+  id: "/login",
+  path: "/login",
+  getParentRoute: () => rootRoute,
+} as any);
+const authenticatedRoute = authenticatedRouteImport.update({
+  id: "/_authenticated",
+  getParentRoute: () => rootRoute,
+} as any);
+const apiSessionRoute = apiSessionRouteImport.update({
+  id: "/api/session",
+  path: "/api/session",
+  getParentRoute: () => rootRoute,
+} as any);
+
+export const routeTree = rootRoute.addChildren([
+  loginRoute,
+  authenticatedRoute,
+  apiSessionRoute,
+]);
+
+declare module "@tanstack/react-router" {
+  interface FileRoutesByPath {
+    "/login": {
+      id: "/login";
+      path: "/login";
+      fullPath: "/login";
+      preLoaderRoute: typeof loginRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+    "/_authenticated": {
+      id: "/_authenticated";
+      path: "";
+      fullPath: "/";
+      preLoaderRoute: typeof authenticatedRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+    "/api/session": {
+      id: "/api/session";
+      path: "/api/session";
+      fullPath: "/api/session";
+      preLoaderRoute: typeof apiSessionRouteImport;
+      parentRoute: typeof rootRoute;
+    };
+  }
+}
+`;
+
+/**
+ * The parts of Vite and its plugins the TanStack Router guide's
+ * `vite.config.ts` uses. They are the app's dev dependencies, not
+ * session-kit's. Start's own plugin is installed, and reads `vite` from here.
+ */
+const SPA_VITE_DEPS = `
+declare module "vite" {
+  export interface Plugin {
+    name: string;
+  }
+  export type PluginOption = Plugin | PluginOption[] | false | null | undefined;
+  export interface UserConfig {
+    plugins?: PluginOption[];
+  }
+  export function defineConfig(config: UserConfig): UserConfig;
+}
+declare module "@vitejs/plugin-react" {
+  import type { Plugin } from "vite";
+  export default function react(): Plugin[];
+}
+declare module "@tanstack/router-plugin/vite" {
+  export function tanstackRouter(options?: {
+    target?: "react" | "solid" | "vue";
+    autoCodeSplitting?: boolean;
+  }): import("vite").Plugin;
+}
+`;
+
+/**
+ * The parts of `@react-router/dev` the React Router guide's framework-mode
+ * config uses. It's the app's dev dependency, not session-kit's.
+ */
+const SPA_REACT_ROUTER_DEV = `
+declare module "@react-router/dev/config" {
+  export interface Config {
+    ssr?: boolean;
+    basename?: string;
+  }
+}
+declare module "@react-router/dev/routes" {
+  export interface RouteConfigEntry {
+    id?: string;
+    path?: string;
+    index?: boolean;
+    file: string;
+    children?: RouteConfigEntry[];
+  }
+  export type RouteConfig = RouteConfigEntry[] | Promise<RouteConfigEntry[]>;
+  export function index(file: string): RouteConfigEntry;
+  export function layout(
+    file: string,
+    children?: RouteConfigEntry[],
+  ): RouteConfigEntry;
+  export function route(
+    path: string | null | undefined,
+    file: string,
+    children?: RouteConfigEntry[],
+  ): RouteConfigEntry;
+}
+`;
+
 /** The part of Node's types the server guides' code uses. */
 const SERVER_ENV = `
 declare const process: { env: Record<string, string | undefined> };
@@ -157,6 +276,15 @@ export const MARKERS = {
 
 /** An example's path in a fence's meta, as `MARKERS.mdx` reads it. */
 export const TITLE = new RegExp(`(?:^|\\s)title="(${PATH})"`);
+
+/**
+ * The app an example belongs to, in a fence's meta: `app="data"`. A page's
+ * examples without one form its main app. Each named app is compiled
+ * separately, from the main app's files and its own, which replace any of
+ * the same path. It lets a page show two versions of one file, such as a
+ * `src/main.tsx` for each of React Router's modes.
+ */
+export const APP = /(?:^|\s)app="([\w-]+)"/;
 
 /** Where the site's pages for the current release line live. */
 export const PAGES = "site/content/docs/(latest)";
@@ -191,7 +319,8 @@ const clientPage = (slug) => ({
  * `fixtures` standing in for generated files and the app's other
  * dependencies. A page that builds on another page's app names the files it
  * uses as `shared`; its own file replaces a shared one of the same path.
- * `requires` skips a page when an installed package is older than it needs.
+ * `requires` skips a page when an installed package is older than it needs,
+ * and `appRequires` skips one of its named apps.
  */
 export const documents = [
 	{
@@ -211,20 +340,31 @@ export const documents = [
 		fixtures: {},
 	},
 	{
+		path: page("security"),
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {},
+	},
+	{
 		path: page("setups/tanstack-router"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
-		fixtures: { "src/routeTree.gen.ts": ROUTE_TREE },
+		fixtures: {
+			"src/routeTree.gen.ts": ROUTE_TREE,
+			"src/vite-deps.d.ts": SPA_VITE_DEPS,
+		},
 		shared: {
 			from: page("getting-started"),
 			files: ["src/backend.ts", "src/auth.ts", "src/sign-in.tsx"],
 		},
+		// Start in SPA mode needs the router Start itself depends on.
+		appRequires: { start: { "@tanstack/react-router": "1.170" } },
 	},
 	{
 		path: page("setups/react-router"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
-		fixtures: {},
+		fixtures: { "app/react-router-dev.d.ts": SPA_REACT_ROUTER_DEV },
 		shared: {
 			from: page("getting-started"),
 			files: [
@@ -243,7 +383,22 @@ export const documents = [
 		resolutions: ["Bundler"],
 		// No DOM, so browser-only code fails as it would on a device.
 		dom: false,
+		fixtures: {},
+	},
+	{
+		path: page("setups/expo-locking"),
+		resolutions: ["Bundler"],
+		dom: false,
 		fixtures: { "src/locking-deps.d.ts": LOCKING_DEPS },
+		// It adds locking to the Expo guide's app.
+		shared: {
+			from: page("setups/expo"),
+			files: [
+				"app/+native-intent.tsx",
+				"app/login.tsx",
+				"app/(app)/profile.tsx",
+			],
+		},
 	},
 	{
 		path: page("setups/tanstack-start"),
@@ -253,7 +408,7 @@ export const documents = [
 		requires: { "@tanstack/react-router": "1.170" },
 		dom: true,
 		fixtures: {
-			"src/routeTree.gen.ts": START_ROUTE_TREE,
+			"src/routeTree.gen.ts": START_GUIDE_ROUTE_TREE,
 			"src/env.d.ts": SERVER_ENV,
 		},
 	},
@@ -277,13 +432,26 @@ export const documents = [
 		// The guide's code is React Router 8's, with the `url` argument.
 		requires: { "react-router": "8.0" },
 		dom: true,
-		fixtures: { "app/env.d.ts": SERVER_ENV },
+		fixtures: {
+			"app/env.d.ts": SERVER_ENV,
+			"app/react-router-dev.d.ts": SPA_REACT_ROUTER_DEV,
+		},
 	},
 	{
 		path: page("server-rendering/server-sessions"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
-		fixtures: { "src/env.d.ts": SERVER_ENV },
+		fixtures: {
+			"src/env.d.ts": SERVER_ENV,
+			// The app's own server render, for servers without an adapter.
+			"src/server/render.ts": `
+import type { Session } from "@monarcode/session-kit";
+
+export declare function renderPage(
+  session: Session<{ id: number; firstName: string }> | null,
+): Promise<Response>;
+`,
+		},
 	},
 	{
 		path: page("server-rendering/hybrid"),
@@ -304,14 +472,36 @@ export const documents = [
 				"src/router.tsx",
 				"src/routes/__root.tsx",
 				"src/routes/_authenticated.tsx",
+				// The guide's Call your API code must compile with hybrid's server.ts.
+				"src/auth/auth-fetch.ts",
 			],
 		},
 	},
 	{
-		path: page("effect"),
+		path: page("effect/browser"),
 		resolutions: ["NodeNext", "Bundler"],
 		dom: true,
 		fixtures: {},
+	},
+	{
+		path: page("effect/server"),
+		resolutions: ["NodeNext", "Bundler"],
+		dom: true,
+		fixtures: {},
+		shared: {
+			from: page("effect/browser"),
+			// The server's files, and the client and query cache it registers.
+			files: [
+				"src/backend.ts",
+				"src/refresh.ts",
+				"src/api.ts",
+				"src/user.ts",
+				"src/auth.ts",
+				"src/layer.ts",
+				"src/runtime.ts",
+				"src/query.ts",
+			],
+		},
 	},
 	clientPage("client/state"),
 	clientPage("client/sessions"),
@@ -321,6 +511,8 @@ export const documents = [
 	clientPage("client/other-http-clients"),
 	clientPage("client/users-from-tokens"),
 	clientPage("client/locking"),
+	clientPage("configuration/user-schemas"),
+	clientPage("configuration/refresh"),
 	clientPage("configuration/expiry"),
 	clientPage("configuration/storage"),
 	clientPage("configuration/errors"),
@@ -339,10 +531,12 @@ export function markedExamples(path, dom) {
 	const files = [];
 	for (const match of text.matchAll(MARKERS[markerOf(path)])) {
 		const fenceStart = match.index + match[0].indexOf("```");
+		const fence = match[0].slice(match[0].indexOf("```")).split("\n")[0];
 		files.push({
 			origin: join(root, path),
 			line: text.slice(0, fenceStart).split("\n").length + 1,
 			path: match[1],
+			app: APP.exec(fence)?.[1],
 			dom,
 			code: match[2],
 		});
@@ -362,7 +556,10 @@ function markerOf(path) {
 function sharedExamples(path, { from, files, directories }, dom, report) {
 	const theirs = markedExamples(from, dom);
 	return files.flatMap((name) => {
-		const file = theirs.find((candidate) => candidate.path === name);
+		// The page's main version, not a named app's version of the file.
+		const file = theirs.find(
+			(candidate) => candidate.path === name && candidate.app === undefined,
+		);
 		if (!file) {
 			report(`${path}: ${from} has no example named ${name}`);
 			return [];
@@ -423,17 +620,39 @@ export function pageApp({ path, dom, fixtures, shared }, report) {
 		});
 	const names = new Set();
 	for (const file of files) {
-		if (names.has(file.path))
+		const key = `${file.app ?? ""}:${file.path}`;
+		if (names.has(key))
 			report(`${path}: two examples are named ${file.path}`);
-		names.add(file.path);
+		names.add(key);
 	}
 	if (shared)
 		files.push(
-			...sharedExamples(path, shared, dom, report).filter(
-				(file) => !names.has(file.path),
-			),
+			...sharedExamples(path, shared, dom, report)
+				.filter((file) => !names.has(`:${file.path}`))
+				.map((file) => ({ ...file, app: undefined })),
 		);
 	return files;
+}
+
+/**
+ * A document's apps, by name: the main app (`""`), and one for each `app`
+ * an example names, made of the main app's files and its own, which replace
+ * any of the same path. A page that names none has only the main app.
+ */
+export function pageApps(document, report) {
+	const files = pageApp(document, report);
+	const main = files.filter((file) => file.app === undefined);
+	const apps = new Map([["", main]]);
+	for (const name of new Set(files.map((file) => file.app)))
+		if (name !== undefined) {
+			const own = files.filter((file) => file.app === name);
+			const paths = new Set(own.map((file) => file.path));
+			apps.set(name, [
+				...main.filter((file) => !paths.has(file.path)),
+				...own,
+			]);
+		}
+	return apps;
 }
 
 /**

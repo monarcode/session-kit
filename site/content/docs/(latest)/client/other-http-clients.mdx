@@ -3,16 +3,20 @@ title: Other HTTP clients
 description: Send the access token with ky, axios, openapi-fetch or any other HTTP client.
 ---
 
-[`authFetch`](/docs/client/requests) takes a `URL` or a `Request` as well as
-a path, as `fetch` does. An HTTP client that lets you choose its `fetch` can
-send its requests through it, and they get everything `authFetch` does: the
-token stays on your API's origin, a 401 refreshes once, and only a GET or
-HEAD is sent again.
+Your app might already call its API through an HTTP client such as ky, axios
+or openapi-fetch. You don't have to replace it to send the access token. Most
+clients let you choose the `fetch` they call, and `authFetch` can be that
+`fetch`. A client with its own transport can use the three calls `authFetch`
+is built on.
 
-A client with its own transport uses
-[the calls `authFetch` is built on](#clients-without-a-fetch-option) instead.
+This page shows both ways, and what each one leaves to you.
 
 ## Clients that take a `fetch`
+
+[`authFetch`](/docs/client/requests) takes a `URL` or a `Request` as well as
+a path, as `fetch` does. A client that sends its requests through it gets
+everything `authFetch` does: the token goes only to your API's origin, a 401
+refreshes the token one time, and only a `GET` or `HEAD` is sent again.
 
 With [ky](https://github.com/sindresorhus/ky), pass `authFetch` as `fetch`:
 
@@ -29,8 +33,8 @@ export async function fetchCarts(userId: number): Promise<unknown> {
 }
 ```
 
-With [axios](https://axios-http.com), choose its `fetch` adapter and pass
-`authFetch` in `env`:
+With [axios](https://axios-http.com), choose its `fetch` adapter, and pass
+`authFetch` as `env.fetch`:
 
 ```ts title="src/axios.ts"
 import axios from "axios";
@@ -45,51 +49,61 @@ export const http = axios.create({
 });
 ```
 
-[openapi-fetch](https://openapi-ts.dev/openapi-fetch/) takes it the same way
-as ky:
+With [openapi-fetch](https://openapi-ts.dev/openapi-fetch/), pass `authFetch`
+as the `fetch` option of `createClient`, with your API as its `baseUrl`, the
+same way as with ky.
 
-```ts
-const client = createClient<paths>({ baseUrl: API, fetch: authFetch });
-```
-
-What changes for the client's calls:
+Here's what changes for the client's calls:
 
 - **Give the client the same API.** Its base URL must be on the origin that
   `authFetch` was created for. A request for another origin rejects with
   `INVALID_OPTIONS`, and the token isn't sent.
 - **Signed out, every call rejects** with `UNAUTHENTICATED`. If the client
   also calls public endpoints, such as your sign-in, create `authFetch` with
-  [`optional: true`](/docs/client/requests). Those requests then go without
-  a token.
-- **A 401 reaches the client after the refresh.** For a GET or HEAD, the
-  client sees the answer to the request that was sent again. For a write, it
-  sees the 401, as ky's `HTTPError` or axios's `AxiosError`. Retry it where
+  [`optional: true`](/docs/client/requests#send-requests-while-signed-out).
+  Those requests then go out without a token.
+- **A 401 reaches the client after the refresh.** For a `GET` or `HEAD`, the
+  client gets the answer to the request that was sent again. For a write, it
+  gets the 401, as ky's `HTTPError` or axios's `AxiosError`. Retry it where
   sending it twice is safe.
 - **Session kit's errors keep their code.** ky rejects with the `AuthError`
-  itself. axios wraps it in an `AxiosError` that has the same `code`, with
-  the `AuthError` as its `cause`. Match on `error.code`, which works with
-  both, rather than on `instanceof AuthError`.
-- **`authFetch` sets `Authorization`.** While signed in, it replaces a
-  header the client set itself.
-- **Only what a `Request` holds is sent.** ky hands `fetch` the options it
-  doesn't know itself, such as Next.js's `next`. `authFetch` doesn't pass
+  itself. axios wraps it in an `AxiosError` with the same `code`, and the
+  `AuthError` as its `cause`. Match on `error.code`, which works with both,
+  rather than on `instanceof AuthError`.
+- **`authFetch` sets the `Authorization` header,** in place of one the client
+  set itself. [Authenticated requests](/docs/client/requests) has the rest of
+  its rules.
+- **Only what a `Request` holds is sent.** ky passes `fetch` the options it
+  doesn't use itself, such as Next.js's `next`. `authFetch` doesn't pass
   those on.
 
 ## Clients without a `fetch` option
 
-`createAuthFetch` and the
-[effetch plugin](/docs/effect#6-call-your-api-with-effetch) are built on three
-calls, and a client with its own transport can use the same ones:
+`createAuthFetch` and effetch's [`sessionBearer` plugin](/docs/effect#how-sessionbearer-differs-from-createauthfetch) are
+built on three calls, and a client with its own transport can use the same
+ones:
 
-1. **Before a request**, `auth.credentials.get()` resolves the credentials to
-   send, waiting for a restore or a refresh that is under way. It resolves
-   `null` when nobody is signed in.
-2. **After a 401**, `auth.credentials.renew(credentials)` takes the
-   credentials that request was sent with, and resolves new ones. However many
-   requests failed, they share one refresh. It resolves `null` when the user
-   was signed out instead.
-3. **After a second 401**, `auth.credentials.reject(credentials)` ends the
+1. **Before a request,** `auth.credentials.get()` resolves the credentials to
+   send. It waits for the saved session to be read, and refreshes an access
+   token that has expired first. It resolves `null` when no one is signed in.
+2. **After a 401,** `auth.credentials.renew(credentials)` takes the
+   credentials that request was sent with, and resolves new ones. Requests
+   that fail at the same time share one refresh. It resolves `null` when the
+   user was signed out instead.
+3. **After a second 401,** `auth.credentials.reject(credentials)` ends the
    session, unless newer credentials have replaced the ones you pass.
+
+`get` and `renew` reject in these cases:
+
+- **`LOCKED`** while the session is [locked](/docs/client/locking).
+- **The refresh's failure,** such as `REFRESH_FAILED`, when a refresh fails.
+- **`SESSION_CHANGED`** when another session replaces the one they're working
+  for.
+- **`PERSISTENCE_FAILED`** when the saved session can't be read, or the new
+  tokens can't be saved.
+
+Thrown from an axios interceptor, these errors reach your code as the
+`AuthError` itself, not as an `AxiosError`.
 
 An axios instance that keeps its default adapter does it with two
 interceptors:
@@ -139,13 +153,31 @@ http.interceptors.response.use(undefined, async (error: unknown) => {
 });
 ```
 
-Three things `createAuthFetch` does for you are yours to keep here:
+## What's left to you
+
+Without `authFetch`, a few things it does for you are yours to do:
 
 - **Keep the token on one origin.** Give the client one base URL, and don't
   pass it absolute URLs to other hosts.
 - **Don't read the token early.** Ask for credentials in the request hook,
-  never once at startup. A token saved in a variable goes stale at the next
-  refresh.
-- **Check the account after slow work.** `auth.isCurrent(credentials)` tells
-  whether the session that sent a request is still the signed-in one, before
-  you show its answer.
+  never once at startup. A token saved in a variable goes stale at the
+  next refresh.
+- **Check the account after slow work.** `auth.isCurrent(credentials)`
+  checks whether the session that sent a request is still the signed-in one,
+  before you show its answer.
+- **Don't follow redirects with the token.** `authFetch` refuses a redirect,
+  as [Authenticated requests](/docs/client/requests#when-it-rejects)
+  explains. axios's default adapters follow it, so don't let your API
+  redirect requests that carry a token.
+- **Decide about signed-out requests.** `authFetch` rejects them with
+  `UNAUTHENTICATED`, unless it was created with `optional: true`. The
+  interceptor above sends them without a token instead. Throw in the request
+  interceptor if your API should never get one.
+
+## Next steps
+
+- [Authenticated requests](/docs/client/requests): what `authFetch` does
+  after a 401, and when it rejects.
+- [Effect and effetch](/docs/effect): send the token from Effect code with
+  `sessionBearer`.
+- [Errors](/docs/configuration/errors): show a failed refresh to the user.

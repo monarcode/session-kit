@@ -1,42 +1,73 @@
 ---
 title: Server sessions
-description: How the server keeps the session in every framework, from the cookie and its secret to refreshing, signing out and limits.
+description: What every server-rendered setup shares, from the cookie and its secret to refreshing before rendering, signing out and limits.
 ---
 
-This page covers what every server-rendered setup shares: the cookie and its
-secret, a request's session, refreshes, sign-out, and limits. Read it once
-your app works, to deploy it. The setup guides show the code:
-[TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next),
+Your server-rendered app signs in and renders the signed-in page. Before you
+deploy it, you need to know where the session lives, how to keep and rotate
+its secret, what happens when a page can't set cookies, and what signing out
+ends. Those answers are the same in TanStack Start, Next.js and React
+Router, so they live on this page.
+
+Read it after your app works. The setup guides show the code:
+[TanStack Start](/docs/setups/tanstack-start), [Next.js](/docs/setups/next)
 and [React Router with server rendering](/docs/setups/react-router-ssr).
 
 ## The cookie
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps both tokens and
-the user in one cookie, `<name>.session`, sealed with AES-256-GCM through Web
-Crypto. It's `httpOnly`, so page scripts can't read it, and `Secure` and
-`SameSite=Lax` unless you pass other `cookie` options. It takes the options
-`createAuth` does, except `storage` and `locking`, plus `secret`, `cookie`
-and `clientCredentials`.
+`createServerAuth` from `@monarcode/session-kit/server` keeps both tokens
+and the user in a sealed cookie: it's encrypted with AES-256-GCM through Web
+Crypto, with a key derived from your secret, so only your server can read or
+change it.
 
-Keep the module that creates it on the server. Each setup guide shows how
-its framework keeps such a module out of the browser bundle.
+The cookie is named after the `name` option: `app.session` in these docs.
+A session too large for one cookie is split across `app.session.0` and
+`app.session.1`, and `app.session` then only marks the split. If a proxy or
+CDN passes on only the cookies it knows, give it all three names.
+
+The cookie is `httpOnly`, so page scripts can't read it. It's also `Secure`,
+`SameSite=Lax` and sent to every path, unless you pass other `cookie`
+options.
+
+It lasts for `maxAge` seconds, 30 days by default. Each save starts that
+again: a sign-in, a refresh or an `updateUser`. When it runs out, the browser
+drops the cookie, and the user is signed out.
+
+`createServerAuth` takes the options `createAuth` does, except `storage` and
+`locking`, plus `secret`, `cookie` and `clientCredentials`. Keep the module
+that creates it on the server. Each setup guide shows how its framework keeps
+such a module out of the browser bundle.
 
 ## The secret
 
-Use 32 or more random characters from an environment variable. To make one,
-run `openssl rand -base64 32`. `createServerAuth` checks the secret on first
-use, not when the module loads, so build steps that import the module without
-the secret still work.
+The secret is the key that seals the cookie. Use 32 or more random
+characters, kept in an environment variable such as `SESSION_SECRET`. To make
+one, run `openssl rand -base64 32`.
 
-Your module still reads `process.env.SESSION_SECRET` when it loads. On
-Cloudflare Workers, `process.env` has the secret at that point when Node.js
-compatibility is on, the default from compatibility date 2025-04-01. Without
-Node.js compatibility, read it with `import { env } from "cloudflare:workers"`,
-which also works at the top of a module.
+`createServerAuth` checks the secret when a method first runs, not when the
+module loads. So build steps that import the module without the secret, such
+as `next build`, still work. Your module still reads
+`process.env.SESSION_SECRET` when it loads. On Cloudflare Workers,
+`process.env` holds the secret at that point when Node.js compatibility is on
+and the compatibility date is 2025-04-01 or later. Otherwise, read it with
+`import { env } from "cloudflare:workers"`, which also works at the top of a
+module.
 
-To rotate the secret, pass a list. The first secret seals new cookies, and
-any of them opens one, so sessions survive the change. For example, to read
-the old secret from `OLD_SESSION_SECRET` only while it's set:
+A missing or wrong secret shows up on the first request:
+
+- **Without a valid secret,** every method rejects with `INVALID_OPTIONS`,
+  and a request's `state` is `unavailable`. The session route (the route in
+  your app that the browser's client calls to read the session and sign
+  out) answers 500 with `INVALID_OPTIONS`, so your monitoring sees it.
+- **A cookie that no secret opens** reads as signed out. Where the request
+  can set cookies, the cookie is also deleted. So putting back a secret you
+  removed doesn't bring back the sessions it sealed.
+
+### Rotate the secret
+
+To change the secret without signing everyone out, pass a list. The first
+secret seals new cookies, and any of them opens one. For example, to read the
+old secret from `OLD_SESSION_SECRET` only while it's set:
 
 ```ts title="src/auth/server.ts"
 import { createServerAuth } from "@monarcode/session-kit/server";
@@ -52,100 +83,280 @@ export const serverAuth = createServerAuth({
 });
 ```
 
-Each save seals the cookie with the first secret. Remove
-`OLD_SESSION_SECRET` once `maxAge` has passed since the change, 30 days by
-default. By then, every cookie it sealed has expired. A cookie that no listed
-secret opens reads as signed out.
+Then rotate in four steps:
+
+1. Set `OLD_SESSION_SECRET` to the current secret.
+2. Set `SESSION_SECRET` to a new one, made with `openssl rand -base64 32`.
+3. Deploy. New cookies are sealed with the new secret, and each save moves a
+   session onto it. Cookies sealed with the old secret still open.
+4. After `maxAge` has passed since the deploy, 30 days by default, remove
+   `OLD_SESSION_SECRET`. By then, every cookie it sealed has expired.
 
 ## A request's session
 
 Your server code reads and changes the session through one request's
 session (`RequestAuth`). It has every `serverAuth` method, without the
-request's cookie jar to pass:
+request's cookies to pass. Each adapter gives it to you:
 
 - **TanStack Start:** `startAuth(serverAuth)`, made once at module level.
   Each call finds the request Start is handling.
 - **React Router:** `routerAuth(serverAuth)` makes a function you call with
   a loader's, action's or middleware's `context`.
-- **Next.js:** `nextSession(serverAuth, { cookies, redirect })`, whose
-  `writable()` gives it in Server Functions and Route Handlers, and
-  `readOnly()` in Server Components.
+- **Next.js:** `nextSession(serverAuth, { cookies, redirect })`. Its
+  `writable()` gives the request's session in Server Functions and Route
+  Handlers, and `readOnly()` in Server Components.
 - **Servers without an adapter:** `serverAuth.forRequest(jar)`, over the
-  request's cookie jar.
+  request's cookie jar. See
+  [Servers without an adapter](#servers-without-an-adapter).
 
 It's shaped like a client, so code written for one works on the server with
-it. `createAuthFetch(session, { baseUrl })` sends the cookie's token and saves
-a renewed one after a 401, and Effect's `Auth.layer` takes it
-([Effect on the server](/docs/effect#on-the-server)).
+it. `createAuthFetch(session, { baseUrl })` sends the cookie's access token,
+and saves a renewed one after a 401. Effect's `Auth.layer` takes it too: see
+[Use Effect on the server](/docs/effect/server).
 
-Some requests can't set cookies: a Next.js Server Component rendering, or a
-React Router loader once its response has left the middleware. There,
-nothing is saved, so `signIn`, `signOut`, `updateUser` and `refreshIfDue`
-reject with `INVALID_OPTIONS`. `getSession` still resolves, and
-`credentials.get` rejects with `REFRESH_FAILED` once the access token has
-expired. TanStack Start can't tell once a page has started streaming, so a
-cookie set then is lost. Refresh before rendering, with the middleware each
-setup guide adds: `refreshSession` in TanStack Start, `sessionMiddleware` in
-React Router, and `nextSession`'s `refresh` in Next.js's Proxy.
+## Requests that can't set cookies
 
-## Servers without an adapter
+Some requests can't change the cookie:
 
-Every `serverAuth` method also takes the request's `CookieJar` first:
-`serverAuth.getSession(jar)` does what a request's `getSession()` does, and
-`serverAuth.forRequest(jar)` gives that request's session. For a server
-without an adapter, build a [`CookieJar`](/docs/reference/server#cookiejar)
-over its cookies. Answer the browser client's session route with
-`sessionHandler(serverAuth)`, called with the request and its jar.
+- **Next.js:** a Server Component rendering.
+- **React Router:** a loader after its response has left the middleware,
+  such as deferred data that reads the session while the page streams.
+- **TanStack Start:** a page that has started streaming. Start gives no
+  sign of it, so a cookie set then is lost. A refresh at that point would
+  spend the refresh token and drop the new one.
 
-Use one jar per request. Calls with the same jar share what it read and
-wrote and one refresh, so a jar kept at module level would show one
-request's session to the next. A jar that can't set cookies says so with
-`writable: false`.
+In Next.js and React Router, where Session kit can tell, the request's
+session saves nothing:
 
-## Token refresh
+- `signIn`, `signOut`, `updateUser` and `refreshIfDue` reject with
+  `INVALID_OPTIONS`.
+- `getSession` still resolves, with the session as the cookie holds it.
+- `credentials.get` rejects with `REFRESH_FAILED` after the access token has
+  expired, since a refreshed one couldn't be saved.
+
+The way around all three cases is to refresh first, while the response can
+still set the cookie.
+
+## Refresh before rendering
+
+Each setup refreshes in middleware that runs before any route reads the
+session. Here's the middleware for each:
+
+| Setup                      | Refreshes with                                                    |
+| -------------------------- | ----------------------------------------------------------------- |
+| TanStack Start             | `refreshSession(serverAuth)`, in request middleware               |
+| React Router               | `sessionMiddleware(serverAuth)`, in the root route                |
+| Next.js                    | `session.refresh(request, response)` from `nextSession`, in Proxy |
+| Servers without an adapter | `serverAuth.refreshIfDue(jar)`, before rendering                  |
+
+The middleware refreshes when the access token expires within 60 seconds, so
+it lasts through the request. A token that lives a minute or less would be
+refreshed on every request, so pass a smaller `within` for it, such as
+`refreshSession(serverAuth, { within: 15 })`. `sessionMiddleware` takes
+`within` the same way, and `nextSession` in its options.
+
+What else the middleware does:
+
+- **It refreshes at most once per request.** Calls during the request share
+  that refresh.
+- **A failed refresh doesn't fail the request.** While the access token
+  still works, the failure is ignored. After it expires, routes read the
+  session as usual, and the error reaches the route's error component or
+  error boundary.
+- **It keeps shared caches out.** A page that reads the session differs per
+  user. `refreshSession` and `sessionMiddleware` send
+  `Cache-Control: private, no-store` with each response that doesn't set its
+  own, so a CDN or proxy doesn't cache it. Pass `cacheControl` for another
+  value, or `{ cacheControl: false }` to leave every response as it is.
+  `nextSession`'s `refresh` doesn't set the header: the
+  [Next.js](/docs/setups/next) guide says how Next caches pages that read the
+  session.
+
+## Refreshes across requests and servers
 
 Parallel requests to one instance that carry the same cookie share one
-refresh. For ten seconds afterwards, a request still carrying the old cookie
-gets the new tokens rather than refreshing again. A refresh that fails at
-your backend is shared too. For ten seconds, requests carrying that cookie
-reject with its error rather than call your backend again.
+refresh. For 10 seconds afterwards, a request that still carries the old
+cookie gets the new tokens rather than refreshing again. A refresh that
+fails at your backend is shared too: for 10 seconds, requests that carry that
+cookie reject with its error rather than call your backend again.
 
-Each `createServerAuth` call is its own instance, and a framework may make
-several on one server, one per bundle. Separate processes, servers, and
-serverless functions are separate instances too. Instances share nothing, so
-with rotating refresh tokens, give your backend a short reuse window. Two
-instances that refresh the same session then don't sign it out.
+An instance is one `createServerAuth` call, and instances share nothing. A
+framework may make several on one server, one per bundle. Separate
+processes, servers and serverless functions are separate instances too. With
+rotating refresh tokens, give your backend a short reuse window, so that two
+instances that refresh the same session don't sign it out.
 
 ## Sign-out
 
 A request's `signOut` clears the cookie in this browser, then calls your
-`revoke`. The cookie holds the whole session and the server keeps no list of
-sessions, so a copy of the cookie made before sign-out still reads as signed
-in. For ten seconds, the instance that signed out treats such a copy as
-signed out, as it treats an old cookie after a refresh. After that, the copy
-works for as long as its tokens do.
+`revoke` and waits for it. A failed `revoke` doesn't make `signOut` reject.
+The browser's client signs out through the session route, which calls it for
+you.
 
-`revoke` is what ends the session: have your backend revoke the refresh
-token there, so a copy can't refresh, and keep access tokens short-lived,
-since the backend accepts one until it expires unless it checks for
-revocation.
+The cookie holds the whole session, and the server keeps no list of
+sessions. So a copy of the cookie made before sign-out still reads as signed
+in. For 10 seconds, the instance that signed out treats such a copy as signed
+out, as it treats an old cookie after a refresh. After that, the copy works
+for as long as its tokens do.
+
+`revoke` is what ends the session. Have your backend revoke the refresh token
+there, so a copy can't refresh. Keep access tokens short-lived too: your
+backend accepts one until it expires, unless it checks for revocation.
 
 ## The access token in the browser
 
-Server code calls your API with a request's `credentials`. To call it from
-the browser too, with `createAuthFetch` or effetch's `sessionBearer`, opt in
-with `clientCredentials: true`. The session route then serves the access
-token, and the browser's client gets it there. Page scripts hold the access
-token in memory, never the refresh token, so a script injected into the page
-can use the API while the page is open, as it could with any token the
-browser holds.
+Server code calls your API with a request's `credentials`. To call your API
+from the browser too, with `createAuthFetch` or effetch's `sessionBearer`,
+pass `clientCredentials: true` to `createServerAuth`. The session route then
+serves the access token, and the browser's client gets it there.
 
-The session route answers your own site's pages only: see
+Here's how the token behaves in the browser:
+
+- Page scripts hold the access token in memory, never the refresh token.
+  The client asks for a new one shortly before it expires.
+- After a 401, the client asks the session route for a new token, and the
+  server refreshes with the cookie's refresh token.
+- Without `clientCredentials`, the session route answers 500, and the
+  client's `credentials.get()` rejects with `INVALID_OPTIONS`.
+- Without a session route, such as when your client calls server functions,
+  pass `createMirrorAuth`'s `credentials` option: two functions that call a
+  request's `clientCredentials.get` and `clientCredentials.renew` on the
+  server.
+
+A script injected into your page can then use your API while the page is
+open, as it could with any token the browser holds. The session route
+answers your own site's pages only: see
 [The session route](/docs/security#the-session-route).
+
+## Servers without an adapter
+
+On a server with no adapter, such as a plain `fetch` handler that takes a
+`Request` and returns a `Response`, you wire the same pieces yourself. Every
+`serverAuth` method also takes the request's cookie jar
+([`CookieJar`](/docs/reference/server#cookiejar)) first.
+`serverAuth.getSession(jar)` does what a request's `getSession()` does, and
+`serverAuth.forRequest(jar)` gives that request's session.
+
+### 1. Build a cookie jar for each request
+
+The jar reads the request's `Cookie` header and collects the `Set-Cookie`
+lines for the response:
+
+```ts title="src/server/cookie-jar.ts"
+import type { CookieJar, CookieOptions } from "@monarcode/session-kit/server";
+
+function setCookie(name: string, value: string, options: CookieOptions) {
+  return [
+    `${name}=${value}`,
+    `Path=${options.path}`,
+    `Max-Age=${options.maxAge ?? 0}`,
+    `SameSite=${options.sameSite}`,
+    ...(options.domain ? [`Domain=${options.domain}`] : []),
+    ...(options.secure ? ["Secure"] : []),
+    "HttpOnly",
+  ].join("; ");
+}
+
+/** One request's cookie jar, and a function that answers with its cookies. */
+export function cookieJar(request: Request) {
+  const cookies = new Map<string, string>();
+  for (const pair of request.headers.get("Cookie")?.split(";") ?? []) {
+    const equals = pair.indexOf("=");
+    const name = pair.slice(0, equals).trim();
+    if (equals > 0 && !cookies.has(name))
+      cookies.set(name, pair.slice(equals + 1).trim());
+  }
+  const written = new Map<string, string>();
+  let answered = false;
+  const jar: CookieJar = {
+    get writable() {
+      return !answered;
+    },
+    get: (name) => cookies.get(name),
+    set: (name, value, options) =>
+      written.set(name, setCookie(name, value, options)),
+    delete: (name, options) =>
+      written.set(name, setCookie(name, "", { ...options, maxAge: 0 })),
+  };
+  function respond(response: Response) {
+    answered = true;
+    for (const line of written.values())
+      response.headers.append("Set-Cookie", line);
+    return response;
+  }
+  return { jar, respond };
+}
+```
+
+Make a new jar for each request. Calls with the same jar share what it read
+and wrote, and one refresh, so a jar kept at module level would show one
+request's session to the next. After `respond`, the jar's `writable` is
+`false`, which tells Session kit that the request can't set cookies any more.
+
+### 2. Answer the session route, then render
+
+`sessionHandler(serverAuth)` answers the session route. For a page, refresh
+first, then read the session and render with it:
+
+```ts title="src/server/handle.ts"
+import { sessionHandler } from "@monarcode/session-kit/server";
+
+import { serverAuth } from "../auth/server.js";
+import { cookieJar } from "./cookie-jar.js";
+import { renderPage } from "./render.js";
+
+const handleSession = sessionHandler(serverAuth);
+
+export async function handle(request: Request): Promise<Response> {
+  const { jar, respond } = cookieJar(request);
+  if (new URL(request.url).pathname === "/api/session")
+    return respond(await handleSession(request, jar));
+  // While the response can still set the cookie. A failure is ignored
+  // here: getSession rejects if the access token has expired.
+  await serverAuth.refreshIfDue(jar).catch(() => {});
+  const session = await serverAuth.getSession(jar);
+  const page = await renderPage(session);
+  // The page differs per user, so no shared cache may keep it.
+  if (!page.headers.has("Cache-Control"))
+    page.headers.set("Cache-Control", "private, no-store");
+  return respond(page);
+}
+```
+
+Without an adapter, nothing marks the response as private, so set
+`Cache-Control` yourself, as the adapters' middleware does
+([Refresh before rendering](#refresh-before-rendering)).
+
+`renderPage` is your app's own server render. It puts the session in the
+page, as frameworks do with a loader's data, so the browser's client can
+start from it.
+
+### 3. Create the browser's client
+
+In the browser, create the client from the session the page was rendered
+with, once per page load:
+
+```ts title="src/auth/client.ts"
+import { createMirrorAuth, type SessionOf } from "@monarcode/session-kit";
+
+// Types only: left out of the browser's bundle.
+import type { serverAuth } from "./server.js";
+
+export type AppSession = SessionOf<typeof serverAuth>;
+
+export function createAppAuth(session: AppSession | null) {
+  return createMirrorAuth({ name: "app", session, endpoint: "/api/session" });
+}
+```
+
+With React, create it with `useMirrorAuth` from
+`@monarcode/session-kit/react`, and render `AuthProvider` with it. Its
+`onChange` runs when the session changes in the browser, so you can render
+the page on the server again.
 
 ## Limits
 
-- **Size.** The cookie can take about 7.5 KB across two cookies, since
+- **Size.** The cookie can take about 7.5 KB across its two parts, since
   servers and proxies refuse larger request headers (nginx: 8 KB for the
   `Cookie` line, shared with the site's other cookies), and go on refusing
   every page until the cookie is cleared. That holds about 5.5 KB of tokens
@@ -153,14 +364,18 @@ The session route answers your own site's pages only: see
   `PERSISTENCE_FAILED`, so keep the user small. An `updateUser` or a refresh
   that outgrows the cookie rejects the same way, and signs the user out.
 - **Plain http.** The cookie is `Secure` by default. Browsers accept that on
-  `http://localhost` except Safari: pass `cookie: { secure: false }` for
+  `http://localhost`, except Safari: pass `cookie: { secure: false }` for
   local development there, never in production.
 - **Locking.** `locking` isn't available. The server keeps the tokens, so
   there's nothing on the device to lock.
 
 ## Next steps
 
-- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+- [Hybrid setup](/docs/server-rendering/hybrid): sign in with your backend
+  from the browser, and call your API there.
+- [Use Effect on the server](/docs/effect/server): run Effects with a
   request's session.
 - [Security](/docs/security): what Session kit protects, and what stays your
   backend's job.
+- [`createServerAuth` reference](/docs/reference/server#createserverauth):
+  every option and method.

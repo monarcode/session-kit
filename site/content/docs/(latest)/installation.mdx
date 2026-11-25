@@ -3,17 +3,19 @@ title: Installation
 description: Install Session kit and a schema library, then find the guide and example app for your setup.
 ---
 
-Install Session kit, a schema library, and the packages your setup needs, then
-follow the guide for that setup.
+Your app needs Session kit, a schema library to describe your users, and the
+packages your setup already uses, such as React and your router. Install the
+first two here, then follow the guide for your setup.
 
-To install the package, run the following command:
+To install Session kit, run the following command:
 
 ```npm
 npm install @monarcode/session-kit
 ```
 
-Alpha releases are published to the `latest` distribution tag and may change
-the public API, so pin an exact version and read the
+Release candidates are published to the `latest` distribution tag. The API
+is frozen for 0.1: later 0.1 releases only add to it. Pin an exact version,
+and read the
 [release notes](https://github.com/monarcode/session-kit/blob/main/CHANGELOG.md)
 before upgrading.
 
@@ -25,14 +27,18 @@ To install it, run the following command:
 npm install zod
 ```
 
-Then install React, and the router or framework your setup uses.
-[Compatibility](/docs/reference/compatibility) lists every optional peer
-dependency and the versions it supports.
+Then install React, and the router or framework your setup uses. Each is an
+optional peer dependency, so install only the ones your setup imports.
+
+Session kit needs TypeScript 5.4 or newer, and Effect asks for 5.9 or newer.
+[Compatibility](/docs/reference/compatibility) lists the runtimes and the
+peer dependency versions it supports.
 
 ## Pick your setup
 
-Find your setup in the following table. Each one has an import path and a
-guide. All but the first also have a runnable app in
+Find your setup in the following table. Each row names the entry point for
+your router or framework, and the guide to follow. All but the first also
+have a runnable app in
 [`examples/`](https://github.com/monarcode/session-kit/tree/main/examples)
 that signs in against DummyJSON's public test API:
 
@@ -49,6 +55,11 @@ that signs in against DummyJSON's public test API:
 | Next.js 16, App Router                     | `@monarcode/session-kit/next`                | [Next.js](/docs/setups/next)                                               | [`next-app`](https://github.com/monarcode/session-kit/tree/main/examples/next-app)                                                                                                                                             |
 | Expo Router on iOS and Android, SDK 53+    | `@monarcode/session-kit/expo`                | [Expo Router](/docs/setups/expo)                                           | [`expo-router`](https://github.com/monarcode/session-kit/tree/main/examples/expo-router)                                                                                                                                       |
 
+Every setup also imports its client from `@monarcode/session-kit`:
+`createAuth`, or with server rendering, `createMirrorAuth`. Server-rendered
+setups import more on the server, and each guide shows what.
+[Entry points](/docs/reference) lists every import path.
+
 Two guides apply to more than one setup:
 
 - [Server sessions](/docs/server-rendering/server-sessions) covers what the
@@ -57,15 +68,16 @@ Two guides apply to more than one setup:
 
 ## Docs for coding assistants
 
-These docs are also plain Markdown, for AI coding assistants. Point yours at
-[`/llms.txt`](/llms.txt), which links every page in reading order, or
-[`/llms-full.txt`](/llms-full.txt), which holds them all in one file. Add
-`.md` to a page's URL for that page alone.
+These docs are also available as plain Markdown, for AI coding assistants.
+Point yours at [`/llms.txt`](/llms.txt), which links every page in reading
+order, or at [`/llms-full.txt`](/llms-full.txt), which holds them all in one
+file. For one page alone, add `.md` to its URL.
 
 ## Next steps
 
-- For a setup that keeps the session in the browser or on the device, start
-  with [Getting started](/docs/getting-started). The web router guides build
-  on its app. The Expo guide starts from scratch.
-- For a server-rendered setup, start with
-  [Server rendering](/docs/server-rendering).
+- [Getting started](/docs/getting-started): start here for a setup that
+  keeps the session in the browser. The web router guides build on its app.
+- [Expo Router](/docs/setups/expo): start here for an iOS or Android app. The
+  guide starts from scratch.
+- [Server rendering](/docs/server-rendering): start here for TanStack Start,
+  Next.js, or React Router with server rendering.

@@ -1,0 +1,154 @@
+---
+title: Effect and effetch
+description: Read the session as an Effect service, and call your API with effetch's sessionBearer plugin, which sends the access token and renews it after a 401.
+---
+
+If your app is written with [Effect](https://effect.website), your Effects
+need the session too: who is signed in, and an access token for your API.
+Session kit gives them both, from the same client that React and your
+router use, so there's one session for all of them. Your API calls go
+through [effetch](https://github.com/monarcode/effetch), with a plugin that
+sends the token and gets a new one after a 401.
+
+This page shows what the two entry points give you and where they differ
+from the rest of Session kit. To set them up, follow
+[Use Effect in the browser](/docs/effect/browser), then, with server
+rendering, [Use Effect on the server](/docs/effect/server).
+
+## What `./effect` and `./effetch` give you
+
+Two entry points connect Session kit to Effect:
+
+- **`@monarcode/session-kit/effect`** gives your Effects the session as the
+  `Auth` service. It wraps the client you already have, so React, your
+  router and your Effects share one session. `Auth.layer(auth)` provides it.
+- **`@monarcode/session-kit/effetch`** has the `sessionBearer` plugin for
+  effetch clients. It sends the access token with each call, and gets a new
+  one after a 401.
+
+`effect` and `@monarcode/effetch` are optional peer dependencies.
+[effetch-query](https://github.com/monarcode/effetch-query), which caches
+each account's data, works with them but isn't needed.
+
+### The `Auth` service at a glance
+
+Here's what `Auth` gives your Effects:
+
+| Member                    | What it does                                                                                                    |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `Auth.layer(client)`      | Provides the client, or on the server one request's session, as the `Auth` service. It doesn't mount it.        |
+| `Auth.session`            | The current session, refreshed first if the access token expired. Fails with `UNAUTHENTICATED` when signed out. |
+| `Auth.sessionOption`      | The same, with `Option.none()` when no one is signed in.                                                        |
+| `Auth.credentials`        | The access token and session ID, for a request.                                                                 |
+| `Auth.renew(credentials)` | New credentials after your API rejected these. Calls at the same time share one refresh.                        |
+| `Auth.signIn(input)`      | Saves a new session, as the client's `signIn` does.                                                             |
+| `Auth.signOut`            | Signs out, as the client's `signOut` does.                                                                      |
+| `Auth.updateUser(input)`  | Replaces the user with the one given, or with what an Effect fetches.                                           |
+| `Auth.changes`            | A `Stream` of the client's state: the current state, then every change.                                         |
+| `Auth.fromAuthError`      | Turns an `AuthError` from a client method `Auth` doesn't wrap into an `AuthFailure`.                            |
+
+Register your client's type once, as
+[Register the client](/docs/effect/browser#3-register-the-client) shows, so
+these carry your user. The [`./effect` reference](/docs/reference/effect)
+lists every failure.
+
+## How Effects fail
+
+Every `Auth` Effect fails with `AuthFailure`, a tagged error that
+`Effect.catchTag("AuthFailure", …)` handles like your own errors. Its
+`code` is the client's [`AuthErrorCode`](/docs/configuration/errors), such
+as `UNAUTHENTICATED` or `REFRESH_FAILED`. Its `cause` is the `AuthError`
+itself.
+
+Misuse, which the client reports as `INVALID_OPTIONS`, isn't an
+`AuthFailure`. The Effect dies with it instead, as a defect: it's a mistake
+in the code to fix, not a failure to handle. So `AuthFailure`'s `code` is
+never `INVALID_OPTIONS`.
+
+## Why `sessionBearer`, not effetch's `bearer`
+
+effetch has a `bearer` plugin of its own, which can take its token and its
+refresh from `Auth`. It's built for any token, though, so
+it has no rules about where the token goes. Here's what `bearer` does that
+`sessionBearer` doesn't:
+
+- **It sends the token to any URL a call names.** An absolute URL skips the
+  client's `baseUrl`, and gets the token all the same.
+- **It follows redirects,** so the token can follow one to another server.
+- **It sends a `POST` again after a refresh,** and any other method that
+  got the 401.
+- **It doesn't check the account.** A response to a request sent for an
+  account that has since signed out comes back as it is.
+
+`sessionBearer` sends the token only to your API's origin, and with
+Effect's `FetchHttpClient` it refuses redirects. It sends only a `GET` or
+`HEAD` again, and fails with `SESSION_CHANGED` rather than return a response
+meant for another account.
+
+## How `sessionBearer` differs from `createAuthFetch`
+
+`sessionBearer` follows the same rules as `createAuthFetch`, which
+[Authenticated requests](/docs/client/requests) explains: when the token is
+sent, what happens after a 401, and when the user is signed out after a
+second one. Here's what's different with `sessionBearer`:
+
+- **Failures are `AuthFailure`s,** in the Effect's error channel, rather
+  than a rejected `AuthError`.
+- **A 401 it hands back is an `HttpError`.** Where `authFetch` resolves a
+  401 response, such as for a `POST` after a refresh, the call fails with
+  an `HttpError` whose `status` is 401. A client's `statusErrors` turns it
+  into your own error instead.
+- **Another origin dies rather than fails.** A request for another origin,
+  or with a username or password in its URL, dies with `INVALID_OPTIONS`,
+  so `Effect.catch` and `Effect.catchTag` don't see it.
+- **A redirect fails as a `Fetch.NetworkError`,** with Effect's
+  `FetchHttpClient`, rather than a `TypeError`. On React Native before Expo
+  SDK 58, `fetch` follows redirects whatever it's told, so the redirected
+  request has already gone out. `authFetch` still refuses the response, and
+  `sessionBearer` returns it. Don't let your API redirect requests that
+  carry a token.
+- **A request that already has an `Authorization` header passes
+  through.** While signed in, `authFetch` replaces the header.
+  `sessionBearer` sends the request as it is, with no token, no refresh, and
+  none of the checks: not the origin or redirect check, and no
+  `UNAUTHENTICATED`, `LOCKED` or `SESSION_CHANGED`.
+
+Streams, such as `api.sse` or a stream endpoint, go through the same checks
+up to the response's headers. As with a body `authFetch` returns, one that's
+open when the user signs out or switches accounts keeps reading until it
+ends, so stop it yourself if it mustn't outlive the session.
+
+The [`sessionBearer` reference](/docs/reference/effetch#sessionbearer)
+lists its options.
+
+## What `Auth` covers
+
+`Auth` covers what Effect code does with a session: reading it, signing in
+and out, and updating the user. Everything else stays on the client, which
+React and the routers already drive: `lock` and `unlock`, `refresh` and
+`retry`, `mount`, and the client's options. On the server, a request's
+session signs in and updates the user with its own methods.
+
+## On the server
+
+With server rendering, `Auth.layer` takes one request's session, so
+`Auth.session`, `Auth.credentials` and `sessionBearer` work in server
+functions, actions and route handlers too. There, `sessionBearer` sends the
+cookie's token, and saves a renewed one after a 401.
+[Use Effect on the server](/docs/effect/server) sets it up, step by step.
+
+## Cache with effetch-query
+
+effetch-query caches what your endpoints return, with a client per account,
+so no account sees another's data. Its React bindings need React 19.
+[Cache with effetch-query](/docs/effect/browser#cache-with-effetch-query),
+on the browser guide, sets it up.
+
+## Next steps
+
+- [Use Effect in the browser](/docs/effect/browser): set up `Auth`,
+  `sessionBearer` and the runtime in a single-page or Expo app.
+- [Use Effect on the server](/docs/effect/server): run Effects with each
+  request's session.
+- [Authenticated requests](/docs/client/requests): the 401 rules
+  `sessionBearer` shares with `createAuthFetch`.

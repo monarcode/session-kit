@@ -22,7 +22,7 @@ import {
 	type UserSource,
 } from "./sources.js";
 import { countMounts, inBackground, stateView } from "./store.js";
-import { runTask } from "./task.js";
+import { abortWith, runTask } from "./task.js";
 import { setLongTimeout, proactiveRefreshDelay } from "./timers.js";
 import { receiveTokens, tokensOf, type SessionTokens } from "./tokens.js";
 import type {
@@ -430,7 +430,7 @@ export function createAuth<Src extends UserSource>(
 		// A cancelled refresh never finished, so it doesn't use up the attempt.
 		if (flight) refreshAttempted = false;
 		epoch++;
-		controller.abort(sessionChanged());
+		abortWith(controller, sessionChanged());
 		controller = new AbortController();
 		flight = undefined;
 		initialization = undefined;
@@ -810,7 +810,7 @@ export function createAuth<Src extends UserSource>(
 
 	function cancelSignIn() {
 		signInIntent++;
-		signInController.abort(sessionChanged());
+		abortWith(signInController, sessionChanged());
 		signInController = new AbortController();
 	}
 

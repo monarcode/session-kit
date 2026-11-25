@@ -9,7 +9,7 @@ import {
 	installedAtLeast,
 	markedExamples,
 	PAGES,
-	pageApp,
+	pageApps,
 	root,
 } from "./docs-pages.mjs";
 import { renderReference } from "./reference-docs.mjs";
@@ -95,7 +95,9 @@ checkPagesListed();
 checkLinks();
 
 if (problems.length > 0) {
-	console.error(problems.map((problem) => `✗ ${problem}`).join("\n"));
+	// A page's main files compile again in each of its named apps.
+	const unique = [...new Set(problems)];
+	console.error(unique.map((problem) => `✗ ${problem}`).join("\n"));
 	process.exit(1);
 }
 console.log(
@@ -370,6 +372,7 @@ function checkDocument({
 	fixtures,
 	shared,
 	requires = {},
+	appRequires = {},
 }) {
 	const missing = Object.entries(requires).find(
 		([name, minimum]) => !installedAtLeast(name, minimum),
@@ -381,9 +384,22 @@ function checkDocument({
 		return false;
 	}
 	const report = (message) => problems.push(message);
-	const files = pageApp({ path, dom, fixtures, shared }, report);
-	if (files.length === 0) return true;
-	compileExamples(path, files, resolutions, { together: true });
+	const apps = pageApps({ path, dom, fixtures, shared }, report);
+	for (const [name, files] of apps) {
+		const needs = Object.entries(appRequires[name] ?? {}).find(
+			([dependency, minimum]) => !installedAtLeast(dependency, minimum),
+		);
+		if (needs) {
+			console.log(
+				`- ${path} app "${name}" skipped: it needs ${needs[0]} ${needs[1]} or later`,
+			);
+			continue;
+		}
+		if (files.length > 0)
+			compileExamples(name ? `${path}#${name}` : path, files, resolutions, {
+				together: true,
+			});
+	}
 	return true;
 }
 
@@ -395,6 +411,9 @@ function checkDocument({
  */
 function compileExamples(label, files, resolutions, { together = false } = {}) {
 	const directory = join(scratch, label.replace(/[^\w]+/g, "-"));
+	// A page's named app is labelled `path#name`.
+	const app = label.includes("#") ? label.slice(label.indexOf("#") + 1) : "";
+	const where = app ? `, app "${app}"` : "";
 	const virtual = new Map(
 		files.map((file) => [join(directory, file.path), file]),
 	);
@@ -439,7 +458,7 @@ function compileExamples(label, files, resolutions, { together = false } = {}) {
 					diagnostic.start ?? 0,
 				);
 				problems.push(
-					`${relative(root, file.origin)}:${file.line + line} (${file.path}, ${resolution}): TS${diagnostic.code} ${message}`,
+					`${relative(root, file.origin)}:${file.line + line} (${file.path}${where}, ${resolution}): TS${diagnostic.code} ${message}`,
 				);
 			}
 		}

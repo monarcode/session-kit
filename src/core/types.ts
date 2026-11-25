@@ -67,7 +67,8 @@ export type UserInput<Src extends UserSource> =
  *
  * When the access token expires comes from the first of these that is set:
  * 1. `expiresIn` or `expiresAt`. Pass one, not both.
- * 2. A JWT access token's `exp - iat`, counted from when auth receives it.
+ * 2. A JWT access token's `exp - iat`, counted from when the client
+ *    receives it.
  * 3. A JWT access token's `exp` alone, compared with the device's clock.
  *
  * With none of them, the token never expires on its own. It's replaced only
@@ -110,8 +111,8 @@ export type Tokens = {
 	refreshToken?: string | undefined;
 	/**
 	 * How long the access token lasts, in **seconds**, like OAuth's
-	 * `expires_in` (`900` is 15 minutes). It's counted from when auth receives
-	 * the token, so a wrong device clock doesn't matter.
+	 * `expires_in` (`900` is 15 minutes). It's counted from when the client
+	 * receives the token, so a wrong device clock doesn't matter.
 	 */
 	expiresIn?: number | undefined;
 	/**
@@ -149,7 +150,7 @@ export type SignInInput<I> = [I] extends [never]
 	: Tokens & {
 			/**
 			 * The signed-in user, checked against the `user` schema. It must be a
-			 * plain JSON object. Auth keeps a frozen copy.
+			 * plain JSON object. The client keeps a frozen copy.
 			 */
 			user: I;
 		};
@@ -162,7 +163,7 @@ export type SignInInput<I> = [I] extends [never]
  *
  * For any other failure, such as a network error or a 5xx, throw. The session
  * is kept, and the failure shows as a `REFRESH_FAILED` error whose `cause` is
- * what you threw.
+ * what you threw. An `AuthError` you throw keeps its own `code`.
  *
  * With `fromAccessToken`, return tokens only. The user is read from the new
  * access token.
@@ -202,7 +203,7 @@ export type RefreshResult<I = never> =
  * Exchanges a refresh token for new tokens. It's the `refresh` option of
  * {@link AuthOptions}.
  *
- * Auth calls it whenever it needs a new access token: shortly before the
+ * The client calls it whenever it needs a new access token: shortly before the
  * current one expires (while mounted), once it has expired, when your API
  * rejects it, on `refresh()`, and on `retry()` once it has expired. It never
  * runs two at once. Callers that need a refresh while one runs share its
@@ -583,8 +584,10 @@ type AuthClientBase<U, I> = {
 		 * with a 401. Calls that overlap share one refresh. Without a `refresh`
 		 * option or a refresh token, it signs out and resolves `null`.
 		 *
-		 * Rejects with `REFRESH_FAILED` when the refresh fails, and with
-		 * `SESSION_CHANGED` when another session has replaced theirs.
+		 * Rejects with the refresh's failure, such as `REFRESH_FAILED`, or
+		 * `INVALID_SESSION` and `USER_VALIDATION_FAILED` for tokens or a user
+		 * the client can't use. Rejects with `SESSION_CHANGED` when another
+		 * session has replaced theirs, and with `LOCKED` while locked.
 		 */
 		renew: (credentials: Credentials) => Promise<Credentials | null>;
 		/**
@@ -631,9 +634,15 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
 				 *
 				 * Rejects with `UNAUTHENTICATED` when signed out, and with
 				 * `USER_VALIDATION_FAILED` for a user the schema rejects, or when
-				 * the function rejects or takes more than 15 seconds. If calls
+				 * the function rejects or takes more than 15 seconds. An
+				 * `AuthError` the function throws keeps its own `code`. If calls
 				 * overlap, the latest wins and the others reject with
 				 * `SESSION_CHANGED`.
+				 *
+				 * It reads the session as `getSession()` does first, so it rejects
+				 * with `LOCKED` while locked, and with a refresh's failure, such as
+				 * `REFRESH_FAILED`. If the new user can't be saved, it rejects with
+				 * `PERSISTENCE_FAILED` and signs out.
 				 */
 				updateUser: (input: I | (() => Promise<I>)) => Promise<void>;
 			});
@@ -642,7 +651,7 @@ export type AuthClient<U, I> = AuthClientBase<U, I> &
  * Encrypts the saved tokens with a key your app holds, such as one behind
  * Face ID. Pass it as the `locking` option of {@link AuthOptions}.
  *
- * Auth calls `seal` whenever it saves tokens, and `open` only from
+ * The client calls `seal` whenever it saves tokens, and `open` only from
  * `unlock()`. The user and session ID are saved unencrypted, so a locked
  * session can still show who is signed in.
  *
@@ -736,13 +745,14 @@ export type AuthOptions<Src extends UserSource> = {
 	 * How long a saved session lasts, in whole seconds. Each save, such as
 	 * after a refresh, starts it again. A session saved longer ago isn't
 	 * restored, and the user is signed out without an error. So is a session
-	 * saved by another version of session-kit. Default: 30 days.
+	 * saved in another format by an older or newer version of Session kit.
+	 * Default: 30 days.
 	 */
 	maxAge?: number | undefined;
 	/**
-	 * Logs what auth does, for debugging: restores, refreshes, timers, storage
-	 * and state changes. `true` logs to the console, and a function receives
-	 * each event instead ({@link AuthDebug}).
+	 * Logs what the client does, for debugging: restores, refreshes, timers,
+	 * storage and state changes. `true` logs to the console, and a function
+	 * receives each event instead ({@link AuthDebug}).
 	 *
 	 * Tokens, user fields, saved values and error details are left out unless
 	 * you pass `{ sensitive: true }`. Pass a development flag, such as Expo's

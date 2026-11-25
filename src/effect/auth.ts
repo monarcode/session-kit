@@ -316,7 +316,7 @@ export class Auth extends Context.Service<Auth, RegisteredAuth>()(
 
 	/**
 	 * Saves a new session from `input`, as the client's `signIn` does, for
-	 * example after a login request.
+	 * example after a sign-in request.
 	 *
 	 * Fails with `USER_VALIDATION_FAILED`, `INVALID_SESSION`,
 	 * `PERSISTENCE_FAILED` or `SESSION_CHANGED`. With a `createMirrorAuth`

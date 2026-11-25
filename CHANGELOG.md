@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.1.0-rc.3
+
+Fixes for Expo SDK 53 to 57 and for redirects on React Native, and a
+rewritten docs site. Session kit's API is unchanged.
+
+### Fixed
+
+- **Expo SDK 53 to 57:** signing in, refreshing, revoking and `updateUser`
+  failed on React Native 0.79 to 0.86. Their `AbortController` has no
+  `throwIfAborted` or `reason`, which the client relied on. It now keeps
+  the abort reason itself, so a sign-in cut short by a newer one still
+  rejects with `SESSION_CHANGED`. Expo SDK 58 wasn't affected.
+- **`createAuthFetch` on React Native:** redirects are refused there too.
+  The redirect mode is now passed in `init`, which Expo's `fetch` reads.
+  Before Expo SDK 58, `fetch` follows redirects anyway, so a response from
+  another origin or path rejects with a `TypeError`, as a refused redirect
+  does in browsers. The redirected request has already gone out by then.
+- **`createAuthFetch` keeps a `Request`'s `referrerPolicy` and
+  `referrer`.** Copying the request to add the token reset them.
+
+### Docs
+
+- The JSDoc names more of the cases behind each error code: what
+  `REFRESH_FAILED`, `INVALID_SESSION`, `USER_VALIDATION_FAILED`,
+  `SESSION_CHANGED`, `PERSISTENCE_FAILED` and `INVALID_OPTIONS` cover, and
+  what `credentials.renew` and `updateUser` reject with.
+- `keychainAccessible` no longer says a locked iOS keychain never signs the
+  user out: a refresh that can't save its tokens does.
+- `sessionBearer` says that `fetch` follows redirects on React Native before
+  Expo SDK 58.
+- The API reference shows each export's whole description and its `@see`
+  links, and lists the members of the client and server types with their
+  descriptions, which say what each method rejects with.
+- `sessionBearer` says that a 401 it doesn't send again fails the call as
+  an `HttpError`, and `updateUser` that an `AuthError` its function throws
+  keeps its own code.
+- The docs site is rewritten. Every page was checked against the source,
+  and every code sample on it compiles, the setup guides' config files
+  included. The sidebar is grouped into Get started, Setups, Guides, Going
+  further and Reference. Effect has three pages (`/docs/effect`,
+  `/docs/effect/browser` and `/docs/effect/server`), and Expo has an
+  "Unlock with biometrics" guide
+  (`/docs/setups/expo-locking`). Every old page URL still works. Some
+  section anchors changed, such as the old `/docs/effect` steps; no link in
+  the docs, the README or the examples points at one.
+- Compatibility states the TypeScript floor (5.4, and 5.9 for Effect), the
+  framework's own Node.js and React floors, and which runtimes CI tests.
+
 ## 0.1.0-rc.2
 
 For effetch `0.1.0-rc.4`, whose main entry now exports only the `Fetch`

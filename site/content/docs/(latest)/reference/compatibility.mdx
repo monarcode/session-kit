@@ -1,54 +1,66 @@
 ---
 title: Compatibility
-description: The peer dependency versions, runtimes, and TypeScript settings Session kit supports and is tested with.
+description: The peer dependency versions, runtimes and TypeScript versions Session kit supports, and which of them CI tests.
 ---
 
-Check this page before you upgrade a framework that Session kit works with,
-or to see whether your runtime is supported.
+Before you upgrade React, a router or a framework, check here that Session kit
+supports the new version. This page also lists the runtimes Session kit is
+built for, and which of them CI tests.
 
 ## Peer dependencies
 
-Every peer dependency is optional. Install only the ones the entry points you
-import use:
+Every peer dependency is optional. Install only the ones used by the entry
+points you import:
 
-| Peer                     | Range                   | Used by                                                |
-| ------------------------ | ----------------------- | ------------------------------------------------------ |
-| `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/react-router`, `/expo` |
-| `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                     |
-| `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                               |
-| `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`, `/react-router/server`                |
-| `next`                   | `^16.0.0`               | `/next`                                                |
-| `effect`                 | `^4.1.0`                | `/effect`, `/effetch`                                  |
-| `@monarcode/effetch`     | `^0.1.0-rc.4`           | `/effetch`                                             |
-| `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                |
-| `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                |
-| `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                |
-| `react-native`           | `>=0.79.0`              | `/expo`                                                |
+| Peer                     | Range                   | Used by                                                                   |
+| ------------------------ | ----------------------- | ------------------------------------------------------------------------- |
+| `react`                  | `^18.0.0 \|\| ^19.0.0`  | `/react`, `/tanstack-router`, `/tanstack-start`, `/react-router`, `/expo` |
+| `@tanstack/react-router` | `^1.132.0`              | `/tanstack-router`                                                        |
+| `@tanstack/react-start`  | `^1.169.0`              | `/tanstack-start/server`                                                  |
+| `react-router`           | `^7.0.0 \|\| ^8.0.0`    | `/react-router`, `/react-router/server`                                   |
+| `next`                   | `^16.0.0`               | `/next`                                                                   |
+| `effect`                 | `^4.1.0`                | `/effect`, `/effetch`                                                     |
+| `@monarcode/effetch`     | `^0.1.0-rc.4`           | `/effetch`                                                                |
+| `expo-router`            | `^5.0.2` through `^58`  | `/expo`                                                                   |
+| `expo-secure-store`      | `^14.2.0` through `^58` | `/expo`                                                                   |
+| `expo-file-system`       | `^18.1.0` through `^58` | `/expo`                                                                   |
+| `react-native`           | `>=0.79.0`              | `/expo`                                                                   |
 
-Three things to know about these peers:
+Things to know about these peers:
 
-- **Expo.** The Expo ranges cover Expo SDK 53 and newer. Install them with
+- **Expo.** The Expo ranges cover Expo SDK 53 to 58. Install them with
   `npx expo install`, so that they match your SDK, as the
   [Expo guide](/docs/setups/expo#installation) shows.
+- **React Router 8** needs React 19.2.7 or newer. With React 18, use React
+  Router 7.
+- **Next.js 16** needs React 18.2 or newer.
 - **React Router with server rendering.** `/react-router/server` needs React
   Router's middleware: React Router 8, or 7.9 and later with
   `future.v8_middleware`.
+- **effetch-query**, for caching Effect queries, needs React 19.
 - **React DOM.** No entry point imports React DOM.
-
-## Tested versions
-
-CI tests the oldest and the newest version in each range, with one
-exception: it tests `expo-file-system` only at its newest. Version 18.1
-publishes no `exports` map, so its types don't resolve under NodeNext.
 
 ## Runtimes
 
-Session kit runs in browsers, in React Native (Expo SDK 53 and newer, with
-Hermes and Metro), and in Node.js 20 and newer. Your framework can need a
-newer Node.js: React Router 8 needs 22.22. Session kit uses these platform
-features:
+Session kit is built for these runtimes:
 
-- **`AbortController`** is required.
+- browsers;
+- React Native through Expo SDK 53 to 58, with Hermes and Metro;
+- Node.js 20 and newer, for server rendering and for the server entry
+  points.
+
+Your framework can need a newer Node.js than Session kit does. React Router
+8.5 needs Node.js 22.22, TanStack Start 1.169 needs 22.12, and Next.js 16.4
+needs 20.9.
+
+Session kit uses these platform features:
+
+- **`AbortController`** is required. React Native's, which can't carry an
+  abort reason, works too.
+- **`atob`** decodes JWTs, to read an access token's expiry and for
+  `fromAccessToken`. Every runtime above has it.
+- **`fetch`, `Request` and `Response`** are required by
+  `@monarcode/session-kit/http` and by the server entry points.
 - **`crypto.randomUUID`** makes session IDs when present. Without it, the
   client uses `crypto.getRandomValues`, or `Math.random` as a last resort.
 - **Web Locks** keep tabs to one refresh at a time when present. Without
@@ -59,7 +71,26 @@ features:
 - **Web Crypto** is required on the server by
   `@monarcode/session-kit/server`, as in Node.js 20 and newer.
 
+## What CI tests
+
+CI runs every test on Node.js 24, twice:
+
+- with the peer versions in the repository's lockfile, which can be behind
+  the newest releases;
+- with the oldest version in each peer range, such as React 18.0 and React
+  Router 7.0, and Expo SDK 53's packages. `expo-file-system` stays at the
+  lockfile's version, because 18.1 publishes no `exports` map, so its types
+  don't resolve under NodeNext.
+
+CI also builds each example app, and bundles the Expo app for iOS and
+Android. It doesn't run Node.js 20 or 22, browsers or a device. Those are
+built for, but not tested in CI.
+
 ## TypeScript
 
-The package is ESM-only. It's checked with TypeScript 6.0.3 under NodeNext
-and Bundler resolution, with `exactOptionalPropertyTypes` both on and off.
+Session kit's types need TypeScript 5.4 or newer. `/effect` and `/effetch`
+also load Effect's types, and Effect asks for TypeScript 5.9 or newer.
+
+The package is ESM-only. CI checks its types with TypeScript 6.0.3 under
+NodeNext and Bundler resolution, with `exactOptionalPropertyTypes` both on
+and off.

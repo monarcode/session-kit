@@ -101,10 +101,11 @@ const refuseRedirects = <A, E, R>(
 /**
  * An effetch plugin that sends the current access token as
  * `Authorization: Bearer`. After a 401, it gets a new access token once.
- * `GET` and `HEAD` requests are then sent again; other requests return the
- * 401 for you to retry. If the request sent again gets a 401 too, the user
- * is signed out, unless `signOutOnRepeated401` is off. If the renewal ends
- * the session, the call returns the 401.
+ * `GET` and `HEAD` requests are then sent again. Other requests keep their
+ * 401, which effetch fails the call with as an `HttpError`, for you to
+ * retry. If the request sent again gets a 401 too, the user is signed out,
+ * unless `signOutOnRepeated401` is off. If the renewal ends the session, the
+ * call fails with the 401 too.
  *
  * Calls fail with `AuthFailure`, before sending anything: `UNAUTHENTICATED`
  * when signed out, unless `optional` sends them without a token, and
@@ -122,7 +123,9 @@ const refuseRedirects = <A, E, R>(
  * The token never leaves your API. A request on another origin, or with a
  * username or password in its URL, dies with `INVALID_OPTIONS`. With
  * Effect's `FetchHttpClient`, a redirect fails as a `Fetch.NetworkError`
- * rather than being followed. An invalid `baseUrl` throws `INVALID_OPTIONS`.
+ * rather than being followed, except on React Native before Expo SDK 58,
+ * whose `fetch` follows redirects whatever it's told. An invalid `baseUrl`
+ * throws `INVALID_OPTIONS`.
  *
  * A request that already has an `Authorization` header is sent as it is, as
  * effetch's `bearer` does.

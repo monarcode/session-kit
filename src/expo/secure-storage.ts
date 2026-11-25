@@ -34,8 +34,9 @@ export type SecureStorageOptions = {
 	 * while the device is locked needs `AFTER_FIRST_UNLOCK`. Passed to
 	 * SecureStore unchanged.
 	 *
-	 * While the keychain can't be read, the session is `unavailable`, not
-	 * signed out.
+	 * If the keychain can't be read when the app starts, the session is
+	 * `unavailable`, not signed out. A refresh that runs while it's locked
+	 * can't save the new tokens, and that signs the user out.
 	 * @default WHEN_UNLOCKED
 	 */
 	keychainAccessible?: KeychainAccessibilityConstant | undefined;

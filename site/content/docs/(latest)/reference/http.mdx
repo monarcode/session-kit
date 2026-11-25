@@ -3,11 +3,8 @@ title: "HTTP"
 description: "A fetch that sends the access token and refreshes on a 401."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/http";
-```
-
-Guide: [Authenticated requests](/docs/client/requests).
+Import these from `@monarcode/session-kit/http`. To set it up, see
+[Authenticated requests](/docs/client/requests).
 
 ## Functions
 
@@ -15,11 +12,33 @@ Guide: [Authenticated requests](/docs/client/requests).
 
 Creates a `fetch` for your API ([`AuthFetch`](#authfetch)) that sends the current access token as `Authorization: Bearer`. After a 401, it gets a new access token once. `GET` and `HEAD` requests are then sent again; other requests resolve the 401 for you to retry. If the request sent again gets a 401 too, the user is signed out, unless `signOutOnRepeated401` is off.
 
+Rejects with `UNAUTHENTICATED` when signed out, unless `optional` sends the request without a token, and with `LOCKED` while locked. When a refresh fails, it rejects with that failure, such as `REFRESH_FAILED`.
+
+If the session changes during a request, it rejects with `SESSION_CHANGED` rather than resolve a response meant for another account.
+
+The token never leaves your API. A request for another origin, with a username or password in its URL, or with an invalid URL rejects with `INVALID_OPTIONS`, as does a `Request` from another realm or a polyfill. A missing or invalid `baseUrl` throws `INVALID_OPTIONS`. While signed in, a request's own `Authorization` header is replaced.
+
+A redirect isn't followed: the request rejects as `fetch` does when it refuses one, with a `TypeError` in browsers and Node.js. On React Native before Expo SDK 58, `fetch` follows a redirect whatever it's told. The response is still refused, with a `TypeError`, but the redirected request has already gone out, so don't let your API redirect requests that carry a token.
+
+`fetch`'s own failures, such as a network error, and an `init` that `Request` refuses, reject as `fetch` and `Request` do.
+
+An HTTP client that takes a custom `fetch`, such as ky or openapi-fetch, can take this one. Its requests then get the same checks, and the same handling of a 401.
+
+See [`AuthFetchOptions`](#authfetchoptions) for `baseUrl`, `optional` and `signOutOnRepeated401`.
+
 ## Types
 
 ### AuthFetch
 
 The `fetch` that [`createAuthFetch`](#createauthfetch) returns. Call it with a path under your API's base URL, and `init` as you would pass to `fetch`. It takes a `URL` or a `Request` too, as `fetch` does.
+
+A `Request` with a body can be sent once, as with `fetch`. To retry a write after a 401, send a clone you kept. A call that rejects before sending anything leaves the `Request` unused.
+
+`init` takes what `Request` takes. An option that only a runtime's own `fetch` reads, such as Next.js's `next`, isn't passed on.
+
+Use the name to type a prop, a context or a test fake that stands in for it.
+
+See [`createAuthFetch`](#createauthfetch) for how it sends the token and handles a 401.
 
 ### AuthFetchClient
 

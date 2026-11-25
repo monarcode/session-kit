@@ -22,24 +22,34 @@ export type AuthErrorCode =
 	 * it rejected the user, and `cause` holds the error when something else
 	 * failed, such as an `updateUser` function. Otherwise `message` says why,
 	 * such as a user that isn't a plain JSON object.
+	 *
+	 * It also covers a schema that doesn't return its own output unchanged
+	 * (saved users are checked again when restored), an access token that
+	 * `fromAccessToken` can't read, and a user your refresh callback returned
+	 * that the schema rejects.
 	 */
 	| "USER_VALIDATION_FAILED"
 	/**
 	 * Tokens or a saved session that can't be used, such as an access token
 	 * that already expired at sign-in, or a saved session that's malformed.
-	 * In the browser of a server-rendered app, your server answered with
-	 * something other than a session or an access token.
+	 * Tokens from your refresh callback fail with it too when they last
+	 * under five seconds, have already expired, or repeat the access token
+	 * your API rejected. In the browser of a server-rendered app, your server
+	 * answered with something other than a session or an access token.
 	 */
 	| "INVALID_SESSION"
 	/**
 	 * Storage couldn't be read, written or cleared, or `locking.seal` failed.
-	 * In the browser of a server-rendered app, signing out on the server
-	 * failed.
+	 * That includes a session too large to save: over two cookies on the
+	 * server, or more than `secureStorage` holds. In the browser of a
+	 * server-rendered app, signing out on the server failed.
 	 */
 	| "PERSISTENCE_FAILED"
 	/**
-	 * The refresh failed: your refresh callback threw or timed out, or there
-	 * was no `refresh` option or refresh token to use. In the browser of a
+	 * The refresh failed: your refresh callback threw or timed out, or
+	 * `refresh()` was called without a `refresh` option or a refresh token.
+	 * Without them, an access token that expires or that your API rejects
+	 * signs the user out instead, with no error. In the browser of a
 	 * server-rendered app, reading the session or the access token from the
 	 * server failed. On the server, the access token needed a refresh in a
 	 * request that can't set cookies.
@@ -51,8 +61,9 @@ export type AuthErrorCode =
 	 */
 	| "REVOKE_FAILED"
 	/**
-	 * The session changed while the call ran: a newer sign-in, a sign-out, or
-	 * another tab replaced it.
+	 * The session changed while the call ran: a newer sign-in, a sign-out, a
+	 * newer `updateUser` call, or another tab replaced it. A route guard
+	 * rejects with it when the session kept changing while it was read.
 	 */
 	| "SESSION_CHANGED"
 	/** The call needs someone signed in, and no one is. */
@@ -64,7 +75,9 @@ export type AuthErrorCode =
 	/**
 	 * An option or argument Session kit can't use, or a method called without
 	 * the option it needs or where it can't work, such as a server `signIn` in
-	 * a request that can't set cookies.
+	 * a request that can't set cookies. In the browser of a server-rendered
+	 * app, your session route refused the request, such as one from a page
+	 * an older version of your app served.
 	 */
 	| "INVALID_OPTIONS";
 

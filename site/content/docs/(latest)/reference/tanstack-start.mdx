@@ -1,13 +1,10 @@
 ---
 title: "TanStack Start"
-description: "Server sessions and hydration for TanStack Start."
+description: "The browser's side of TanStack Start with server rendering: connecting the Router and loading the session."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/tanstack-start";
-```
-
-Guide: [TanStack Start](/docs/setups/tanstack-start).
+Import these from `@monarcode/session-kit/tanstack-start`. To set it up, see
+[TanStack Start](/docs/setups/tanstack-start).
 
 ## Functions
 
@@ -15,6 +12,20 @@ Guide: [TanStack Start](/docs/setups/tanstack-start).
 
 Connects a TanStack Start router to the browser client in its context, as `auth`. Call it once in `getRouter`, after `createRouter`.
 
+It carries the session from the server render to the browser. On the server, the page is sent with the session [`loadSession`](#loadsession) read. In the browser, the client starts from it before the first render, without running guards again or telling other tabs. When the server didn't read the session, the browser reads it itself.
+
+In the browser, it then does what `connectAuth` does for a TanStack Router app: guards run again when the session changes. It returns a function that stops.
+
+Throws `INVALID_OPTIONS` when the router's context has no client from `createMirrorAuth` as `auth`.
+
+A `dehydrate` and a `hydrate` of your own keep working: yours gets back what yours sent. Pass them to `createRouter`. One set later, such as with `router.update`, replaces the session's.
+
+See [`loadSession`](#loadsession) to read the session before the guards run.
+
 ### loadSession
 
 Reads this request's session into the client. Call it in the root route's `beforeLoad`.
+
+On the server, it calls the client's `revalidate`, so guards and the page see the session from the cookie. In the browser, it does nothing when [`connectSession`](#connectsession) already brought the server's session. Otherwise, such as for a root route that didn't render on the server, it asks the server on each navigation until a read succeeds.
+
+Rejects as the client's `retry()` does when the read fails.

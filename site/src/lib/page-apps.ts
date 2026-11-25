@@ -3,10 +3,11 @@ import { relative, sep } from "node:path";
 import type { Element, ElementContent, Root, RootContent } from "hast";
 
 import {
+	APP,
 	compilerSettings,
 	documents,
 	installedAtLeast,
-	pageApp,
+	pageApps,
 	root,
 	TITLE,
 } from "../../../scripts/docs-pages.mjs";
@@ -66,14 +67,19 @@ export function rehypePageApps() {
 		);
 		if (missing) return;
 		// `check-docs` reports a page's problems; the site only reads it.
-		const app = pageApp(document, () => {});
+		const apps = pageApps(document, () => {});
 		// The dev server rebuilds the page when a file it borrows from changes.
-		for (const origin of new Set(app.map((other) => other.origin)))
+		for (const origin of new Set(
+			[...apps.values()].flat().map((other) => other.origin),
+		))
 			file.data._compiler?.addDependency(origin);
 		visitCode(tree, (code) => {
 			const meta = String(code.data?.meta ?? "");
 			const title = TITLE.exec(meta)?.[1];
 			if (!title || OPT_OUT.test(meta)) return;
+			// The app `check-docs` compiles this example in.
+			const name = APP.exec(meta)?.[1] ?? "";
+			const app = apps.get(name) ?? [];
 			if (!app.some((other) => other.path === title)) return;
 			const hidden = app
 				.filter((other) => other.path !== title)
@@ -88,7 +94,7 @@ export function rehypePageApps() {
 				// program, where each copy of a page's `declare module` would
 				// merge with the others. An export condition of its own, which
 				// no package has, gives each block a program of its own.
-				`// @customConditions: ${document.path}#${title}`,
+				`// @customConditions: ${document.path}#${name}#${title}`,
 				// The hidden files are `check-docs`' to report.
 				"// @noErrorsCutted",
 				...(document.dom ? [] : [NO_DOM_LIB]),

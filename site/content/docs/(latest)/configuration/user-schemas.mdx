@@ -1,15 +1,44 @@
 ---
 title: User schemas
-description: How the user schema checks every user the client accepts, and what restoring a session requires of it.
+description: How the user schema checks every user the client accepts, and what restoring a session asks of it.
 ---
 
-The schema you pass as `createAuth`'s `user` option checks each user the
-client accepts and gives the user its type. This page explains when it runs,
-and the two rules it must follow so that a saved session can be restored.
+Your backend answers a sign-in with the user's fields, and your components
+render them. The schema you pass as `createAuth`'s `user` option sits
+between the two: it checks each user the client accepts, and gives the user
+its type in your code.
+
+This page shows when the schema runs, the two rules it must follow so that a
+saved session can be restored, and how to change it without signing anyone
+out.
 
 Any [Standard Schema](https://standardschema.dev) library works, such as Zod,
 Valibot or ArkType. If your backend puts the user in the access token
 instead, see [Users from the access token](/docs/client/users-from-tokens).
+
+## The user's type
+
+`createAuth` infers the user's type from the schema's output. With the
+schema from [Getting started](/docs/getting-started#2-create-the-client),
+hover `user` to see it:
+
+```ts title="src/user-type.ts"
+import type { SessionOf, UserOf } from "@monarcode/session-kit";
+
+import { auth } from "./auth.js";
+
+const { user } = auth.state.get();
+//      ^?
+
+// The same types, named for the rest of your code.
+export type AppUser = UserOf<typeof auth>;
+export type AppSession = SessionOf<typeof auth>;
+```
+
+`user` is `null` unless the session is `authenticated`, `refreshing` or
+`locked`, and checking `status` narrows it. To type the hooks from `@monarcode/session-kit/react`, register the
+client one time, as
+[Getting started](/docs/getting-started#4-read-the-session-in-react) shows.
 
 ## When the schema runs
 
@@ -24,29 +53,11 @@ The client runs the schema on every user it accepts:
 It keeps a frozen copy of each user it accepts. To change the user, call
 [`updateUser`](/docs/client/updating-the-user).
 
-## The user's type
-
-`createAuth` infers the user's type from the schema's output. Hover `user` to
-see it:
-
-```ts twoslash
-import { createAuth, memoryStorage } from "@monarcode/session-kit";
-import { z } from "zod";
-
-const auth = createAuth({
-  name: "my-app",
-  user: z.object({ id: z.number(), firstName: z.string() }),
-  storage: memoryStorage(),
-});
-
-const { user } = auth.state.get();
-//      ^?
-```
-
-To name the types elsewhere, use `UserOf<typeof auth>` and
-`SessionOf<typeof auth>`. To type the hooks from
-`@monarcode/session-kit/react`, register the client once, as
-[Getting started](/docs/getting-started#4-read-the-session-in-react) shows.
+An asynchronous schema, such as one with an async refinement, has 15 seconds
+to answer each check, and a check that takes longer fails. During a refresh,
+the check shares the refresh's 15 seconds. It also means a
+saved session can't be restored before the first render, as the
+[Introduction](/docs) explains: the app shows `initializing` first.
 
 ## Rules for restoring
 
@@ -60,11 +71,29 @@ when it restores the session. That sets two rules for the schema:
 
 A schema that breaks either rule is rejected with `USER_VALIDATION_FAILED`
 the first time it accepts a user, usually at sign-in. That way the problem
-shows up at once, not as users being signed out on their next reload.
+shows up right away, not as users being signed out on their next reload.
 
-## Users the schema rejects
+## Change the schema safely
 
-A deploy can change the schema so that it rejects users saved before it. The
-client doesn't restore such a user, so the user signs in again. A user saved by
-another tab that the schema rejects signs every tab out, with
-`USER_VALIDATION_FAILED` in `state.error`.
+A deploy can change the schema so that it rejects users saved before it.
+When the client restores such a user, it signs them out and clears the saved
+session, with `USER_VALIDATION_FAILED` in `state.error`. The user then signs
+in again.
+
+To add a field without signing anyone out, make it optional or give it a
+default. A saved user without the field still passes, and a default fills
+it in on restore.
+
+A user that another tab saved, and that this tab's schema rejects, signs
+every tab out the same way. That can happen while two versions of your app
+are open in different tabs. [Errors](/docs/configuration/errors) covers this
+and the other saved sessions the client can't use.
+
+## Next steps
+
+- [Users from the access token](/docs/client/users-from-tokens): read the
+  user from a JWT instead of a schema.
+- [Updating the user](/docs/client/updating-the-user): change the signed-in
+  user's fields after sign-in.
+- [Errors](/docs/configuration/errors): show `USER_VALIDATION_FAILED` and
+  the other errors to your users.

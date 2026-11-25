@@ -3,52 +3,127 @@ title: Refresh
 description: What the refresh callback's results mean, when a refresh runs, and why an outage never signs anyone out.
 ---
 
-`createAuth`'s `refresh` option is a callback that exchanges the refresh
-token for new tokens. This page explains what its results mean and when the
-client calls it. For a callback to start from, see `refresh` in
-[Getting started](/docs/getting-started#1-talk-to-your-backend).
+Access tokens last minutes, and users stay for hours. `createAuth`'s
+`refresh` option is a callback that exchanges the refresh token for new
+tokens, so the user stays signed in when the access token expires.
+
+This page shows what the callback should return, when the client calls it,
+and what happens when it fails. The callback in
+[Getting started](/docs/getting-started#1-talk-to-your-backend) is a good
+place to start.
 
 ## What the callback returns
 
-The callback ends in one of three ways, and the client handles each
-differently:
+The callback tells the client one of three things: here are new tokens, the
+backend rejected the refresh token, or the backend couldn't answer. For
+example, against DummyJSON:
+
+```ts title="src/refresh.ts"
+import type { RefreshFn } from "@monarcode/session-kit";
+
+import { API } from "./backend.js";
+
+type RefreshBody = { accessToken: string; refreshToken: string };
+
+export const refresh: RefreshFn = async ({ refreshToken, signal }) => {
+  const response = await fetch(`${API}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
+    signal,
+  });
+  // The backend rejected the refresh token: sign the user out.
+  if (response.status === 401 || response.status === 403) return null;
+  // Anything else is an outage: keep the session.
+  if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
+  const body = (await response.json()) as RefreshBody;
+  return { accessToken: body.accessToken, refreshToken: body.refreshToken };
+};
+```
+
+Pass it as `refresh` when you create the client. Here's what the client does
+with each result:
 
 | The callback   | What the client does                                                                                                       |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | Returns tokens | Saves them. A refresh token or user it leaves out keeps the current one.                                                   |
-| Returns `null` | Treats the refresh token as rejected: signs the user out and clears storage.                                               |
+| Returns `null` | Treats the refresh token as rejected: signs the user out and clears the saved session.                                     |
 | Throws         | Treats it as an outage: keeps the session and reports `REFRESH_FAILED`. See [When a refresh fails](#when-a-refresh-fails). |
-
-When the client can tell
-[when the new access token expires](/docs/configuration/expiry), the token
-must last at least five seconds. A shorter one is an `INVALID_SESSION` error.
 
 Return `null` only when your backend rejected the refresh token, such as with
 a 401. Throw for anything else, such as a network error or a 500, so that an
 outage doesn't sign anyone out. To sign the user out on every failure, return
-`null` instead of throwing.
+`null` instead of throwing. An `AuthError` you throw keeps its own code.
+
+The client also checks the tokens and the user you return. It refuses them
+in these cases, and counts the refresh as failed, with the session kept:
+
+- When the client can tell
+  [when the new access token expires](/docs/configuration/expiry), the token
+  must last at least five seconds. A shorter one, or one that has already
+  expired, fails with `INVALID_SESSION`.
+- Tokens with both `expiresIn` and `expiresAt` fail with `INVALID_SESSION`.
+- The access token your API rejected, returned again, fails with
+  `INVALID_SESSION`.
+- A user that the [user schema](/docs/configuration/user-schemas) rejects
+  fails with `USER_VALIDATION_FAILED`.
+
+These keep their own code in `state.error`, rather than `REFRESH_FAILED`.
 
 ## When a refresh runs
 
 The client refreshes at one of three moments:
 
-- **Early.** While the client is mounted, 60 seconds before the access token
-  expires, or halfway through when the token lasts under two minutes. It
-  tries once per token. If that fails, the token stays usable until it
-  expires.
+- **Early.** While the client is mounted, it refreshes 60 seconds before the
+  access token expires. When less than two minutes are left, it refreshes
+  halfway through the time that's left instead. It tries once per token.
 - **At expiry, or after a 401.** `status` is `refreshing` while it runs, and
   the user stays on screen.
-- **On request.** `auth.refresh()` runs one now.
+- **On request.** `auth.refresh()` runs one straight away. It rejects with
+  `REFRESH_FAILED` when there's nothing to refresh with: no `refresh` option,
+  or no refresh token.
+
+Only one refresh runs at a time. A request that needs one while it runs
+waits for it, and tabs take turns, as [Tabs](/docs/configuration/tabs)
+explains.
+
+Without a `refresh` option or a refresh token, there's nothing to refresh
+with. The user is signed out, with no error, when the access token expires
+or your API rejects it.
 
 ## When a refresh fails
 
-If a refresh the session needed fails, `status` becomes `unavailable`.
-`getSession()` then rejects with the same error until you call `auth.retry()`,
-or the user signs in or out. Guards that run again therefore can't start a
-refresh loop.
+What a failure means depends on whether the access token still works.
+
+If an early refresh fails, the access token stays usable until it expires.
+The user stays `authenticated`, and `state.error` shows the failure, usually
+`REFRESH_FAILED`. When the token expires, the client refreshes again.
+
+If a refresh the session needed fails, because the access token expired or
+was rejected, `status` becomes `unavailable`. The saved session is kept, so
+access can come back without a new sign-in. `getSession()` rejects with the
+same error until one of these happens:
+
+- You call `auth.retry()` or `auth.refresh()`.
+- The user signs in or out.
+- Another tab saves new tokens.
+
+Guards that run again therefore can't start a refresh loop. To offer the
+user a way out, show a **Try again** button that calls `auth.retry()`, as
+[Errors](/docs/configuration/errors) shows.
 
 ## Deadlines
 
-The client gives each refresh, and each check of a user, 15 seconds. The
-callback's `signal` aborts when that time runs out or when the session
-changes, such as on sign-out. Pass it to `fetch`.
+The client gives each refresh 15 seconds. The callback's `signal` aborts
+when that time runs out, or when the session changes, such as on sign-out.
+Pass it to `fetch`, as the example does. A refresh that runs out of time
+fails like an outage, with `REFRESH_FAILED`.
+
+## Next steps
+
+- [Expiry](/docs/configuration/expiry): make sure the client can tell when the
+  access token expires, so it can refresh early.
+- [Errors](/docs/configuration/errors): show a failed refresh to the user,
+  and let them try again.
+- [Authenticated requests](/docs/client/requests): see how `authFetch`
+  refreshes after a 401.

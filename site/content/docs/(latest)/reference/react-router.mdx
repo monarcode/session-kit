@@ -3,17 +3,16 @@ title: "React Router"
 description: "Route guards and revalidation for React Router."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/react-router";
-```
-
-Guide: [React Router](/docs/setups/react-router).
+Import these from `@monarcode/session-kit/react-router`. To set it up, see
+[React Router](/docs/setups/react-router).
 
 ## Functions
 
 ### redirectIfSignedIn
 
 Sends a signed-in user from your sign-in page straight to `redirectTo`, made safe with `safeReturnTo`, inside a loader of your own. When the loader does nothing else, use [`redirectIfSignedInLoader`](#redirectifsignedinloader) instead.
+
+If the session can't be read, such as after a failed refresh or while locked, the sign-in page shows, so the user can sign in again. A `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
 
 ### redirectIfSignedInLoader
 
@@ -23,19 +22,41 @@ Makes the loader for your sign-in page, for `loader` or `clientLoader`. It reads
 
 Checks for a signed-in user inside a loader of your own, in data or framework mode, and resolves `{ session }`, which holds no tokens. When the loader does nothing else, use [`requireSessionLoader`](#requiresessionloader) as the loader instead.
 
+Call it in a page's loader that calls your API, even under a guarded layout. React Router runs nested routes' loaders at the same time, so the page's doesn't wait for the layout's guard.
+
+Signed-out users go to `loginPath`, with `?redirectTo=` set to the path and query they asked for. React Router leaves the `#fragment` out of a loader's request, so it isn't kept. A locked session counts as signed out, as locking is for native apps and the router adapters don't unlock.
+
+Other errors, such as `REFRESH_FAILED` after a failed refresh, are rethrown to the route's error element, which can offer `auth.retry()`. A `loginPath` or `basename` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
+
+Use `SessionOutlet` as the route's element, and call `useAuthRevalidation`, so the loader runs again when the session changes.
+
 ### requireSessionLoader
 
 Makes the loader that guards a route, for `loader` or `clientLoader`, so only signed-in users get through. It resolves `{ session }`, typed with the client's user, and works as [`requireSession`](#requiresession) does.
 
+Pass `loginPath` or `basename` when they aren't the defaults. A `loginPath` or `basename` that doesn't start with `/` throws `INVALID_OPTIONS` when the loader is made.
+
 ### useAuthRevalidation
 
 Runs your loaders again when the session changes, so guards such as `requireSession` check it again. That's on sign-in, sign-out, a switch of account, a profile update, a lock, or a refresh that fails once the access token has expired. A token refresh alone doesn't, nor does a failed refresh while the token is still valid.
+
+Call it once in the root layout, in data or framework mode. Declarative mode has no loaders, and React Router throws when the hook runs there.
+
+It watches `client`, or the nearest `AuthProvider`'s, and doesn't mount the client itself. Throws `INVALID_OPTIONS` without either.
 
 ## Components
 
 ### SessionOutlet
 
 Renders child routes only while someone is signed in, in any mode. It needs an `AuthProvider` above it, or a `client`.
+
+Signed-out users, and a locked session, go to `loginPath`, with `?redirectTo=` set to where they were. In declarative mode, that makes it the guard.
+
+In data or framework mode, render it from a route whose loader returns `requireSession`'s result. When the account changes, it shows `pending` until the loader has run again, so no child sees the last account's data.
+
+Child routes remount for each account, but not on token refreshes or profile updates. UI the route renders around the outlet, such as a sidebar, isn't guarded this way. Read the user there from state, where it may be `null`.
+
+Throws `INVALID_OPTIONS` when it has neither an `AuthProvider` around it nor a `client`.
 
 ## Types
 

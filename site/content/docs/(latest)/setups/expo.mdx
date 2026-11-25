@@ -3,46 +3,52 @@ title: Expo Router
 description: Save the session in the device's secure storage, hold the splash screen while it restores, and keep deep links across sign-in.
 ---
 
-In this guide, you build an Expo Router app for iOS and Android that keeps
-the session in the device's secure storage, holds the splash screen while it
-restores, and keeps deep links across sign-in. Expo Router's
-`Stack.Protected` guards the screens, and `SessionGate` wraps the root
-navigator. It holds the splash screen while the session is restored,
-renders `unavailable` after a failed refresh, and checks the session again
-when the app returns to the foreground.
+People who open your Expo app expect to find themselves still signed in, to
+land on the screen a link points to, and not to see the sign-in screen flash
+past while the app starts. In this guide, you build an Expo Router app for
+iOS and Android that does that. It saves the session in the device's secure
+storage, holds the splash screen while the session restores, and keeps a
+deep link across sign-in.
 
-This page builds the
-[`expo-router` example app](https://github.com/monarcode/session-kit/tree/main/examples/expo-router)
-from scratch. It signs in against
-[DummyJSON's auth API](https://dummyjson.com/docs/auth), so it runs as
-written. Its `src/auth.ts` takes the place of Getting started's `backend.ts`
-and `auth.ts`. [Using the client](/docs/client),
+The app is a shorter version of the
+[`expo-router` example app](https://github.com/monarcode/session-kit/tree/main/examples/expo-router).
+It signs in against [DummyJSON's auth API](https://dummyjson.com/docs/auth),
+so it runs as written. The example adds a few extras, such as one-minute
+tokens so you can watch a refresh, and its links use the scheme `sessionkit`
+where this page uses `myapp`. Its `src/auth.ts` takes the place of Getting
+started's `backend.ts` and `auth.ts`.
+
+This page covers what differs on Expo. [Using the client](/docs/client),
 [Refresh](/docs/configuration/refresh) and
-[Errors](/docs/configuration/errors) explain how the client works. This page
-covers what differs on Expo.
+[Errors](/docs/configuration/errors) explain how the client works.
 
 ## Before you begin
 
-- Expo SDK 53 or newer: Expo Router 5 or newer, and React Native 0.79 or
-  newer.
-- iOS and Android only. Expo web is not supported. On the web, use a
+- Expo SDK 53 to 58, with the Expo Router and React Native versions that come
+  with your SDK. [Compatibility](/docs/reference/compatibility) lists the
+  versions.
+- An app for iOS and Android. Expo web isn't supported. On the web, use a
   [web router setup](/docs/installation#pick-your-setup) with `webStorage()`.
 - Expo Go, which includes `expo-secure-store` and `expo-file-system`, or a
   development build with both installed.
 
 ## Installation
 
-Install the package, its Expo peers, and a schema library. `npx expo install`
-picks the peer versions that match your SDK:
+Install the package, its Expo peers, the splash screen module and a schema
+library. `npx expo install` picks the versions that match your SDK:
 
 ```sh
-npx expo install @monarcode/session-kit expo-secure-store expo-file-system zod
+npx expo install @monarcode/session-kit expo-secure-store \
+  expo-file-system expo-splash-screen zod
 ```
 
-An Expo Router app already has `expo-router` and `react-native`. Holding the
-splash screen needs `expo-splash-screen`, so install it too if your app
-doesn't have it. Add the `expo-secure-store` config plugin to `app.json`, so
-Android Auto Backup leaves the session out of backups:
+An Expo Router app already has `expo-router` and `react-native`.
+`expo-splash-screen` is what holds the splash screen. Without it, holding
+does nothing, and the app shows while the session is still restoring.
+
+Then add the `expo-secure-store` config plugin to `app.json`. It keeps the
+session out of Android's Auto Backup, and adds the Face ID permission on
+iOS:
 
 ```json
 {
@@ -54,6 +60,10 @@ Android Auto Backup leaves the session out of backups:
 ```
 
 `scheme` is what custom-scheme deep links such as `myapp://profile` use.
+Expo Go opens its own `exp://` links instead, and doesn't apply config
+plugins, so both take effect in a development or release build.
+[Reinstalls and Android backups](#reinstalls-and-android-backups) says more
+about the backup rules.
 
 ## 1. Create the client
 
@@ -85,6 +95,8 @@ export const auth = createAuth({
   name: "my-app",
   user: userSchema,
   storage: secureStorage(),
+  // Logs what Session kit does to Metro, in development only.
+  debug: __DEV__,
   refresh: async ({ refreshToken, signal }) => {
     const response = await fetch(`${API}/auth/refresh`, {
       method: "POST",
@@ -115,11 +127,48 @@ export async function signInWithPassword(username: string, password: string) {
 }
 ```
 
-## 2. Gate the root layout
+[Turn on debug logs](#debugging) says what `debug` adds on Expo.
+
+## 2. Add the unavailable screen
+
+Sometimes there's a saved session that can't be used: a refresh failed,
+often because the device is offline, or the keychain couldn't be read. Access
+is then `unavailable`, and the gate you add in the next step shows this
+screen in place of the app. It receives the error and a `retry` function:
+
+```tsx title="src/unavailable.tsx"
+import { Button, Text, View } from "react-native";
+
+import type { UnavailableProps } from "@monarcode/session-kit/expo";
+
+import { auth } from "./auth";
+
+export function Unavailable({ error, retry }: UnavailableProps) {
+  return (
+    <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
+      <Text accessibilityRole="header">Can't reach your account</Text>
+      <Text>{error?.message ?? "Check your connection and try again."}</Text>
+      <Button title="Try again" onPress={retry} />
+      {/* Works offline: it clears the session on this device. */}
+      <Button
+        title="Sign out"
+        onPress={() => void auth.signOut().catch(() => {})}
+      />
+    </View>
+  );
+}
+```
+
+Without an `unavailable` screen, the gate hides the splash screen and throws
+the error to the root layout's `ErrorBoundary` instead. That boundary's
+`retry` only renders again, so have it call `auth.retry()` too, as
+[`SessionGateProps`](/docs/reference/expo#sessiongateprops) explains.
+
+## 3. Gate the root layout
 
 `SessionGate` goes inside `AuthProvider`, around the root navigator. Guard the
-screens with `Stack.Protected`. Signed-in users see the `(app)` group, and
-everyone else sees `login`. Register the client's type here, so the hooks
+screens with `Stack.Protected`: signed-in users see the `(app)` group, and
+everyone else sees `login`. Register the client's type here too, so the hooks
 from `@monarcode/session-kit/react` carry your user:
 
 ```tsx title="app/_layout.tsx"
@@ -168,29 +217,20 @@ function RootStack() {
 ```
 
 `RootStack` is its own component so that `useAuth` runs inside
-`AuthProvider`. The navigator mounts only once the session is restored, so the
-guards never see `initializing`.
+`AuthProvider`. `SessionGate` mounts the navigator only after the session is
+restored, so the guards never see `initializing`.
 
-If the first screen needs more than the session, such as fonts, pass `ready`.
-The splash screen then stays up until both are done. Count a failed load as
-done, or the splash screen never hides:
+If the first screen needs more than the session, such as fonts, pass `ready`
+as well. The splash screen then stays up until both are done. Count a failed
+load as done, or the splash screen never hides: with Expo Font's `useFonts`,
+pass `ready={fontsLoaded || fontError !== null}`.
+[`SessionGateProps`](/docs/reference/expo#sessiongateprops) describes `ready`.
 
-```tsx
-const [fontsLoaded, fontError] = useFonts(fonts);
-
-<SessionGate
-  ready={fontsLoaded || fontError !== null}
-  unavailable={(props) => <Unavailable {...props} />}
->
-  <RootStack />
-</SessionGate>;
-```
-
-## 3. Keep deep links
+## 4. Keep deep links
 
 `Stack.Protected` sends a link to a guarded screen to the first screen the
-user may see, so a signed-out user who opens `myapp://profile` lands on the
-sign-in screen and the link is lost. `deepLinkHandler` keeps it, and
+user may see. So a signed-out user who opens `myapp://profile` lands on the
+sign-in screen, and the link is lost. `deepLinkHandler` keeps the link, and
 `SessionGate` opens it after the sign-in. Expo Router calls
 `redirectSystemPath` with every URL that opens the app, before routing:
 
@@ -202,12 +242,13 @@ import { auth } from "../src/auth";
 export const redirectSystemPath = deepLinkHandler(auth);
 ```
 
-It returns the path unchanged. The link still goes to Expo Router, which
+It returns the path unchanged, so the link still goes to Expo Router, which
 shows it right away when the user is signed in. If your `redirectSystemPath`
 does more, such as rewriting old links, call `rememberDeepLink(auth, path)`
-in it instead.
+in it instead. [How deep links are kept](#how-deep-links-are-kept) has the
+rules.
 
-## 4. Add the sign-in screen
+## 5. Add the sign-in screen
 
 The sign-in screen calls `signInWithPassword` from `src/auth.ts`:
 
@@ -255,15 +296,16 @@ export default function Login() {
 }
 ```
 
-Don't navigate after `signIn`. Once the user is signed in, `Stack.Protected`
-removes the sign-in screen, and a `router.replace` of your own would race the
-deep link `SessionGate` opens.
+The guards already decide where a signed-in user belongs, so the screen
+doesn't navigate after `signIn`. After the user signs in, `Stack.Protected`
+removes the sign-in screen. A `router.replace` of your own would race the
+deep link that `SessionGate` opens.
 
-## 5. Add the signed-in screens
+## 6. Add the signed-in screens
 
-Screens inside the guarded group read the user with `useAuth`, and call the API
-with `authFetch`, which attaches the access token and refreshes after a 401. To
-use axios or another HTTP client instead, see
+Screens inside the guarded group read the user with `useAuth`. They call the
+API with `authFetch`, which adds the access token and refreshes after a 401.
+To use axios or another HTTP client instead, see
 [Other HTTP clients](/docs/client/other-http-clients). The group's layout is a
 plain stack:
 
@@ -351,377 +393,129 @@ export default function Profile() {
 }
 ```
 
-## 6. Show unavailable access
+## 7. Check the app
 
-Access is `unavailable` when the session exists but can't be used: a refresh
-failed, often because the device is offline, or the keychain couldn't be
-read. `SessionGate` then renders `unavailable` instead of the navigator:
-
-```tsx title="src/unavailable.tsx"
-import { Button, Text, View } from "react-native";
-
-import type { UnavailableProps } from "@monarcode/session-kit/expo";
-
-import { auth } from "./auth";
-
-export function Unavailable({ error, retry }: UnavailableProps) {
-  return (
-    <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
-      <Text accessibilityRole="header">Can't reach your account</Text>
-      <Text>{error?.message ?? "Check your connection and try again."}</Text>
-      <Button title="Try again" onPress={retry} />
-      {/* Works offline: it clears the session on this device. */}
-      <Button
-        title="Sign out"
-        onPress={() => void auth.signOut().catch(() => {})}
-      />
-    </View>
-  );
-}
-```
-
-Without `unavailable`, `SessionGate` hides the splash screen and throws the
-error to the root layout's `ErrorBoundary`. The boundary's `retry` only
-renders again, and a failed refresh stays failed until `auth.retry()`, so
-have the boundary call both.
-
-To check the app:
+Run the app, and check each part of the session:
 
 1. Sign in. The home screen shows your name. Open the profile to see your
    email.
 2. Close the app and open it again. The splash screen stays up until the
    session is restored, then the home screen shows.
 3. Sign out. The sign-in screen shows.
-4. Signed out, open `myapp://profile`. On the iOS Simulator, run
+4. While signed out, open `myapp://profile`. On the iOS Simulator, run
    `xcrun simctl openurl booted myapp://profile`. In Expo Go, open
-   `exp://<host>:8081/--/profile` instead. Sign in. The profile screen opens.
+   `exp://HOST:8081/--/profile` instead, and replace `HOST` with the address
+   Expo CLI prints for Metro. Sign in. The profile screen opens.
+
+That's the whole app. The rest of this page explains what `secureStorage()`,
+`SessionGate` and the deep link handler do on the device.
 
 ## Secure storage
 
 [`secureStorage()`](/docs/reference/expo#securestorage) saves the session
-with `expo-secure-store`, in the iOS keychain and in Keystore-encrypted
-storage on Android. A session over 2048 bytes, which some iOS releases refuse
-to store in one value, is split across several keys, up to 128 KB. By
-default, a reinstalled app starts signed out. So does an app whose saved
-session Android can't decrypt, as after a backup is restored onto another
-device. Its options are in
+with `expo-secure-store`: in the iOS keychain, and in storage encrypted with
+an Android Keystore key on Android. A session too large for one SecureStore
+value is split across several keys, up to 128 KB, as its reference explains.
+Its options are in
 [`SecureStorageOptions`](/docs/reference/expo#securestorageoptions).
 
-Two things depend on your app:
+### Reinstalls and Android backups
 
-- **Background refreshes.** By default, iOS lets the app read the keychain
-  only while the device is unlocked. While the keychain can't be read, the
-  session is `unavailable`, never signed out. An app that refreshes in a
-  background task while the device is locked needs
-  `secureStorage({ keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK })`.
-- **Android backups.** The `expo-secure-store` config plugin from
-  [Installation](#installation) keeps the session out of Auto Backup.
+iOS keeps keychain items after the app is deleted. So by default,
+`secureStorage()` removes a session that an earlier install left, and a
+reinstalled app starts signed out. To restore that session instead, pass
+`secureStorage({ clearOnReinstall: false })`.
 
-## SessionGate
+On Android, Auto Backup can restore the app's data onto another device. The
+session can't be decrypted there, so the app starts signed out, and the
+unreadable session is removed. The `expo-secure-store` config plugin from
+[Installation](#installation) keeps the session out of backups, with two
+conditions:
+
+- It applies in a development or release build. Expo Go doesn't apply config
+  plugins.
+- If your app already has its own backup rules, the plugin leaves them as
+  they are and prints a warning. Exclude SecureStore's data in your rules
+  yourself, as
+  [Expo's SecureStore docs](https://docs.expo.dev/versions/latest/sdk/securestore/)
+  explain.
+
+### Keychain access on iOS
+
+By default, iOS lets the app read the keychain only while the device is
+unlocked. What happens when the keychain is locked depends on what's
+reading it:
+
+- **When the app starts**, a keychain that can't be read leaves the session
+  `unavailable`, not signed out. `SessionGate` tries again when the app
+  returns to the foreground.
+- **When a refresh runs**, it can't save the new tokens to a locked keychain,
+  and that signs the user out.
+
+An app that refreshes in a background task while the device is locked needs
+`secureStorage({ keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK })`,
+with `SecureStore` imported from `expo-secure-store`.
+
+## What SessionGate does
 
 [`SessionGate`](/docs/reference/expo#sessiongate) adds what `Stack.Protected`
-lacks. It holds the splash screen while the session is restored, shows
-`unavailable` when access can't be used, checks the session again when the
-app returns to the foreground, and opens deep links kept for after sign-in.
+lacks:
+
+- It holds the splash screen while the session is restored, and until
+  `ready`.
+- It shows `unavailable` when access can't be used.
+- It checks the session again when the app returns to the foreground, since
+  timers don't run while iOS suspends the app.
+- It opens the deep link kept for after the sign-in.
+
 While the session is locked, it renders the navigator, so your guards can
 show an unlock screen. When one account replaces another without a sign-out
 between them, it remounts the navigator, so no screen keeps the previous
-account's state. [`SessionGateProps`](/docs/reference/expo#sessiongateprops)
-covers `ready` and `unavailable`.
+account's state.
 
-## Deep links
+## How deep links are kept
 
 [`deepLinkHandler`](/docs/reference/expo#deeplinkhandler) keeps one link at a
-time, and `SessionGate` opens it after the next sign-in or unlock. A link to
-the root or the sign-in screen is ignored, as is one that could leave the
-app. A link that arrives while the user is signed in is dropped, since Expo
-Router opens it as usual. A link to a screen anyone may see is dropped once
-that screen shows. If the app launched with it, it's dropped at the sign-in
-instead, unopened.
+time, and `SessionGate` opens it after the next sign-in or unlock. Some links
+aren't kept, or are dropped before then:
+
+- A link to the root or the sign-in screen is ignored, as is one that could
+  leave the app.
+- A link that arrives while the user is signed in is dropped, since Expo
+  Router opens it as usual.
+- A link to a screen anyone may see is dropped when that screen shows. If the
+  app launched with such a link, it's dropped at the sign-in instead,
+  unopened.
 
 If your sign-in screen isn't `/login`, pass
 `deepLinkHandler(auth, { loginPath: "/sign-in" })`.
 
 Where `Stack.Protected` takes a `redirectTo`, as in Expo SDK 58, it only
 chooses the screen a turned-away link goes to, such as `/login`. It doesn't
-keep the link, so `deepLinkHandler` is still what opens it after the sign-in.
+keep the link, so `deepLinkHandler` is still what opens it after the
+sign-in.
 
-There is no `?redirectTo=` parameter on Expo. The link waits in memory, not
-in the URL, and an app restart forgets it.
+There's no `?redirectTo=` parameter on Expo. The link waits in memory, not in
+the URL, and an app restart forgets it.
 
-## Debugging
+## Turn on debug logs [#debugging]
 
-Turn on the client's `debug` option to see what Session kit does in Metro's
-logs:
-
-```ts
-export const auth = createAuth({
-  // ...
-  debug: __DEV__,
-});
-```
-
-`SessionGate` and deep links report through the same option. They log why
-the splash screen is held (restoring, or waiting for `ready`), when it hides,
-and what happened to a remembered link. `secureStorage()` adds what only it
-can see, such as removing a session an earlier install left.
-[Debugging](/docs/configuration/debugging) covers what events leave out, and
-how to send them somewhere other than the console.
+The client in [step 1](#1-create-the-client) sets `debug: __DEV__`, so in
+development the app logs what Session kit does to Metro. `SessionGate` and the
+deep link handler report through the same option. They log why the splash
+screen is held (restoring, or waiting for `ready`), when it hides, and what
+happened to a remembered link. `secureStorage()` adds what only it can see,
+such as removing a session an earlier install left.
+[Debugging](/docs/configuration/debugging) covers what the logs leave out,
+and how to send them somewhere other than the console.
 
 ## Locking
 
-A returning user can be asked to unlock before the app opens: a
-"Welcome back" screen with Face ID, Touch ID, or a fingerprint, and the
-password as a fallback. With `locking`, a saved session restores as `locked`,
-with `user` and `sessionId` set and its tokens sealed by a key your app holds.
-[Locking](/docs/client/locking) covers how it behaves. This section is the
-Expo side.
-
-Keep a random key in a SecureStore item that needs biometrics to read, and
-seal the tokens with AES-GCM. SecureStore's biometric prompt needs a
-development build on a real device. Expo Go doesn't support it, and
-simulators don't ask for biometrics. On iOS, the `expo-secure-store` config
-plugin from [Installation](#installation) adds the Face ID permission. This
-example uses `@noble/ciphers` and `expo-crypto`, your app's dependencies, not
-Session kit's:
-
-```ts title="src/session-key.ts"
-import { Platform } from "react-native";
-
-import type { AuthLocking } from "@monarcode/session-kit";
-import { gcm } from "@noble/ciphers/aes.js";
-import {
-  bytesToHex,
-  bytesToUtf8,
-  hexToBytes,
-  utf8ToBytes,
-} from "@noble/ciphers/utils.js";
-import { getRandomBytes } from "expo-crypto";
-import * as SecureStore from "expo-secure-store";
-
-const KEY_ITEM = "session-key";
-// Whether the key was saved behind biometrics, so it's read the same way.
-const BIOMETRIC_ITEM = "session-key-biometric";
-
-function keyOptions(biometric: boolean): SecureStore.SecureStoreOptions {
-  return biometric
-    ? {
-        requireAuthentication: true,
-        authenticationPrompt: "Unlock your account",
-      }
-    : {};
-}
-
-// In memory from an unlock or a password sign-in until the app locks.
-let key: Uint8Array | undefined;
-
-/**
- * Saves the key behind the device's biometrics, or, on a device with none
- * enrolled, without them. On Android, saving shows the prompt.
- */
-async function saveKey(next: Uint8Array): Promise<void> {
-  const biometric = SecureStore.canUseBiometricAuthentication();
-  await SecureStore.setItemAsync(
-    KEY_ITEM,
-    bytesToHex(next),
-    keyOptions(biometric),
-  );
-  await SecureStore.setItemAsync(BIOMETRIC_ITEM, String(biometric));
-}
-
-/**
- * Reads the key, which shows the prompt when it needs biometrics. Resolves
- * `null` when no key was saved yet.
- */
-async function readKey(): Promise<string | null> {
-  const biometric = await SecureStore.getItemAsync(BIOMETRIC_ITEM);
-  if (biometric === null) return null;
-  const saved = await SecureStore.getItemAsync(
-    KEY_ITEM,
-    keyOptions(biometric === "true"),
-  );
-  // SecureStore reads `null` for a key that a change to the device's
-  // biometrics made unreadable.
-  if (saved === null) throw new Error("The session key can't be read");
-  return saved;
-}
-
-/**
- * Loads the key to unlock. Throws when the user cancels the prompt, or when
- * the device's biometrics changed and the key can't be read.
- */
-export async function loadKey(): Promise<void> {
-  const saved = await readKey();
-  if (saved) {
-    key = hexToBytes(saved);
-    return;
-  }
-  // A session saved before locking was added has no key yet. Make one: on
-  // iOS, saving doesn't prompt, so read it back to show the prompt.
-  const next = getRandomBytes(32);
-  await saveKey(next);
-  if (Platform.OS === "ios") await readKey();
-  key = next;
-}
-
-/**
- * Signs in with a new key, and saves it only once the sign-in succeeds: a
- * failed sign-in keeps the key that the saved session is sealed with.
- */
-export async function withNewKey<T>(signIn: () => Promise<T>): Promise<T> {
-  const previous = key;
-  const next = getRandomBytes(32);
-  key = next;
-  let result: T;
-  try {
-    result = await signIn();
-  } catch (error) {
-    if (key === next) key = previous;
-    throw error;
-  }
-  try {
-    await saveKey(next);
-  } catch (error) {
-    // The session works until the app closes; then the password unlocks it.
-    console.warn("Could not save the session key", error);
-  }
-  return result;
-}
-
-/** Forgets the key in memory, once `auth.lock()` has settled. */
-export function dropKey(): void {
-  key = undefined;
-}
-
-function loadedKey(): Uint8Array {
-  if (!key) throw new Error("The session key isn't loaded");
-  return key;
-}
-
-/** AES-256-GCM: a random 12-byte nonce, then the ciphertext, as hex. */
-export const sessionLocking: AuthLocking = {
-  seal(payload) {
-    const nonce = getRandomBytes(12);
-    const sealed = gcm(loadedKey(), nonce).encrypt(utf8ToBytes(payload));
-    return bytesToHex(nonce) + bytesToHex(sealed);
-  },
-  open(sealed) {
-    const bytes = hexToBytes(sealed);
-    const nonce = bytes.subarray(0, 12);
-    return bytesToUtf8(gcm(loadedKey(), nonce).decrypt(bytes.subarray(12)));
-  },
-};
-```
-
-A device with no biometrics enrolled can't save an item that needs them, so
-there the key is saved without them, and unlocking asks for nothing beyond
-the device's own lock screen. If your app needs more on those devices, sign
-out instead of locking.
-
-Pass it to the client, and sign in with a new key, so the new session is
-sealed with it:
-
-```ts
-export const auth = createAuth({
-  // ...
-  locking: sessionLocking,
-});
-
-export async function signInWithPassword(username: string, password: string) {
-  // ...
-  await withNewKey(() => auth.signIn({ accessToken, refreshToken, user }));
-}
-```
-
-Guard the screens with `isSignedIn` and `status`, since a locked session
-keeps its user. The unlock screen comes before the sign-in screen, so a
-locked app opens on it, and the sign-in screen stays open to a locked user
-for the password path:
-
-```tsx
-import { isSignedIn } from "@monarcode/session-kit";
-
-function RootStack() {
-  const signedIn = useAuth(isSignedIn);
-  const locked = useAuth((state) => state.status === "locked");
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={signedIn}>
-        <Stack.Screen name="(app)" />
-      </Stack.Protected>
-      <Stack.Protected guard={locked}>
-        <Stack.Screen name="welcome-back" />
-      </Stack.Protected>
-      <Stack.Protected guard={!signedIn}>
-        <Stack.Screen name="login" />
-      </Stack.Protected>
-    </Stack>
-  );
-}
-```
-
-The unlock screen reads the key, which shows the biometric prompt, then
-unlocks:
-
-```tsx title="app/welcome-back.tsx"
-import { useState } from "react";
-import { Button, Text, View } from "react-native";
-
-import { Link } from "expo-router";
-
-import { useAuth } from "@monarcode/session-kit/react";
-
-import { auth } from "../src/auth";
-import { loadKey } from "../src/session-key";
-
-export default function WelcomeBack() {
-  const name = useAuth((state) => state.user?.firstName);
-  const [failed, setFailed] = useState(false);
-
-  async function unlock() {
-    setFailed(false);
-    try {
-      await loadKey();
-      await auth.unlock();
-      // No navigation: Stack.Protected leaves this screen, and
-      // SessionGate opens the deep link the user was headed to.
-    } catch {
-      // Cancelled, or the biometrics changed: offer the password. A refresh
-      // that failed after unlocking leaves the session `unavailable`, which
-      // SessionGate shows instead.
-      if (auth.state.get().status === "locked") setFailed(true);
-    }
-  }
-
-  return (
-    <View style={{ flex: 1, justifyContent: "center", padding: 24, gap: 12 }}>
-      <Text>Welcome back{name ? `, ${name}` : ""}</Text>
-      <Button title="Unlock" onPress={() => void unlock()} />
-      {failed ? <Text accessibilityRole="alert">Could not unlock</Text> : null}
-      <Link href="/login">Use your password</Link>
-    </View>
-  );
-}
-```
-
-To lock again after some time in the background, lock when the app returns
-to the foreground, then drop the key:
-
-```ts
-let backgroundedAt: number | undefined;
-AppState.addEventListener("change", (next) => {
-  if (next === "background") backgroundedAt = Date.now();
-  else if (next === "active" && backgroundedAt !== undefined) {
-    if (Date.now() - backgroundedAt > 5 * 60_000)
-      void auth.lock().then(dropKey);
-    backgroundedAt = undefined;
-  }
-});
-```
-
-Call `dropKey()` after `auth.signOut()` too. While locked, `SessionGate`
-re-checks nothing on a return to the foreground, and requests through
-`authFetch` reject with `LOCKED` until the user unlocks.
+A returning user can be asked to unlock before the app opens: a "Welcome
+back" screen with Face ID, Touch ID or a fingerprint, and the password as a
+fallback. [Unlock with biometrics](/docs/setups/expo-locking) adds that to
+this guide's app, step by step. [Locking](/docs/client/locking) explains how
+a locked session behaves.
 
 ## Not supported
 
@@ -729,7 +523,8 @@ re-checks nothing on a return to the foreground, and requests through
 - **`requireAuthentication`.** `secureStorage()` doesn't use SecureStore's
   biometric prompt. A session that refreshes on its own can't ask for a face
   or fingerprint on every read and write. Keep a key behind the prompt
-  instead, and seal the session with it, as [Locking](#locking) shows.
+  instead, and seal the session with it, as
+  [Unlock with biometrics](/docs/setups/expo-locking) shows.
 - **Network status.** Session kit doesn't watch connectivity. When your app
   learns the device is back online, for example from
   `@react-native-community/netinfo`, call `auth.retry()`, or the `retry` that
@@ -737,7 +532,10 @@ re-checks nothing on a return to the foreground, and requests through
 
 ## Next steps
 
-- [Using the client](/docs/client): updating the user, signing out, and the
+- [Unlock with biometrics](/docs/setups/expo-locking): ask a returning user
+  for Face ID or a fingerprint before the app opens.
+- [Using the client](/docs/client): update the user, sign out, and the
   client's other methods.
-- [Locking](/docs/client/locking): how a locked session behaves.
+- [Expo reference](/docs/reference/expo): every option of `secureStorage`,
+  `SessionGate` and the deep link handler.
 - [Effect and effetch](/docs/effect): the same client as an Effect service.

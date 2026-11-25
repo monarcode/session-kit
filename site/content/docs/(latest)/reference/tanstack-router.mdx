@@ -3,11 +3,8 @@ title: "TanStack Router"
 description: "Route guards and router wiring for TanStack Router."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/tanstack-router";
-```
-
-Guide: [TanStack Router](/docs/setups/tanstack-router).
+Import these from `@monarcode/session-kit/tanstack-router`. To set it up, see
+[TanStack Router](/docs/setups/tanstack-router).
 
 ## Functions
 
@@ -15,21 +12,43 @@ Guide: [TanStack Router](/docs/setups/tanstack-router).
 
 Starts auth for a Router whose context holds the client as `auth`. It restores the session, runs expiry timers, follows other tabs, and runs guards such as `requireSession` again when the session changes. Call it once, beside the Router.
 
+When the session changes, it also clears the Router's cached and preloaded route data, so one account's data never shows for the next.
+
+It returns a function that stops. Calling it again for the same Router returns that same function.
+
+Throws `INVALID_OPTIONS` when the Router's context has no client as `auth`.
+
+On a server, such as when TanStack Start renders its SPA shell, it does nothing. The shell keeps the `initializing` state, which shows your pending UI.
+
 ### redirectIfSignedIn
 
 Guards your sign-in page in `beforeLoad`, so a signed-in user goes straight to `redirectTo`, made safe with `safeReturnTo`.
+
+If the session can't be read, such as after a failed refresh or while locked, the sign-in page shows, so the user can sign in again. A `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
 
 ### requireSession
 
 Guards a route in `beforeLoad`, so only signed-in users get through. They get `{ session }` in route context, typed and never `null`, with no tokens in it.
 
+Signed-out users go to `loginPath`, with `?redirectTo=` set to where they were going. A locked session counts as signed out, as locking is for native apps and the router adapters don't unlock.
+
+Other errors, such as `REFRESH_FAILED` after a failed refresh, are rethrown to the route's error component, which can offer `auth.retry()`. A `loginPath` that doesn't start with `/` rejects with `INVALID_OPTIONS`.
+
+Render the route's children with `SessionOutlet`, and call `connectAuth`, so the guard runs again when the session changes.
+
 ### useAuth
 
 Reads the current auth state of the client in Router context, or the part `selector` picks, and re-renders when it changes. With a selector, it re-renders only when that part changes.
 
+Typed by your registered Router, as [`useAuthClient`](#useauthclient) is. Throws `INVALID_OPTIONS` when Router context has no `auth`.
+
 ### useAuthClient
 
 Returns the auth client from Router context, where it's `auth`, for actions such as `signIn` and `signOut`. It needs no `AuthProvider`: `connectAuth` mounts the client.
+
+The client's type comes from your registered Router ([`RouterAuth`](#routerauth)). Router context is per request in TanStack Start, so this is safe during server rendering.
+
+Throws `INVALID_OPTIONS` when Router context has no `auth`.
 
 ## Components
 
@@ -37,11 +56,21 @@ Returns the auth client from Router context, where it's `auth`, for actions such
 
 Renders the child routes of a route guarded by `requireSession`, but only while the session it accepted is still the signed-in one.
 
+After a change, such as a sign-out or another account signing in, it shows `pending` until the guard has run again. A locked or `unavailable` session shows `pending` too, until the guard redirects or throws.
+
+Child routes remount for each account, so nothing from one stays mounted for the next. Token refreshes and profile updates keep them mounted.
+
+UI the route renders around the outlet, such as a sidebar, isn't guarded this way. Read the user there from state, where it may be `null`.
+
+Throws `INVALID_OPTIONS` when neither an `AuthProvider` nor Router context has a client.
+
 ## Types
 
 ### AuthRouter
 
 What [`connectAuth`](#connectauth) needs from a TanStack Router: the client in its context as `auth`, and the methods that run guards again and clear cached route data. A Router made by `createRouter` with `context: { auth }` fits.
+
+Use it to type a function that takes your Router.
 
 ### RedirectIfSignedInOptions
 

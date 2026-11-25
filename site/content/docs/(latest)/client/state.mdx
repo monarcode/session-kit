@@ -1,10 +1,20 @@
 ---
 title: State
-description: Read the client's state outside React, follow its changes, and know what each field holds.
+description: Read the client's state outside React, follow its changes, scope cached data to the session, and know what each field holds.
 ---
 
-`auth.state` holds what `useAuth` reads in components. Outside React, read it
-once with `get`, or follow it with `subscribe`:
+In a component, `useAuth` reads the state and re-renders when it changes.
+Code outside React, such as a logger, a cache or an analytics hook, reads the
+same state from `auth.state`. It holds who is signed in and where the session
+stands, never a token.
+
+This page shows how to read and follow the state, what each field holds, and
+how to keep one account's data away from the next.
+
+## Read and follow the state
+
+Read the state at any moment with `get`, and follow its changes with
+`subscribe`:
 
 ```ts title="src/status-log.ts"
 import { auth } from "./auth.js";
@@ -21,25 +31,109 @@ export function logStatus() {
 }
 ```
 
-`subscribe` reports later changes, not the current value. A listener that
-throws doesn't interrupt auth. Its error is rethrown asynchronously, where
-error reporting can catch it.
+`subscribe` calls the listener on each later change, not with the current
+state, so read the current state with `get` first, as `logStatus` does.
 
-The state holds these fields:
+A listener that throws doesn't interrupt the client. Its error is thrown
+again asynchronously, where your error reporting can catch it.
 
-| Field       | Holds                                                                                 |
-| ----------- | ------------------------------------------------------------------------------------- |
-| `status`    | Where the session stands. [How it works](/docs#how-it-works) lists each one.          |
-| `user`      | The signed-in user, or `null`. Checking `status` narrows it.                          |
-| `sessionId` | New on every sign-in, and stable across refreshes and profile updates.                |
-| `error`     | The latest failure, as an [`AuthError`](/docs/configuration/errors), or `null`.       |
-| `version`   | Changes when guards must run again. `connectAuth` and `useAuthRevalidation` watch it. |
+## What the state holds
 
-Two habits follow from these fields:
+The state has these fields:
 
-- **Scope private cached data to `sessionId`**, such as TanStack Query
-  results, so one account never sees another's.
-- **Check `status`, not `user`, to know whether access is usable.** A
-  [locked](/docs/client/locking) session keeps its user. `isSignedIn(state)`
-  is the check. It's `true` while `authenticated` or `refreshing`, and it
-  narrows `user`. `useAuth(isSignedIn)` reads it in a component.
+| Field       | Holds                                                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`    | Where the session stands, such as `authenticated` or `unavailable`. [How it works](/docs#how-it-works) lists each one.                 |
+| `user`      | The signed-in user, or `null`. Checking `status` tells TypeScript whether it's set.                                                    |
+| `sessionId` | The ID of this sign-in, or `null` when signed out. It's new on every sign-in, and stays the same across refreshes and profile updates. |
+| `error`     | The latest failure, as an [`AuthError`](/docs/configuration/errors), or `null`. The next successful change clears it.                  |
+| `version`   | A number that changes when route guards must check the session again. `connectAuth` and `useAuthRevalidation` watch it.                |
+
+`version` changes on a sign-in, a sign-out, a new user or a change of status.
+A token refresh doesn't change it, even while the status is `refreshing`, so
+guards don't run again for one.
+
+## Scope cached data to the session
+
+An account switch is a sign-out followed by a sign-in, and it can happen in
+another tab. Data cached for the first account must never show for the
+second. Because `sessionId` is new on every sign-in, it's the key to cache
+private data under.
+
+This cache keeps each session's orders under its `sessionId`, and drops them
+when the session ends:
+
+```ts title="src/orders-cache.ts"
+import { authFetch } from "./api.js";
+import { auth } from "./auth.js";
+
+const cache = new Map<string, Promise<unknown>>();
+
+// After a sign-out or an account switch, drop the old session's entries.
+auth.state.subscribe(({ sessionId }) => {
+  for (const id of cache.keys()) if (id !== sessionId) cache.delete(id);
+});
+
+async function fetchOrders(userId: number): Promise<unknown> {
+  const response = await authFetch(`auth/carts/user/${userId}`);
+  if (!response.ok) throw new Error(`Orders failed (${response.status})`);
+  return response.json();
+}
+
+export async function cachedOrders(): Promise<unknown> {
+  const session = await auth.getSession();
+  if (!session) return null;
+  let orders = cache.get(session.sessionId);
+  if (!orders) {
+    orders = fetchOrders(session.user.id);
+    cache.set(session.sessionId, orders);
+    // A failed load isn't kept, so the next call tries again.
+    orders.catch(() => cache.delete(session.sessionId));
+  }
+  return orders;
+}
+```
+
+The same idea applies to other caches:
+
+- **TanStack Query and similar libraries:** put `sessionId` in the key of
+  every private query, so each account gets its own entries.
+- **Components:** `SessionOutlet` and Expo's `SessionGate` remount the pages
+  under them when the account changes. For a layout outside them, such as a
+  sidebar, pass `key={sessionId}`, as the
+  [TanStack Router guide](/docs/setups/tanstack-router) shows.
+- **Slow work:** `auth.isCurrent(session)` checks that a session is still the
+  signed-in one before you use a result that took a while. See
+  [Sessions and credentials](/docs/client/sessions).
+
+## Check `status`, not `user`
+
+`user` is set while the session is `authenticated` or `refreshing`, and also
+while it's [locked](/docs/client/locking). A locked session can show who is
+signed in, but it can't make requests. To know whether the user has access,
+check `status`.
+
+`isSignedIn(state)` is that check. It's `true` while `authenticated` or
+`refreshing`, and it tells TypeScript that `user` is set:
+
+```ts title="src/greeting.ts"
+import { isSignedIn } from "@monarcode/session-kit";
+
+import { auth } from "./auth.js";
+
+export function greeting(): string {
+  const state = auth.state.get();
+  return isSignedIn(state) ? `Hi, ${state.user.firstName}` : "Please sign in";
+}
+```
+
+In a component, `useAuth(isSignedIn)` reads the same check.
+
+## Next steps
+
+- [Errors](/docs/configuration/errors): show `state.error` to the user, and
+  know which failures appear there.
+- [Sessions and credentials](/docs/client/sessions): ask who is signed in
+  from a loader, and wait for the saved session to be read.
+- [Core reference](/docs/reference/core#authstate): the `AuthState` type and
+  each status.

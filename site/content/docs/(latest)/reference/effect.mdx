@@ -3,17 +3,20 @@ title: "Effect"
 description: "The session as an Effect service."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/effect";
-```
-
-Guide: [Effect and effetch](/docs/effect).
+Import these from `@monarcode/session-kit/effect`. To set it up, see
+[Effect and effetch](/docs/effect).
 
 ## Classes
 
 ### Auth
 
 Your auth client as an Effect service. Its Effects read the session, get an access token for API calls, sign in and out, update the user, and stream state changes.
+
+Provide it with `Auth.layer`. Register your client's type in the main entry point's `Register`, so the Effects carry your user.
+
+Each Effect fails with an [`AuthFailure`](#authfailure) whose `code` is the client's `AuthErrorCode`. An Effect dies on misuse (`INVALID_OPTIONS`).
+
+The layer doesn't mount the client. `AuthProvider`, `SessionGate` or the router adapters do, or call `auth.mount()` yourself. `lock()` and `unlock()` stay on the client. Wrap their errors with `Auth.fromAuthError`.
 
 ### AuthFailure
 

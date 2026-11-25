@@ -597,3 +597,73 @@ test("axios can take authFetch through its fetch adapter", async () => {
 	await assert.rejects(http.get("me"), wraps("UNAUTHENTICATED"));
 	assert.equal(sent.length, 3);
 });
+
+/** A response as a `fetch` that followed a redirect returns it. */
+function redirectedResponse(url: string, flagged: boolean) {
+	const response = new Response("secret", { status: 200 });
+	Object.defineProperty(response, "url", { value: url });
+	Object.defineProperty(response, "redirected", { value: flagged });
+	return response;
+}
+
+test("a redirect that fetch followed anyway rejects, as on older React Native", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const inits: (RequestInit | undefined)[] = [];
+	const responses = [
+		redirectedResponse("https://elsewhere.example/me", false),
+		redirectedResponse("https://api.example.com/login", true),
+		redirectedResponse("https://api.example.com/me", false),
+	];
+	setGlobal("fetch", async (_request: Request, init?: RequestInit) => {
+		inits.push(init);
+		return responses.shift();
+	});
+	const request = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
+	await assert.rejects(request("/me"), TypeError);
+	await assert.rejects(request("/me"), TypeError);
+	// The same URL, less the fragment, isn't a redirect.
+	assert.equal((await request("/me#profile")).status, 200);
+	// Expo's `fetch` reads the redirect mode only from `init`.
+	assert.deepEqual(
+		inits.map((init) => init?.redirect),
+		["error", "error", "error"],
+	);
+});
+
+test("the redirect check ignores how the platform spells the same URL", async () => {
+	const auth = client();
+	await auth.signIn(input());
+	const responses: unknown[] = [
+		redirectedResponse(
+			"https://api.example.com/orders?filter%5Bstatus%5D=open",
+			false,
+		),
+		redirectedResponse("https://api.example.com/caf%C3%A9", false),
+		// A test fake that isn't a `Response` and has no `url`.
+		{ status: 200, redirected: undefined, url: undefined },
+	];
+	const policies: string[] = [];
+	setGlobal("fetch", async (request: Request) => {
+		policies.push(request.referrerPolicy);
+		return responses.shift();
+	});
+	const request = createAuthFetch(auth, {
+		baseUrl: "https://api.example.com/",
+	});
+	assert.equal(
+		(
+			await request(
+				new Request("https://api.example.com/orders?filter[status]=open", {
+					referrerPolicy: "no-referrer",
+				}),
+			)
+		).status,
+		200,
+	);
+	assert.equal((await request("/café")).status, 200);
+	assert.equal((await request("/me")).status, 200);
+	assert.equal(policies[0], "no-referrer");
+});

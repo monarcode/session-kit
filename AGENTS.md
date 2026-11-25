@@ -169,7 +169,11 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   the JSDoc examples, in memory. Each page is listed in `documents` in
   `scripts/docs-pages.mjs`, which the site also reads for type hovers, and
   a page that builds on Getting started lists the files it uses as `shared`.
-  A new page with titled examples fails the check until it's listed.
+  A new page with titled examples fails the check until it's listed, and a
+  listed page without any fails too. Blocks with `app="name"` compile as
+  their own app, with the page's other files: use it for a second version of
+  a file, such as `src/main.tsx` for another mode, or for a file that can't
+  share the page's main app.
 - The README's quick start is its own small app: each block marked
   `<!-- file: src/auth.ts -->` is a file, compiled together like a page's
   (`README.md` in `documents`). A README example marked

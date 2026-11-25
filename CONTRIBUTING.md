@@ -21,7 +21,9 @@ example:
   resolution, the server-rendering guides under Bundler resolution, and the
   Expo guide under Bundler resolution without DOM types, as Metro resolves.
   `scripts/docs-pages.mjs` lists each page, for `scripts/check-docs.mjs`
-  and for the site's type hovers.
+  and for the site's type hovers. Blocks with `app="name"` compile as their
+  own app, with the page's other files, such as a second version of a file
+  for another mode.
 - **The reference.** The API reference pages are generated from the JSDoc
   by `pnpm run docs:reference`, and the check fails when they're out of
   date. Run it after changing a public export or its JSDoc.

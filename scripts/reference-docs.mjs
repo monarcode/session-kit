@@ -1,5 +1,5 @@
 // Writes the site's API reference from the JSDoc: a page per entry point,
-// listing each export with its summary, and the error codes page.
+// listing each export with its description, and the error codes page.
 //
 //   pnpm run docs:reference
 //
@@ -66,13 +66,13 @@ const PAGES = {
 	"./tanstack-start": [
 		"tanstack-start",
 		"TanStack Start",
-		"Server sessions and hydration for TanStack Start.",
+		"The browser's side of TanStack Start with server rendering: connecting the Router and loading the session.",
 		["TanStack Start", "/docs/setups/tanstack-start"],
 	],
 	"./tanstack-start/server": [
 		"tanstack-start-server",
 		"TanStack Start server",
-		"TanStack Start's server-side cookie access.",
+		"The server's side of TanStack Start: the request's session, the refresh middleware and the session route.",
 		["TanStack Start", "/docs/setups/tanstack-start"],
 	],
 	"./next": [
@@ -110,6 +110,23 @@ const GROUPS = ["Functions", "Components", "Classes", "Values", "Types"];
 const BUILT_BY_APPS = new Set(["AuthStorage", "CookieJar", "Tokens"]);
 
 /**
+ * Types an app calls methods on, so their entry lists each member with its
+ * own description, which says what it rejects with. Type tables can't: they
+ * drop members behind a conditional type, such as `updateUser`.
+ */
+const CALLED_BY_APPS = new Set([
+	"AuthClient",
+	"AuthLocking",
+	"Credentials",
+	"MirrorAuth",
+	"NextSession",
+	"RequestAuth",
+	"ServerAuth",
+	"Session",
+	"SessionGuard",
+]);
+
+/**
  * The reference pages, by path from the repository root. `program` covers
  * each entry point's source file; one is created when it's left out.
  */
@@ -141,6 +158,9 @@ export function renderReference(program = createProgram()) {
 				table:
 					/(Options|Props)$/.test(exported.name) ||
 					BUILT_BY_APPS.has(exported.name),
+				members: CALLED_BY_APPS.has(exported.name)
+					? membersOf(checker, declaration, names)
+					: [],
 			});
 		}
 		const importPath =
@@ -151,17 +171,16 @@ title: ${JSON.stringify(title)}
 description: ${JSON.stringify(description)}
 ---
 
-\`\`\`ts
-import { … } from "${importPath}";
-\`\`\`
-
-Guide: [${guide}](${guideUrl}).
+Import these from \`${importPath}\`. To set it up, see
+[${guide}](${guideUrl}).
 `;
 		for (const [group, items] of groups) {
 			if (items.length === 0) continue;
 			body += `\n## ${group}\n`;
 			for (const item of items) {
 				body += `\n### ${item.name}\n\n${item.summary}\n`;
+				if (item.members.length > 0)
+					body += `\nMembers:\n\n${item.members.join("\n")}\n`;
 				if (item.table)
 					body += `\n<auto-type-table cwd path="${types}" name="${item.name}" />\n`;
 			}
@@ -185,7 +204,8 @@ description: Every AuthErrorCode, what it means and when you'll see it.
 ---
 
 Every error from Session kit's own logic is an \`AuthError\`. Match on its
-\`code\`. The \`message\` is for people, and may change.
+\`code\`, because the \`message\` is for people and can change. For
+example, to check for a locked session:
 
 \`\`\`ts title="src/error-codes.ts"
 import { AuthError } from "@monarcode/session-kit";
@@ -211,7 +231,11 @@ How errors reach your app, and how to show them:
 			.map((line) => line.replace(/^\s*\*\s?/, ""))
 			.join("\n")
 			.trim();
-		body += `\n## ${member.literal.text}\n\n${toMarkdown(text)}\n`;
+		const paragraphs = text
+			.split(/\n\s*\n/)
+			.map(toMarkdown)
+			.join("\n\n");
+		body += `\n## ${member.literal.text}\n\n${paragraphs}\n`;
 	}
 	return body;
 }
@@ -258,12 +282,81 @@ function groupOf(name, declaration) {
 }
 
 /**
- * A declaration's first paragraph, with a list that it introduces. A link to
- * an export on the same page becomes an anchor; others become code spans.
+ * A declaration's description, then its `@see` lines. A link to an export on
+ * the same page becomes an anchor; others become code spans.
  */
 function summaryOf(node, names) {
 	const doc = ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc).at(-1);
-	const comment = doc?.comment;
+	const blocks = textOf(doc?.comment, names)
+		.trim()
+		.split(/\n\s*\n/);
+	for (const tag of doc?.tags ?? [])
+		if (tag.tagName.text === "see")
+			blocks.push(
+				`See ${textOf(tag.comment, names).trim().replace(/\.$/, "")}.`,
+			);
+	return blocks.filter(Boolean).map(toMarkdown).join("\n\n");
+}
+
+/**
+ * The members a type alias declares, as list items: `name` and its
+ * description. It follows intersections, both branches of a conditional, a
+ * mapped type's source and the module's own aliases, and lists the methods
+ * of a member that is itself an object, such as `credentials.get`.
+ */
+function membersOf(checker, declaration, names, prefix = "") {
+	const items = [];
+	const seen = new Set();
+	const visit = (node) => {
+		if (!node) return;
+		if (ts.isTypeAliasDeclaration(node)) return visit(node.type);
+		if (ts.isParenthesizedTypeNode(node) || ts.isTypeOperatorNode(node))
+			return visit(node.type);
+		if (ts.isIntersectionTypeNode(node)) return node.types.forEach(visit);
+		if (ts.isConditionalTypeNode(node)) {
+			visit(node.trueType);
+			return visit(node.falseType);
+		}
+		if (ts.isMappedTypeNode(node))
+			return visit(node.typeParameter.constraint);
+		if (ts.isTypeReferenceNode(node)) {
+			// `Readonly<{ … }>` and the module's own aliases, not other packages'.
+			if (node.typeName.getText() === "Readonly")
+				return visit(node.typeArguments?.[0]);
+			const symbol = checker.getSymbolAtLocation(node.typeName);
+			const alias = symbol?.declarations?.find(ts.isTypeAliasDeclaration);
+			if (alias && !alias.getSourceFile().isDeclarationFile) visit(alias);
+			return;
+		}
+		if (!ts.isTypeLiteralNode(node)) return;
+		for (const member of node.members) {
+			if (!member.name || !ts.isIdentifier(member.name)) continue;
+			const name = `${prefix}${member.name.text}`;
+			if (seen.has(name)) continue;
+			seen.add(name);
+			const doc = ts
+				.getJSDocCommentsAndTags(member)
+				.filter(ts.isJSDoc)
+				.at(-1);
+			const text = textOf(doc?.comment, names).trim();
+			items.push(
+				text
+					? `- \`${name}\`: ${text
+							.split(/\n\s*\n/)
+							.map(toMarkdown)
+							.join(" ")}`
+					: `- \`${name}\``,
+			);
+			if (member.type && ts.isTypeLiteralNode(member.type))
+				items.push(...membersOf(checker, member.type, names, `${name}.`));
+		}
+	};
+	visit(declaration);
+	return items;
+}
+
+/** JSDoc text, with each `{@link}` as an anchor or a code span. */
+function textOf(comment, names) {
 	let text = "";
 	for (const part of typeof comment === "string"
 		? [{ text: comment }]
@@ -279,19 +372,14 @@ function summaryOf(node, names) {
 				: `\`${name}\``;
 		} else text += part.text;
 	}
-	const blocks = text.trim().split(/\n\s*\n/);
-	const kept = [blocks[0] ?? ""];
-	// A first paragraph ending in a colon introduces a list.
-	if (/:\s*$/.test(blocks[0] ?? "") && /^\s*- /.test(blocks[1] ?? ""))
-		kept.push(blocks[1]);
-	return kept.map(toMarkdown).join("\n\n");
+	return text;
 }
 
 /** One block of JSDoc text as Markdown: list items keep their own lines. */
 function toMarkdown(block) {
 	const lines = [];
 	for (const line of block.split("\n").map((part) => part.trim())) {
-		if (lines.length === 0 || line.startsWith("- ")) lines.push(line);
+		if (lines.length === 0 || /^(- |\d+\. )/.test(line)) lines.push(line);
 		else lines[lines.length - 1] += ` ${line}`;
 	}
 	return lines.map(escapeMdx).join("\n");

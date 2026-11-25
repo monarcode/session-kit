@@ -143,7 +143,8 @@ export type ServerAuthOptions<Src extends UserSource> = {
 	 */
 	clientCredentials?: boolean | undefined;
 	/**
-	 * Logs what auth does on the server, like `createAuth`'s `debug` option.
+	 * Logs what Session kit does on the server, like `createAuth`'s `debug`
+	 * option.
 	 */
 	debug?: AuthDebug | undefined;
 };

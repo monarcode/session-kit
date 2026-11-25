@@ -3,30 +3,17 @@ title: Expiry
 description: How the client finds out when the access token expires, and which of your backend's answers to prefer.
 ---
 
-The client refreshes the access token before it expires, so it needs to know
-when that is. This page explains where it reads the expiry from, and which
-field to send.
+The client refreshes the access token before it expires, so it reads when
+that is from your tokens. Your backend can say so in a few ways: a lifetime
+in the sign-in response, a fixed time, or claims inside a JWT.
 
-## Where the expiry comes from
+This page shows where the client reads the expiry from, which field to send,
+and what happens when there's none.
 
-The client takes the expiry from the first of these that your tokens have:
+## Send the token's lifetime
 
-1. `expiresIn`, in seconds as in OAuth, or `expiresAt`, in Unix
-   milliseconds.
-2. A JWT access token's `exp` and `iat` claims, as a lifetime.
-3. A JWT access token's `exp` claim alone, as a time.
-
-Send `expiresIn` when your backend gives a lifetime, as most do. The client
-counts it from when it receives the tokens, so a wrong device clock doesn't
-matter. A JWT with `iat` works the same way. Send `expiresAt` only when your
-backend gives no lifetime.
-
-Pass `expiresIn` or `expiresAt`, not both. Tokens with both are an
-`INVALID_SESSION` error. See [`Tokens`](/docs/reference/core#tokens) for
-each field.
-
-To map an OAuth-style response to `Tokens`, pass `expires_in` as
-`expiresIn`:
+Most backends answer with a lifetime, such as OAuth's `expires_in`. Pass it
+as `expiresIn`, in seconds:
 
 ```ts title="src/tokens.ts"
 import type { Tokens } from "@monarcode/session-kit";
@@ -44,6 +31,28 @@ export const toTokens = (body: TokenResponse): Tokens => ({
 });
 ```
 
+The client counts `expiresIn` from when it receives the tokens, so a wrong
+device clock doesn't matter. Send `expiresAt`, in Unix milliseconds, only
+when your backend gives no lifetime.
+
+Pass `expiresIn` or `expiresAt`, not both. Tokens with both are an
+`INVALID_SESSION` error. See [`Tokens`](/docs/reference/core#tokens) for
+each field.
+
+## Where the expiry comes from
+
+When your tokens hold more than one of these, the client uses the first it
+finds:
+
+1. `expiresIn` or `expiresAt`.
+2. A JWT access token's `exp` and `iat` claims, as a lifetime, when `exp` is
+   later than `iat`.
+3. A JWT access token's `exp` claim alone, as a time.
+
+A JWT with `iat` works like `expiresIn`: the client counts the lifetime from
+when it receives the token. So if your access token is a JWT with both
+claims, you don't need to send an expiry at all.
+
 ## Fixed times and device clocks
 
 `expiresAt` and a JWT's `exp` alone are fixed times, which the client
@@ -55,4 +64,13 @@ it with `INVALID_SESSION`.
 
 When the client can't tell when the token expires, it uses the token until
 your API rejects it. [`authFetch`](/docs/client/requests) then refreshes after
-the 401.
+the 401. There's no early refresh, since there's nothing to count down to.
+
+## Next steps
+
+- [Refresh](/docs/configuration/refresh): see when the client refreshes, and
+  what it does when a refresh fails.
+- [Authenticated requests](/docs/client/requests): send the access token
+  with each request, and refresh after a 401.
+- [`Tokens` reference](/docs/reference/core#tokens): every field `signIn`
+  and your refresh callback take.

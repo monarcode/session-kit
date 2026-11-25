@@ -1,13 +1,10 @@
 ---
 title: "TanStack Start server"
-description: "TanStack Start's server-side cookie access."
+description: "The server's side of TanStack Start: the request's session, the refresh middleware and the session route."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/tanstack-start/server";
-```
-
-Guide: [TanStack Start](/docs/setups/tanstack-start).
+Import these from `@monarcode/session-kit/tanstack-start/server`. To set it up, see
+[TanStack Start](/docs/setups/tanstack-start).
 
 ## Functions
 
@@ -15,17 +12,37 @@ Guide: [TanStack Start](/docs/setups/tanstack-start).
 
 Refreshes the session before each request, while the response can still set the cookie. Pass it to Start's `createMiddleware().server()`, and list that middleware in `requestMiddleware` in `src/start.ts`.
 
+It refreshes access that expires within `within` seconds, so pages and server functions don't refresh while rendering, once a cookie can't be set. A failed refresh doesn't fail the request. Routes read the session as usual, and an error there reaches the route's error component.
+
+It sets `Cache-Control` to `private, no-store` on each response that doesn't set its own, unless you pass `cacheControl`.
+
+Start bundles `src/start.ts` for the browser too, and strips only what's inside `.server()` from it. Calling `refreshSession` there keeps `serverAuth` out of the browser bundle.
+
+Throws `INVALID_OPTIONS` when `within` is negative.
+
 ### sessionRoute
 
 Makes the handlers of your session route, a server route that answers `createMirrorAuth`'s `endpoint`: the browser client signs out and gets the access token through it. Pass them as the route's `server.handlers`.
+
+It answers this site's own pages only, as `sessionHandler` from `@monarcode/session-kit/server` explains, and serves the access token only when `createServerAuth` has `clientCredentials`. Start's `createCsrfMiddleware` filtered to server functions doesn't cover server routes, so this check does.
+
+`loadSession` reads the session while Start renders on the server, where the client can't call the route. Pass `createMirrorAuth` a `revalidate` server function too. Sign-in stays your own server function.
 
 ### startAuth
 
 The session of the request TanStack Start is handling (`RequestAuth`), with every `serverAuth` method and no cookie jar. Each call finds the current request, so make it once, at module level, beside `serverAuth`.
 
+Use it in server functions, request middleware, server routes, and `beforeLoad` and loaders while they run on the server. As [`startJar`](#startjar) explains, Start can't set a cookie once a page streams, so refresh before rendering, in request middleware with [`refreshSession`](#refreshsession).
+
+Outside a request, such as in the browser, its methods reject with `INVALID_OPTIONS`, and `isCurrent` and `state` throw it. Import it only from server code, as you do `serverAuth`.
+
 ### startJar
 
 The `CookieJar` for the request TanStack Start is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. [`startAuth`](#startauth) passes it for you. Use it in a server function, request middleware, a server route, or `beforeLoad` and loaders while they run on the server. Every call during one request returns the same jar.
+
+Start adds its cookies to the response, a redirect's included, but not once it has started streaming a page. A cookie set after that is lost, so refresh before rendering, in request middleware with [`refreshSession`](#refreshsession).
+
+Throws `INVALID_OPTIONS` outside a request, such as in the browser. Import it only from server code, such as a server function's handler, so Start's compiler leaves it out of the browser bundle.
 
 ## Types
 

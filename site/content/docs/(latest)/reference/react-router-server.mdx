@@ -3,11 +3,8 @@ title: "React Router server"
 description: "Server sessions in React Router's framework mode."
 ---
 
-```ts
-import { … } from "@monarcode/session-kit/react-router/server";
-```
-
-Guide: [React Router with server rendering](/docs/setups/react-router-ssr).
+Import these from `@monarcode/session-kit/react-router/server`. To set it up, see
+[React Router with server rendering](/docs/setups/react-router-ssr).
 
 ## Functions
 
@@ -15,29 +12,65 @@ Guide: [React Router with server rendering](/docs/setups/react-router-ssr).
 
 Server middleware that gives each request a `CookieJar`, found with [`routerJar`](#routerjar). It sets the cookies written to the jar on the response, redirects and error responses included.
 
+[`sessionMiddleware`](#sessionmiddleware) starts with it, so most apps don't list it themselves. To refresh your own way, list it first in the root route's `middleware`, so it wraps the rest. It needs React Router 8, or 7.9 and later with `future.v8_middleware`.
+
+The jar can set cookies until the response leaves the middleware, which first waits for a refresh under way, so its new tokens are saved. After that, such as while a loader's deferred data streams, it's read-only. Nothing is saved, and a call that needs a refresh rejects with `REFRESH_FAILED`. Refresh before rendering, with `refreshIfDue` in middleware.
+
 ### redirectIfSignedIn
 
 Makes the loader for your sign-in page, which sends a signed-in user on to the page's `redirectTo` search param, made safe with `safeReturnTo`. Signed-out users see the page. React Router adds the app's `basename` to the redirect.
+
+If the session can't be read, such as after a failed refresh, the sign-in page shows, so the user can sign in again.
+
+Throws `INVALID_OPTIONS` when a `loginPath` doesn't start with `/`.
+
+It needs [`sessionMiddleware`](#sessionmiddleware) in the root route.
 
 ### requireSession
 
 Makes server middleware that lets only signed-in users through to a route and the routes nested in it ([`SessionGuard`](#sessionguard)). Their loaders and actions get the session from its `session(context)`, never `null`.
 
+Signed-out users go to `loginPath`, with `?redirectTo=` set to the URL they asked for, for page loads and navigation in the browser alike. Other errors, such as `REFRESH_FAILED` after a failed refresh, reach the route's error boundary.
+
+List it in the guarded route's `middleware`, with [`sessionMiddleware`](#sessionmiddleware) in the root route. Server middleware runs during navigation in the browser only when a route has a loader to fetch, so give the guarded route a `loader`, even `() => null`.
+
+Throws `INVALID_OPTIONS` when `loginPath` or `basename` doesn't start with `/`.
+
+See [`redirectIfSignedIn`](#redirectifsignedin) for the sign-in page.
+
 ### routerAuth
 
 Returns a function that gives the session of the request React Router is handling (`RequestAuth`), with every `serverAuth` method and no cookie jar. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Make it once, at module level.
+
+Calling it throws `INVALID_OPTIONS` when the middleware hasn't run for `context`, as [`routerJar`](#routerjar) does.
 
 ### routerJar
 
 The `CookieJar` for the request React Router is handling, to pass to `serverAuth` from `@monarcode/session-kit/server`. [`routerAuth`](#routerauth) passes it for you. Call it with `context` in server middleware, loaders and actions, after [`cookieJarMiddleware`](#cookiejarmiddleware). Every call during one request returns the same jar.
 
+Throws `INVALID_OPTIONS` when the middleware hasn't run for `context`, such as in a client loader.
+
 ### sessionMiddleware
 
 The root route's server middleware, which gives each request a cookie jar and refreshes the session while the response can still set the cookie. Export it as the root route's `middleware`, or spread it first into a list of your own.
 
+It refreshes access that expires within `within` seconds, before any loader reads it. A failed refresh doesn't fail the request. Loaders read the session as usual, and an error there reaches the route's error boundary.
+
+It sets `Cache-Control` to `private, no-store` on each response that doesn't set its own. Pass `cacheControl` for another value, or `false` to leave every response as it is (`SessionMiddlewareOptions`).
+
+It's [`cookieJarMiddleware`](#cookiejarmiddleware) followed by the refresh, and needs React Router 8, or 7.9 and later with `future.v8_middleware`.
+
+Throws `INVALID_OPTIONS` when `within` is negative.
+
+See [`requireSession`](#requiresession) to let only signed-in users through.
+
 ### sessionRoute
 
 Makes the loader and action of your session route, a resource route that answers `createMirrorAuth`'s `endpoint`: the browser client reads the session, signs out and gets the access token through it. It needs [`sessionMiddleware`](#sessionmiddleware) in the root route.
+
+It answers this site's own pages only, as `sessionHandler` from `@monarcode/session-kit/server` explains, and serves the access token only when `createServerAuth` has `clientCredentials`. Sign-in stays your own action.
+
+Export the loader and action one by one, as the example does. React Router's build can't remove a destructured `export const { loader }` from the browser's bundle, and fails.
 
 ## Types
 
@@ -64,6 +97,10 @@ The loader and action [`sessionRoute`](#sessionroute) makes, for a resource rout
 ### SessionGuard
 
 Server middleware that lets only signed-in users through, made by [`requireSession`](#requiresession). Call `session(context)` in the loaders and actions it guards for the session, which is never `null` there.
+
+Members:
+
+- `session`: The request's session, once the guard has let it through. It's read when called, so a change by an action shows. Throws `INVALID_OPTIONS` when the guard hasn't run for this request, such as in a route outside the ones it guards. Throws `UNAUTHENTICATED` once an action signed out, and `REFRESH_FAILED` when the access token can no longer be refreshed.
 
 ### SessionGuardOptions
 

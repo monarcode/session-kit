@@ -3,29 +3,41 @@ title: React Router with server rendering
 description: Keep the session in an encrypted cookie in React Router's framework mode, where middleware refreshes it and loaders read it.
 ---
 
-In this guide, you keep the session in an encrypted cookie in React Router's
-framework mode. An action signs in, a session route answers the browser,
-middleware refreshes the tokens, and loaders read the session. The first
-response already shows the signed-in page, so the browser never shows a
-"Checking session…" state or a flash of signed-out content. Components get a
-small client that mirrors the session, and the
-[hooks](/docs/getting-started#4-read-the-session-in-react) work with it.
-[Server rendering](/docs/server-rendering) explains how the pieces fit.
+Your React Router app runs in framework mode and renders pages on the server,
+and you want the first response to show the signed-in page, with no "Checking
+session…" state and no flash of signed-out content. To do that, the server
+has to hold the session. In this guide, you keep it in an encrypted cookie:
+an action signs in, middleware refreshes the tokens, and loaders read the
+session.
 
-For framework mode with `ssr: false`, follow
-[React Router](/docs/setups/react-router#framework-mode-with-ssr-false)
-instead. A complete app is in
+Components get a small client that mirrors the session the server rendered,
+and the [hooks](/docs/getting-started#4-read-the-session-in-react) work with
+it. [Server rendering](/docs/server-rendering) explains how the pieces fit. A
+complete app is in
 [`examples/react-router-framework-ssr`](https://github.com/monarcode/session-kit/tree/main/examples/react-router-framework-ssr).
+
+If your app uses framework mode with `ssr: false`, follow
+[React Router](/docs/setups/react-router#framework-mode-with-ssr-false)
+instead.
 
 ## Before you begin
 
-- React Router's middleware: React Router 8, or 7.9 and later with
-  `future.v8_middleware`. The code on this page is for React Router 8. On
+- React Router 8, which needs Node.js 22.22 or newer and React 19.2.7 or
+  newer. See [Compatibility](/docs/reference/compatibility) for the other
+  versions.
+- With React 18, use React Router 7, version 7.9 or later, and turn its
+  middleware on with `future: { v8_middleware: true }` in
+  `react-router.config.ts`. The code on this page is for React Router 8. On
   7.14 and earlier, read the URL with `new URL(request.url)` where the code
   uses the `url` argument.
-- A secret of 32 or more random characters to seal the cookie, set as
-  `SESSION_SECRET` on the server. To make one, run
-  `openssl rand -base64 32`. `react-router build` doesn't need it.
+- A secret of 32 or more random characters to seal the cookie, such as the
+  output of `openssl rand -base64 32`, set as `SESSION_SECRET` on the server.
+  `react-router build` doesn't need it.
+  [The secret](/docs/server-rendering/server-sessions#the-secret) says how to
+  keep and rotate it.
+- The code signs in with [DummyJSON](https://dummyjson.com/docs/auth)'s test
+  backend, as [Getting started](/docs/getting-started) does. Replace its URLs
+  with your backend's.
 
 ## Installation
 
@@ -37,11 +49,13 @@ npm install @monarcode/session-kit react-router zod
 
 ## 1. Create the server engine
 
-`createServerAuth` from `@monarcode/session-kit/server` keeps the session in
-a cookie sealed with your `secret`, and refreshes it with your backend.
-`routerAuth` gives a request's session by its `context`, and
-`requireSession` makes the guard that protects routes in step 4. Create them
-in a `.server` module, so React Router refuses to bundle it for the browser:
+The server engine keeps the session in a cookie sealed with your secret, and
+refreshes the tokens with your backend. `createServerAuth` from
+`@monarcode/session-kit/server` makes it. From
+`@monarcode/session-kit/react-router/server`, `routerAuth` gives you a
+request's session by its `context`, and `requireSession` makes the guard
+that protects routes in step 4. Create them in a `.server` module, so React
+Router refuses to bundle it for the browser:
 
 ```ts title="app/auth/session.server.ts"
 import {
@@ -51,7 +65,7 @@ import {
 import { createServerAuth } from "@monarcode/session-kit/server";
 import { z } from "zod";
 
-const API = "https://api.example.com";
+export const API = "https://dummyjson.com";
 
 const userSchema = z.object({ id: z.number(), firstName: z.string() });
 const tokens = z.object({ accessToken: z.string(), refreshToken: z.string() });
@@ -67,14 +81,14 @@ export const serverAuth = createServerAuth({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken }),
     });
-    // The backend rejected the refresh token: sign out.
-    if (response.status === 401) return null;
+    // DummyJSON rejected the refresh token: sign out.
+    if (response.status === 401 || response.status === 403) return null;
     if (!response.ok) throw new Error(`Refresh failed (${response.status})`);
     return tokens.parse(await response.json());
   },
 });
 
-/** The request's session: `auth(context)` in middleware, loaders and actions. */
+/** The request's session: `auth(context)` in middleware, loaders, actions. */
 export const auth = routerAuth(serverAuth);
 
 /** Lets only signed-in users through to the routes it guards. */
@@ -101,24 +115,17 @@ export async function login(username: string, password: string) {
 }
 ```
 
-[Server sessions](/docs/server-rendering/server-sessions#the-cookie) covers
-its other options, rotating the secret, signing out, and the limits every
-setup shares.
+`auth(context)` returns the same session for every call with the same
+`context`, which React Router makes per request. [Server
+sessions](/docs/server-rendering/server-sessions) covers the engine's other
+options, the cookie, and signing out.
 
 ## 2. Add the root route
 
-The root route's middleware is `sessionMiddleware(serverAuth)` from
-`@monarcode/session-kit/react-router/server`. It reads each request's
-cookies and sets the ones written on the response, redirects included, so
-`auth(context)` gives the request's session in middleware, loaders and
-actions. Then it refreshes access that is about to expire, before any loader
-reads it, and marks each response that doesn't set its own
-`Cache-Control` as `private, no-store`, so shared caches keep none. A failed
-refresh doesn't fail the request. Loaders read the session as usual, and an
-error there reaches the route's error boundary.
-
-`createMirrorAuth` makes the client that components use, from the session
-the root loader read and the session route that step 3 adds:
+The root route does three jobs: its middleware refreshes the session, its
+loader reads it, and its component gives it to the browser's client. First,
+the client, which `createMirrorAuth` makes from the session the root loader
+read and the session route that step 3 adds:
 
 ```ts title="app/auth/client.ts"
 import { createMirrorAuth, type SessionOf } from "@monarcode/session-kit";
@@ -139,12 +146,7 @@ export function createAppAuth(session: AppSession | null) {
 export type AppAuth = ReturnType<typeof createAppAuth>;
 ```
 
-The root route runs the middleware and reads the session, and its component
-creates the client with `useMirrorAuth` from `@monarcode/session-kit/react`:
-once per request on the server, never at module level. It keeps the client
-and the server in step both ways. When the session changes in the browser,
-it calls `onChange`, here `revalidate` from `useRevalidator()`, which runs
-the loaders again. Register the client's type here, where you render
+Then the root route. Register the client's type here, where you render
 `AuthProvider`, so the hooks carry your user:
 
 ```tsx title="app/root.tsx"
@@ -156,6 +158,7 @@ import {
   Scripts,
   useLoaderData,
   useRevalidator,
+  useRouteError,
   type LoaderFunctionArgs,
 } from "react-router";
 
@@ -207,22 +210,120 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+/** Shown when the session can't be read, such as after a failed refresh. */
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const { revalidate } = useRevalidator();
+  return (
+    <div role="alert">
+      <p>{error instanceof Error ? error.message : "Something went wrong"}</p>
+      <button onClick={() => void revalidate()}>Retry</button>
+    </div>
+  );
+}
 ```
 
-`getSession` resolves `{ sessionId, user }`, never tokens, so it's safe to
-return from a loader. After an action signs in or out, the loader reads the
-new session and the client adopts it. After a sign-out in the browser, here
-or in another tab, `onChange` runs the loaders again, so the server's
-redirects run. The client-side guides add `useAuthRevalidation` for this.
-Here, `useMirrorAuth` does it.
+Here's what each part does:
 
-## 3. Sign in and out
+- **`sessionMiddleware(serverAuth)`** reads each request's cookies and sets
+  the ones written on the response, redirects included. That's what lets
+  `auth(context)` work in middleware, loaders and actions. It then refreshes
+  tokens that are about to expire, before any loader reads them, while the
+  response can still set the cookie.
+- **The loader** returns `getSession()`, which resolves
+  `{ sessionId, user }`, never tokens, so it's safe to send to the browser.
+- **`useMirrorAuth`** from `@monarcode/session-kit/react` creates the client
+  once per request on the server, never at module level, and keeps it in
+  step with the server both ways. After an action signs in or out, the loader
+  reads the new session and the client takes it. When the session changes in
+  the browser, here or in another tab, it calls `onChange`. Here that's
+  `revalidate` from `useRevalidator()`, which runs the loaders again, so the
+  server's redirects run. The client-side guides add `useAuthRevalidation`
+  for this, and here `useMirrorAuth` does it.
+- **`ErrorBoundary`** shows a session that can't be read, such as after a
+  failed refresh, and its button runs the loaders again.
+
+`sessionMiddleware` refreshes tokens that expire within 60 seconds. For
+tokens that live a minute or less, pass a smaller `within`, such as
+`sessionMiddleware(serverAuth, { within: 15 })`.
+[Refresh before rendering](/docs/server-rendering/server-sessions#refresh-before-rendering)
+says what happens when a refresh fails, and how the middleware sets
+`Cache-Control`.
+
+## 3. Add the session route
+
+The browser's client reads the session and signs out through a session
+route: a resource route in your app that the browser's client calls.
+`sessionRoute` from `@monarcode/session-kit/react-router/server` makes its
+loader and action:
+
+```ts title="app/routes/auth.session.ts"
+import { sessionRoute } from "@monarcode/session-kit/react-router/server";
+
+import { serverAuth } from "../auth/session.server";
+
+const route = sessionRoute(serverAuth);
+
+export const loader = route.loader;
+export const action = route.action;
+```
+
+Export the loader and action one by one, as this file does. React Router's
+build fails on a destructured `export const { loader, action }`.
+
+The session route answers your own site's pages only, so another site can't
+sign the user out: see [The session route](/docs/security#the-session-route).
+
+## 4. Protect routes
+
+Guard a layout route with `signedIn`, the middleware `requireSession` made.
+It runs on the server before any loader or action nested in it, which
+loaders on their own can't promise:
+
+```tsx title="app/routes/protected.tsx"
+import { Outlet } from "react-router";
+
+import { signedIn } from "../auth/session.server";
+
+export const middleware = [signedIn];
+
+// So navigation in the browser runs the middleware.
+export const loader = () => null;
+
+export default function Protected() {
+  return <Outlet />;
+}
+```
+
+A signed-out user who opens a page in the layout, such as `/orders`, lands on
+`/login?redirectTo=%2Forders`.
+During navigation in the browser, server middleware runs only when a route
+has a loader to fetch. The layout has one in case the routes nested in it
+don't.
+
+Pages nested in the layout read the user with the hooks, as any component
+does:
+
+```tsx title="app/routes/home.tsx"
+import { useAuth } from "@monarcode/session-kit/react";
+
+export default function Home() {
+  const user = useAuth((state) => state.user);
+  return <h1>Welcome, {user?.firstName}</h1>;
+}
+```
+
+A loader nested in the layout gets the session from
+`signedIn.session(context)`, which is never `null` there. [Call your
+API](#call-your-api) uses it.
+
+## 5. Sign in
 
 The sign-in route's action signs in with your backend and seals the result
-into the cookie. React Router 7.12 and later refuse route actions posted from
-other sites. On 7.9 to 7.11, refuse them yourself at the start of the
-action, as [The session route](/docs/security#the-session-route) explains.
-The form works before the page's scripts load:
+into the cookie. Its loader, `redirectIfSignedIn`, sends a user who is
+already signed in on to `redirectTo`. The form works before the page's
+scripts load:
 
 ```tsx title="app/routes/login.tsx"
 import {
@@ -238,7 +339,6 @@ import { redirectIfSignedIn } from "@monarcode/session-kit/react-router/server";
 
 import { auth, login, serverAuth } from "../auth/session.server";
 
-// A signed-in user goes on to `redirectTo`.
 export const loader = redirectIfSignedIn(serverAuth);
 
 export async function action({ request, context, url }: ActionFunctionArgs) {
@@ -281,145 +381,146 @@ export default function Login() {
 }
 ```
 
-A failed sign-in returns its message with status 400 for the form to show.
-React Router doesn't run the page's loaders again after a 4xx action.
+To try it, sign in as `emilys` with the password `emilyspass`. The action
+redirects to `redirectTo`, made safe with `safeReturnTo`. A failed sign-in
+returns its message with status 400, for the form to show, and React Router
+doesn't run the page's loaders again after a 4xx action.
 
-The browser's client reads the session and signs out through a session
-route, a resource route. `sessionRoute` from
-`@monarcode/session-kit/react-router/server` makes its loader and action:
+React Router 7.12 and later refuse route actions posted from other sites. On
+7.9 to 7.11, refuse them yourself at the start of the action: see
+[Check your own routes](/docs/security#check-your-own-routes).
 
-```ts title="app/routes/auth.session.ts"
-import { sessionRoute } from "@monarcode/session-kit/react-router/server";
+In this guide, the server signs in with your backend, so the user in the
+cookie comes from the backend. If the browser has to sign in with the backend
+itself, have the action take the tokens instead:
+[Hybrid setup](/docs/server-rendering/hybrid) shows how.
 
-import { serverAuth } from "../auth/session.server";
+## 6. Sign out
 
-const route = sessionRoute(serverAuth);
+The client's `signOut()` signs out on the server through the session route,
+which clears the cookie and calls your `revoke` option, if `createServerAuth`
+has one. It then signs out this tab and tells the others. `useMirrorAuth`
+runs the loaders again, so `signedIn` sends the user to the sign-in page.
+Put a button like this one on any page under the layout:
 
-export const loader = route.loader;
-export const action = route.action;
-```
+```tsx title="app/sign-out-button.tsx"
+import { useAuthClient } from "@monarcode/session-kit/react";
 
-Add it to `app/routes.ts` as `route("auth/session", "routes/auth.session.ts")`.
-Export the loader and action one by one, as `app/routes/auth.session.ts`
-does. React Router's build fails on a destructured
-`export const { loader, action }`. The route answers your
-own site's pages only, so another site can't sign the user out: see
-[Security](/docs/security).
-
-## 4. Protect routes
-
-Guard a layout route with `signedIn`, the middleware `requireSession` made.
-It runs on the server before any loader or action nested in it, which
-loaders on their own can't promise. Signed-out users go to `/login`, with
-`?redirectTo=` set to the page they asked for:
-
-```tsx title="app/routes/protected.tsx"
-import { Outlet } from "react-router";
-
-import { signedIn } from "../auth/session.server";
-
-export const middleware = [signedIn];
-
-// So navigation in the browser runs the middleware.
-export const loader = () => null;
-
-export default function Protected() {
-  return <Outlet />;
+export function SignOutButton() {
+  const auth = useAuthClient();
+  // A failed sign-out keeps the session, and shows in `state.error`.
+  return (
+    <button onClick={() => void auth.signOut().catch(() => {})}>
+      Sign out
+    </button>
+  );
 }
 ```
 
-A loader nested in it gets the session from `signedIn.session(context)`,
-which is never `null` there. Components read the user with the hooks as
-usual:
+Without `revoke`, a copy of the cookie made before sign-out still works: see
+[Sign-out](/docs/server-rendering/server-sessions#sign-out).
 
-```tsx title="app/routes/home.tsx"
-import { useLoaderData, type LoaderFunctionArgs } from "react-router";
+## 7. Register the routes
 
-import { signedIn } from "../auth/session.server";
+Last, add the routes to `app/routes.ts`. The sign-in route sits outside the
+layout, and the pages it protects sit inside:
 
-export function loader({ context }: LoaderFunctionArgs) {
-  return { name: signedIn.session(context).user.firstName };
-}
+```ts title="app/routes.ts"
+import {
+  index,
+  layout,
+  route,
+  type RouteConfig,
+} from "@react-router/dev/routes";
 
-export default function Home() {
-  const { name } = useLoaderData<typeof loader>();
-  return <h1>Welcome, {name}</h1>;
-}
+export default [
+  route("login", "routes/login.tsx"),
+  layout("routes/protected.tsx", [index("routes/home.tsx")]),
+  // The session route the browser's client calls.
+  route("auth/session", "routes/auth.session.ts"),
+] satisfies RouteConfig;
 ```
 
-In `app/routes.ts`, nest the routes it protects:
-`layout("routes/protected.tsx", [index("routes/home.tsx")])`. During
-navigation in the browser, server middleware runs only when a route has a
-loader to fetch, so the layout has one in case the routes nested in it don't.
-
-In this guide, the server signs in with your backend, so the user in the cookie
-comes from the backend. If the browser signs in with the backend itself, have
-the action take the tokens instead, as
-[Hybrid setup](/docs/server-rendering/hybrid) shows for TanStack Start.
+The sign-in route's path matters: `signedIn` sends signed-out users to
+`/login`. To use another path, pass `loginPath` to `requireSession`.
 
 ## Call your API
 
-Call your API with `createAuthFetch` from `@monarcode/session-kit/http`.
-Given the request's session, it sends the access token, refreshed first when
-it has expired. After a 401, it renews the token, saves it in the cookie, and
-sends a `GET` again:
+Your loaders and actions call your API with `createAuthFetch` from
+`@monarcode/session-kit/http`. Given the request's session, it sends the
+access token, refreshed first if it has expired. This page sits inside the
+layout, so its loader reads the user from `signedIn`:
 
 ```tsx title="app/routes/orders.tsx"
-import { redirect, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { useLoaderData, type LoaderFunctionArgs } from "react-router";
 
-import { loginHref } from "@monarcode/session-kit";
 import { createAuthFetch } from "@monarcode/session-kit/http";
 import { z } from "zod";
 
-import { auth } from "../auth/session.server";
+import { API, auth, signedIn } from "../auth/session.server";
+
+const orders = z.object({ carts: z.array(z.object({ id: z.number() })) });
 
 export async function loader({ context }: LoaderFunctionArgs) {
-  const session = auth(context);
-  // Outside the guarded layout: send the user to sign in, then back here.
-  if (!(await session.getSession()))
-    throw redirect(loginHref("/login", "/orders"));
-  const apiFetch = createAuthFetch(session, {
-    baseUrl: "https://api.example.com/",
-  });
-  const response = await apiFetch("orders");
+  const { user } = signedIn.session(context);
+  const authFetch = createAuthFetch(auth(context), { baseUrl: `${API}/` });
+  const response = await authFetch(`auth/carts/user/${user.id}`);
   if (!response.ok) throw new Error(`Orders failed (${response.status})`);
-  return z.array(z.object({ id: z.number() })).parse(await response.json());
+  return orders.parse(await response.json()).carts;
 }
 
 export default function Orders() {
-  const orders = useLoaderData<typeof loader>();
-  return <p>{orders.length} orders</p>;
+  const carts = useLoaderData<typeof loader>();
+  return <p>{carts.length} orders</p>;
 }
 ```
 
+Then add it inside the layout in `app/routes.ts`:
+
+```ts title="app/routes.ts" app="orders"
+import {
+  index,
+  layout,
+  route,
+  type RouteConfig,
+} from "@react-router/dev/routes";
+
+export default [
+  route("login", "routes/login.tsx"),
+  layout("routes/protected.tsx", [
+    index("routes/home.tsx"),
+    route("orders", "routes/orders.tsx"),
+  ]),
+  route("auth/session", "routes/auth.session.ts"),
+] satisfies RouteConfig;
+```
+
+When your API answers 401, `authFetch` gets a new access token and saves it in
+the cookie. It sends a `GET` or `HEAD` again with the new token, as
+[After a 401](/docs/client/requests#after-a-401) explains.
+
+A loader outside the layout has no `signedIn` to rely on. It can check
+`await auth(context).getSession()` itself, and throw
+`redirect(loginHref("/login", "/orders"))` when it's `null`. `loginHref` from
+`@monarcode/session-kit` builds `/login?redirectTo=%2Forders`, so the user
+comes back after signing in.
+
 With an HTTP client of your own, such as ky or axios, see
 [Other HTTP clients](/docs/client/other-http-clients). A client without a
-`fetch` option reads the token with `credentials.get()`.
+`fetch` option reads the token with `auth(context).credentials.get()`.
 
-To call the API from the browser too, with `createAuthFetch` or effetch's
-`sessionBearer`, opt in with `clientCredentials: true` in `createServerAuth`.
-The session route then serves the access token, and the client's
-`credentials` get it there. The browser keeps the access token in memory,
-never the refresh token; see
-[Server sessions](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
+To call your API from the browser too, turn on `clientCredentials` in
+`createServerAuth`: see
+[The access token in the browser](/docs/server-rendering/server-sessions#the-access-token-in-the-browser).
 The example app does this.
 
 ## Things to know
 
-- **Signing out ends the session only with `revoke`.** Without it, a copy of
-  the cookie made before sign-out still works: see
-  [Sign-out](/docs/server-rendering/server-sessions#sign-out).
-- **Refresh in middleware.** The request's session sets cookies until the
+- **Deferred data.** The request's session can set cookies until the
   response leaves `sessionMiddleware`, which first waits for a refresh under
-  way. A loader's deferred data that reads the session later, while the
-  page streams, can't set cookies: an expired token then rejects with
-  `REFRESH_FAILED`, since nothing new can be saved. `sessionMiddleware`
-  refreshes before that.
-- **One session per request.** `auth(context)` returns the same session for
-  every call with the same `context`, which React Router makes per request.
-- **Caching.** `sessionMiddleware` leaves a response that sets its own
-  `Cache-Control` as it is. Pass `cacheControl` to send another value, or
-  `{ cacheControl: false }` to leave every response as it is.
+  way. Deferred data that reads the session while the page streams can't
+  save anything, so the middleware refreshes before that: see
+  [Requests that can't set cookies](/docs/server-rendering/server-sessions#requests-that-cant-set-cookies).
 - **Guards with the same names.** `requireSession` and `redirectIfSignedIn`
   on this page come from `@monarcode/session-kit/react-router/server`.
   `@monarcode/session-kit/react-router` exports guards with the same names
@@ -430,17 +531,19 @@ The example app does this.
   loaders' and actions' redirects, but not to middleware's, so the guard adds
   it to its own. The client's `endpoint` includes it as well:
   `"/app/auth/session"`.
-- **Tabs.** Signing in or out in one tab reaches the others, which ask the
-  server again and run their loaders again. So does returning to a tab after
-  a while.
-- **More.** Several server instances, the cookie's size, and plain http
-  during development: see
+- **Other tabs.** Signing in or out in one tab reaches the others, which ask
+  the server for the session and run their loaders again: see
+  [How tabs stay in step](/docs/server-rendering#how-tabs-stay-in-step).
+- **Deploying.** Several server instances, the cookie's size, and plain http
+  during development are covered in
   [Server sessions](/docs/server-rendering/server-sessions).
 
 ## Next steps
 
-- [Server sessions](/docs/server-rendering/server-sessions): the cookie,
-  signing out, and the limits every server-rendered setup shares.
-- [Using the client](/docs/client): what the browser client can do.
-- [Effect on the server](/docs/effect#on-the-server): run Effects with a
+- [Server sessions](/docs/server-rendering/server-sessions): the cookie, the
+  secret, signing out, and the limits every server-rendered setup shares.
+- [Hybrid setup](/docs/server-rendering/hybrid): sign in from the browser
+  and call your API there, with the session still on the server.
+- [Using the client](/docs/client): what the browser's client can do.
+- [Use Effect on the server](/docs/effect/server): run Effects with a
   request's session.

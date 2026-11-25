@@ -6,6 +6,7 @@ export interface PageFile {
 	origin: string;
 	line: number;
 	path: string;
+	app?: string | undefined;
 	dom: boolean;
 	code: string;
 	fixture?: boolean | undefined;
@@ -21,12 +22,14 @@ export interface PageDocument {
 		| { from: string; files: string[]; directories?: string[] | undefined }
 		| undefined;
 	requires?: Record<string, string> | undefined;
+	appRequires?: Record<string, Record<string, string>> | undefined;
 }
 
 export const root: string;
 export const PAGES: string;
 export const MARKERS: { md: RegExp; mdx: RegExp };
 export const TITLE: RegExp;
+export const APP: RegExp;
 export const documents: PageDocument[];
 
 export function markedExamples(path: string, dom: boolean): PageFile[];
@@ -35,6 +38,10 @@ export function pageApp(
 	document: Pick<PageDocument, "path" | "dom" | "fixtures" | "shared">,
 	report: (message: string) => void,
 ): PageFile[];
+export function pageApps(
+	document: Pick<PageDocument, "path" | "dom" | "fixtures" | "shared">,
+	report: (message: string) => void,
+): Map<string, PageFile[]>;
 export function compilerSettings(
 	resolution: "NodeNext" | "Bundler",
 	dom: boolean,

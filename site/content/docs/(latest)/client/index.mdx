@@ -1,64 +1,79 @@
 ---
 title: Using the client
-description: The client's methods at a glance, for loaders, event handlers, request code, and anything else outside React.
+description: The client's methods at a glance, for loaders, event handlers and request code, and the options that change how it holds the user.
 ---
 
-This section is for code outside React components. Components read the
-session with hooks. Everything else, such as loaders, event handlers, and
-request code, calls the client that `createAuth` returned. These are its
-methods:
+Your components read the session with hooks, but some of your code runs
+outside React: a route loader, a click handler, the code that calls your API.
+That code talks to the client that `createAuth` returned, which these docs
+call `auth`.
 
-| Call                                              | What it does                                                                                  |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `auth.state.get()`, `.subscribe()`                | Reads the [state](/docs/client/state), or follows its changes.                                |
-| `auth.getSession()`                               | Resolves who is signed in, restoring or refreshing first, or `null`.                          |
-| `auth.signIn({ ...tokens, user })`                | Saves a new session, replacing any current one.                                               |
-| `auth.signOut()`                                  | Ends the session, clears storage, and tells other tabs.                                       |
-| `auth.updateUser(user)`                           | Replaces the user and keeps the session.                                                      |
-| `auth.refresh()`                                  | Refreshes now, even while the access token is usable.                                         |
-| `auth.retry()`                                    | Tries again after a failed refresh.                                                           |
-| `auth.isCurrent(session)`                         | Tells whether a session is still the signed-in one.                                           |
-| `auth.credentials.get()`, `.renew()`, `.reject()` | Resolves the access token, and replaces or ends it after a 401, for code that sends requests. |
-| `auth.lock()`, `auth.unlock()`                    | Locks and unlocks a saved session, with [`locking`](/docs/client/locking).                    |
-| `auth.mount()`                                    | Starts timers and tab sync. `AuthProvider` and the routers call it.                           |
+This section covers the client itself: the methods that code outside React
+calls, and two `createAuth` options that change how the client holds the
+user, reading it from the access token and locking. The examples build on the
+app from [Getting started](/docs/getting-started), where `auth` is the client
+and `authFetch` its `fetch`.
+
+## The client's methods
+
+Here's what each method does:
+
+| Call                                              | What it does                                                                                                                                                                 |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.state.get()`, `.subscribe()`                | Reads the [state](/docs/client/state), or follows its changes.                                                                                                               |
+| `auth.getSession()`                               | Resolves who is signed in, or `null`. It reads the saved session first if needed, and refreshes an access token that expired.                                                |
+| `auth.signIn({ ...tokens, user })`                | Saves a new session, replacing any current one.                                                                                                                              |
+| `auth.signOut()`                                  | Ends the session and clears the saved one. Other tabs sign out too, when the storage reports changes and `locking` is off.                                                   |
+| `auth.updateUser(user)`                           | Replaces the user and keeps the session. A client that reads the user from the access token doesn't have it.                                                                 |
+| `auth.refresh()`                                  | Refreshes now, even while the access token still works.                                                                                                                      |
+| `auth.retry()`                                    | Tries again after a refresh failed.                                                                                                                                          |
+| `auth.isCurrent(session)`                         | Checks whether a session is still the signed-in one.                                                                                                                         |
+| `auth.credentials.get()`, `.renew()`, `.reject()` | Resolves the access token, and replaces it or ends the session after a 401, for code that sends requests.                                                                    |
+| `auth.lock()`, `auth.unlock()`                    | Locks and unlocks a saved session, with the [`locking`](/docs/client/locking) option.                                                                                        |
+| `auth.mount()`                                    | Starts the expiry timers and following other tabs. `AuthProvider`, TanStack Router's `connectAuth`, React Router's `SessionOutlet` and Expo's `SessionGate` call it for you. |
 
 Each method's JSDoc says what it resolves and which `AuthError` it rejects
-with, so your editor shows the details where you use them.
+with, so your editor shows the details where you call it. The
+[`AuthClient` reference](/docs/reference/core#authclient) has the same
+text.
 
-With server rendering, the browser's client comes from `createMirrorAuth`. It
-has the same state, `getSession`, `signOut`, `isCurrent` and `credentials`,
-but no `lock`, `unlock` or `updateUser`. See
-[Server rendering](/docs/server-rendering).
+## With server rendering
 
-The examples in this section build on the app from
-[Getting started](/docs/getting-started). `auth` is its client, and
-`authFetch` its `fetch`.
+When the session lives on the server, the browser's client comes from
+`createMirrorAuth` instead. It reads the state and the session the same way,
+but it has no `lock`, `unlock` or `updateUser`, and its `signIn` and
+`credentials` need options of their own.
+[Server rendering](/docs/server-rendering) covers what it can do.
+
+## In this section
+
+Each page covers one job:
 
 <Cards>
   <Card
     title="State"
     href="/docs/client/state"
-    description="Read the state outside React, and what each field holds."
+    description="Read the state outside React, scope cached data to the session, and know what each field holds."
   />
   <Card
     title="Sessions and credentials"
     href="/docs/client/sessions"
-    description="Ask who is signed in, and keep the access token apart from the user."
+    description="Ask who is signed in, and keep the access token apart from code that only needs the user."
   />
   <Card
     title="Signing in and out"
     href="/docs/client/signing-in-and-out"
-    description="Save a new session, end it, and revoke its tokens."
+    description="Save a new session, end it in every tab, and revoke its tokens."
   />
   <Card
     title="Updating the user"
     href="/docs/client/updating-the-user"
-    description="Replace the user without ending the session."
+    description="Replace the user without ending the session, and handle each way it can fail."
   />
   <Card
     title="Authenticated requests"
     href="/docs/client/requests"
-    description="A fetch that sends the access token to one API, and refreshes on a 401."
+    description="A fetch that sends the access token to one API, and refreshes after a 401."
   />
   <Card
     title="Other HTTP clients"
@@ -76,3 +91,12 @@ The examples in this section build on the app from
     description="Ask a returning user to unlock, for example with biometrics, in native apps."
   />
 </Cards>
+
+## Next steps
+
+- [Sessions and credentials](/docs/client/sessions): ask who is signed in
+  from a loader or an event handler.
+- [Authenticated requests](/docs/client/requests): call your API with the
+  access token.
+- [Configuring the client](/docs/configuration): change how the client saves,
+  refreshes and reports errors.
