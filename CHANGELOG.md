@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-rc.3
+
+Fixes for Expo SDK 53 to 57 and for redirects on React Native, and a
+rewritten docs site. Session kit's API is unchanged.
 
 ### Fixed
 
@@ -36,8 +39,9 @@
 - The docs site is rewritten. Every page was checked against the source,
   and every code sample on it compiles, the setup guides' config files
   included. The sidebar is grouped into Get started, Setups, Guides, Going
-  further and Reference. Effect has three pages (`/docs/effect`, `/browser`
-  and `/server`), and Expo has an "Unlock with biometrics" guide
+  further and Reference. Effect has three pages (`/docs/effect`,
+  `/docs/effect/browser` and `/docs/effect/server`), and Expo has an
+  "Unlock with biometrics" guide
   (`/docs/setups/expo-locking`). Every old page URL still works. Some
   section anchors changed, such as the old `/docs/effect` steps; no link in
   the docs, the README or the examples points at one.
