@@ -36,12 +36,12 @@ export const SITE_URL =
 	typeof __SITE_URL__ === "string" ? __SITE_URL__ : PRODUCTION_URL;
 
 /**
- * A page's full URL, as the host serves it. Every page is prerendered to a
- * folder's `index.html`, so its URL ends in a slash, and the URL without one
- * redirects there.
+ * A page's full URL, as the host serves it: `/docs/installation`, the URL
+ * every link uses. The same URL with a trailing slash redirects there (see
+ * `vite.config.ts`).
  */
 export function pageUrl(path: string): string {
-	return SITE_URL + (path.endsWith("/") ? path : `${path}/`);
+	return SITE_URL + path;
 }
 
 /**
