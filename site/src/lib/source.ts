@@ -1,7 +1,9 @@
 import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import {
+	findPath,
 	flattenTree,
 	getPageTreeRoots,
+	visit,
 	type Folder,
 	type Item,
 	type Node,
@@ -199,4 +201,48 @@ export function pageSection(page: { url: string; title: string }): string[] {
 			return found.at(-1) === page.title ? found.slice(0, -1) : found;
 	}
 	return [];
+}
+
+/**
+ * The steps above a page: the breadcrumb trail search results show. Each
+ * folder it sits in, with the URL of the folder's first page, and the index
+ * page of a section the sidebar spreads into its parent, such as
+ * Reference. Sidebar separators aren't pages, so they're left out, and so
+ * is a step that is this page.
+ */
+export function pageFolders(url: string): { name: string; url: string }[] {
+	const path = findPath(
+		source.getPageTree().children,
+		(node) => node.type === "page" && node.url === url,
+	);
+	const steps = (path ?? []).flatMap((node) => {
+		if (node.type !== "folder" || node.root) return [];
+		const first = node.index ?? flattenTree(node.children)[0];
+		if (!first || first.url === url) return [];
+		return [{ name: String(node.name), url: first.url }];
+	});
+	const slugs = url.split("/").filter(Boolean).slice(1);
+	for (let depth = 1; depth < slugs.length; depth++) {
+		const page = source.getPage(slugs.slice(0, depth));
+		if (page && !steps.some((step) => step.url === page.url))
+			steps.push({ name: page.data.title ?? "", url: page.url });
+	}
+	const depth = (step: { url: string }) => step.url.split("/").length;
+	return steps.sort((a, b) => depth(a) - depth(b));
+}
+
+/**
+ * The name of the folder whose first page this is, such as "Server
+ * rendering" for its "Overview": the page's step in a breadcrumb trail.
+ */
+export function indexFolderName(url: string): string | undefined {
+	let name: string | undefined;
+	visit(source.getPageTree(), (node) => {
+		if (node.type !== "folder" || node.root) return;
+		const first = node.index ?? flattenTree(node.children)[0];
+		if (first?.url !== url) return;
+		name = String(node.name);
+		return "break";
+	});
+	return name;
 }

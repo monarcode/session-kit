@@ -13,7 +13,7 @@ import { Setups } from "@/components/landing/setups";
 import { Tour } from "@/components/landing/tour";
 import { baseOptions } from "@/lib/layout.shared";
 import { HOME_IMAGE_PATH } from "@/lib/og";
-import { pageHead, TAGLINE } from "@/lib/shared";
+import { pageHead, TAGLINE, websiteJsonLd } from "@/lib/shared";
 import { loadLanding } from "@/lib/tour";
 
 import { version } from "../../../package.json";
@@ -29,6 +29,7 @@ export const Route = createFileRoute("/")({
 			path: "/",
 			type: "website",
 			image: HOME_IMAGE_PATH,
+			jsonLd: [websiteJsonLd()],
 		}),
 	component: Home,
 });

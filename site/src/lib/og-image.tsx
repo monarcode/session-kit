@@ -21,7 +21,8 @@ import {
 } from "@/components/logo";
 
 import { IMAGE_AS_BASE64, OG_SIZE } from "./og";
-import { SITE_URL, TAGLINE } from "./shared";
+import { TAGLINE } from "./shared";
+import { PRODUCTION_URL } from "./site";
 
 // The site's tokens, from `site/DESIGN.md`.
 const INK = "#16171d";
@@ -51,8 +52,11 @@ const FONTS = [
 const SANS = "Geist Variable, Geist Ext";
 const MONO = { fontFamily: "Geist Mono Variable, Geist Mono Ext" } as const;
 
-/** The site's host, as a reader would type it. */
-const HOST = SITE_URL.replace(/^https?:\/\//, "");
+/**
+ * The site's host, as a reader would type it: the live site's on every
+ * build, so a preview draws the same images and fits the same text.
+ */
+const HOST = PRODUCTION_URL.replace(/^https?:\/\//, "");
 
 /**
  * The libraries the home image names, from the landing page's setups. React

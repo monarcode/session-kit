@@ -2,6 +2,7 @@ import { createGetUrl } from "fumadocs-core/source";
 
 import { charbox } from "./charbox";
 import { OG_SIZE } from "./og";
+import { PRODUCTION_URL } from "./site";
 
 export const docsRoute = "/docs";
 
@@ -22,8 +23,17 @@ export const codeThemes = {
  */
 export const TAGLINE = "Type-safe sessions for React";
 
-/** Where the site is served. Link previews need absolute URLs. */
-export const SITE_URL = "https://session-kit.monarcode.dev";
+/** Set by `vite.config.ts` (see `lib/site.ts`). */
+declare const __SITE_URL__: string | undefined;
+
+/**
+ * Where this build is served: the live site, or a preview's own address.
+ * Link previews, canonical URLs, the sitemap and `llms.txt` need full URLs.
+ * The MDX compiler loads this file outside Vite, without the build's
+ * value, so `typeof` checks for it before it's read.
+ */
+export const SITE_URL =
+	typeof __SITE_URL__ === "string" ? __SITE_URL__ : PRODUCTION_URL;
 
 /**
  * A page's full URL, as the host serves it. Every page is prerendered to a
@@ -48,6 +58,21 @@ export function imageMeta(path: string, alt: string) {
 	];
 }
 
+/** The site as a structured-data node, which every page's data is part of. */
+export function websiteNode() {
+	return {
+		"@type": "WebSite",
+		"@id": `${SITE_URL}/#website`,
+		name: "Session kit",
+		url: `${SITE_URL}/`,
+	};
+}
+
+/** The home page's structured data: the site itself. */
+export function websiteJsonLd() {
+	return { "@context": "https://schema.org", ...websiteNode() };
+}
+
 /** What {@link pageHead} needs to describe a page. */
 export interface PageHeadInput {
 	title: string;
@@ -60,13 +85,15 @@ export interface PageHeadInput {
 	markdown?: string | undefined;
 	/** The path of its link-preview image (see `lib/og.ts`). */
 	image?: string | undefined;
+	/** Its structured data, for search engines. */
+	jsonLd?: readonly object[] | undefined;
 }
 
 /**
- * A page's head: its title and description, for the browser, search
- * engines and link previews, with the canonical URL each of them should
- * use. Full URLs throughout, since these are read away from the site, and
- * `session-kit.pages.dev` serves the same pages.
+ * A page's head: its title, description and structured data, for the
+ * browser, search engines and link previews, with the canonical URL each of
+ * them should use. Full URLs throughout, since these are read away from
+ * the site, and `session-kit.pages.dev` serves the same pages.
  */
 export function pageHead(page: PageHeadInput) {
 	const url = pageUrl(page.path);
@@ -80,6 +107,12 @@ export function pageHead(page: PageHeadInput) {
 			{ property: "og:type", content: page.type },
 			...(page.image ? imageMeta(page.image, page.title) : []),
 		],
+		// Written into the page as is, so `<` is escaped: a string can't end
+		// the script.
+		scripts: (page.jsonLd ?? []).map((data) => ({
+			type: "application/ld+json",
+			children: JSON.stringify(data).replace(/</g, "\\u003c"),
+		})),
 		links: [
 			{ rel: "canonical", href: url },
 			...(page.markdown

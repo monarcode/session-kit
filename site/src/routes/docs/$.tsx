@@ -19,14 +19,17 @@ import { useMDXComponents } from "@/components/mdx";
 import { baseOptions } from "@/lib/layout.shared";
 import { pageImagePath } from "@/lib/og";
 import {
+	docsRoute,
 	getPageMarkdownUrl,
 	gitConfig,
 	LATEST,
 	latestLabel,
 	pageHead,
+	pageUrl,
 	versionOfPath,
+	websiteNode,
 } from "@/lib/shared";
-import { docs, source } from "@/lib/source";
+import { docs, indexFolderName, pageFolders, source } from "@/lib/source";
 
 export const Route = createFileRoute("/docs/$")({
 	component: Page,
@@ -45,6 +48,39 @@ export const Route = createFileRoute("/docs/$")({
 			type: "article",
 			markdown: loaderData.markdownUrl,
 			image: pageImagePath(loaderData.slugs),
+			jsonLd: [
+				{
+					"@context": "https://schema.org",
+					"@type": "TechArticle",
+					headline: loaderData.title,
+					description: loaderData.description,
+					url: pageUrl(loaderData.url),
+					inLanguage: "en",
+					// Whole, since a reader may take one page at a time.
+					isPartOf: websiteNode(),
+				},
+				// Search results show the trail. An older line's pages aren't
+				// indexed, and their trail would start in the current docs. The
+				// first page has no trail: its own crumb is Docs.
+				...(loaderData.older || loaderData.url === docsRoute
+					? []
+					: [
+							{
+								"@context": "https://schema.org",
+								"@type": "BreadcrumbList",
+								itemListElement: [
+									{ name: "Docs", url: docsRoute },
+									...loaderData.folders,
+									{ name: loaderData.crumb, url: loaderData.url },
+								].map((crumb, i) => ({
+									"@type": "ListItem",
+									position: i + 1,
+									name: crumb.name,
+									item: pageUrl(crumb.url),
+								})),
+							},
+						]),
+			],
 		});
 		return {
 			...head,
@@ -92,6 +128,8 @@ const loader = createServerFn({ method: "GET" })
 			path: page.path,
 			url: page.url,
 			slugs: page.slugs,
+			folders: pageFolders(page.url),
+			crumb: indexFolderName(page.url) ?? page.data.title ?? "",
 			title: page.data.title ?? "",
 			description: page.data.description ?? "",
 			markdownUrl: getPageMarkdownUrl(page).url,

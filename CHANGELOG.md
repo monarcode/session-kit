@@ -12,6 +12,9 @@
 - A link to any page of the docs site shows its own preview image, with the
   page's title, description and place in the docs. Each page names its
   canonical URL on the new domain and links to its Markdown version.
+- The docs site has a `sitemap.xml` and a `robots.txt`, and each page
+  describes itself to search engines with structured data: the home page as
+  the site, and each docs page as an article with its place in the docs.
 
 ## 0.1.0-rc.3
 

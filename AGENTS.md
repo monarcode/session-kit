@@ -196,6 +196,12 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   or description too long for its image, or with a character its fonts
   can't draw, such as an arrow or an emoji. In dev, open an image's URL to
   see it.
+- `pageHead` also gives each page its canonical URL, with the trailing slash
+  the host serves pages at, and its structured data. `robots.txt` and
+  `sitemap.xml` are routes too, and the sitemap lists the home page and the
+  current line's pages. Full URLs use `SITE_URL`: the live site, or a
+  Cloudflare preview's own address (`site/src/lib/site.ts`).
+  `site/public/_headers` keeps the pages' Markdown copies out of search.
 - Older release lines in `site/content/docs/<line>/` are snapshots. Don't
   edit them for a change in the current line.
 

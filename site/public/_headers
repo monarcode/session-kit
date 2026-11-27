@@ -1,0 +1,6 @@
+# Response headers. Cloudflare Pages reads this file.
+
+# Each page's Markdown copy is for LLMs and agents, which can still fetch
+# it; search results show the page itself.
+/docs/*.md
+  X-Robots-Tag: noindex

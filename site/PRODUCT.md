@@ -72,6 +72,10 @@ those same checked examples, so the code shown is code that compiles.
   from the JSDoc by `pnpm run docs:reference` and must not be edited by hand.
 - Type tables (`fumadocs-typescript`) and Twoslash hovers read the package's
   published `.d.ts`.
+- Search engines get a sitemap of the current line's pages, a `robots.txt`
+  that opens every page to search and AI answers, a canonical URL on each
+  page and structured data. A Cloudflare preview's pages link to the preview
+  itself, not the live site.
 - Every page has its own link-preview image, drawn at build time in the landing
   page's style: the title as a comment in Geist Mono, the description, and where
   the page sits in the sidebar. The build fails on a title or description longer

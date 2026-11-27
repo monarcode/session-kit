@@ -15,6 +15,7 @@ import {
 	pageImagePath,
 	TOUCH_ICON_PATH,
 } from "./src/lib/og.ts";
+import { siteUrl } from "./src/lib/site.ts";
 
 const PNG_SIGNATURE = Buffer.from([
 	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
@@ -71,7 +72,10 @@ const { version } = JSON.parse(
 ) as { version: string };
 
 export default defineConfig({
-	define: { __PACKAGE_VERSION__: JSON.stringify(version) },
+	define: {
+		__PACKAGE_VERSION__: JSON.stringify(version),
+		__SITE_URL__: JSON.stringify(siteUrl(process.env)),
+	},
 	plugins: [
 		fumadocsMdx(),
 		tailwindcss(),
@@ -84,6 +88,8 @@ export default defineConfig({
 				{ path: "/api/search" },
 				{ path: "/llms.txt" },
 				{ path: "/llms-full.txt" },
+				{ path: "/robots.txt" },
+				{ path: "/sitemap.xml" },
 				// Written to `404.html` at the output's root.
 				{ path: "/404", prerender: { autoSubfolderIndex: false } },
 				{ path: HOME_IMAGE_PATH, prerender: imagePrerender },
