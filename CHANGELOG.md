@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The documentation site moved to https://session-kit.monarcode.dev. The old
+  address, https://session-kit.pages.dev, still serves it.
+
 ## 0.1.0-rc.3
 
 Fixes for Expo SDK 53 to 57 and for redirects on React Native, and a

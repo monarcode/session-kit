@@ -7,13 +7,13 @@
 [![provenance](https://img.shields.io/badge/provenance-verified-brightgreen?logo=npm)](https://www.npmjs.com/package/@monarcode/session-kit#provenance)
 [![license](https://img.shields.io/npm/l/@monarcode/session-kit)](./LICENSE)
 
-[![React](https://img.shields.io/badge/React-20232a?logo=react&logoColor=61dafb)](https://session-kit.pages.dev/docs/getting-started)
-[![TanStack Router](https://img.shields.io/badge/TanStack%20Router-20232a?logo=tanstack&logoColor=white)](https://session-kit.pages.dev/docs/setups/tanstack-router)
-[![TanStack Start](https://img.shields.io/badge/TanStack%20Start-20232a?logo=tanstack&logoColor=white)](https://session-kit.pages.dev/docs/setups/tanstack-start)
-[![React Router](https://img.shields.io/badge/React%20Router-20232a?logo=reactrouter&logoColor=ca4245)](https://session-kit.pages.dev/docs/setups/react-router)
-[![Next.js](https://img.shields.io/badge/Next.js-20232a?logo=nextdotjs&logoColor=white)](https://session-kit.pages.dev/docs/setups/next)
-[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://session-kit.pages.dev/docs/setups/expo)
-[![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](https://session-kit.pages.dev/docs/effect)
+[![React](https://img.shields.io/badge/React-20232a?logo=react&logoColor=61dafb)](https://session-kit.monarcode.dev/docs/getting-started)
+[![TanStack Router](https://img.shields.io/badge/TanStack%20Router-20232a?logo=tanstack&logoColor=white)](https://session-kit.monarcode.dev/docs/setups/tanstack-router)
+[![TanStack Start](https://img.shields.io/badge/TanStack%20Start-20232a?logo=tanstack&logoColor=white)](https://session-kit.monarcode.dev/docs/setups/tanstack-start)
+[![React Router](https://img.shields.io/badge/React%20Router-20232a?logo=reactrouter&logoColor=ca4245)](https://session-kit.monarcode.dev/docs/setups/react-router)
+[![Next.js](https://img.shields.io/badge/Next.js-20232a?logo=nextdotjs&logoColor=white)](https://session-kit.monarcode.dev/docs/setups/next)
+[![Expo](https://img.shields.io/badge/Expo-20232a?logo=expo&logoColor=white)](https://session-kit.monarcode.dev/docs/setups/expo)
+[![Effect](https://img.shields.io/badge/Effect-20232a?logo=effect&logoColor=white)](https://session-kit.monarcode.dev/docs/effect)
 
 **Every sign-in ends in a session. Make yours type-safe and predictable.**
 
@@ -31,7 +31,7 @@ server with TanStack Start, Next.js, and React Router, and comes with an
 > **Release candidate.** The API is frozen for 0.1, and later 0.1 releases
 > only add to it. See the [release notes](./CHANGELOG.md).
 
-**Documentation: [session-kit.pages.dev](https://session-kit.pages.dev)**
+**Documentation: [session-kit.monarcode.dev](https://session-kit.monarcode.dev)**
 
 ## Installation
 
@@ -45,7 +45,7 @@ Any [Standard Schema](https://standardschema.dev) library describes users.
 The examples use Zod. Peer dependencies such as React and your router are
 optional: install the ones your setup uses. Session kit needs TypeScript 5.4
 or newer (Effect asks for 5.9), and
-[Compatibility](https://session-kit.pages.dev/docs/reference/compatibility)
+[Compatibility](https://session-kit.monarcode.dev/docs/reference/compatibility)
 lists the supported versions.
 
 Release candidates are published to the `latest` tag, so pin an exact version
@@ -165,14 +165,14 @@ function Home() {
 
 To call your API, `createAuthFetch` from `@monarcode/session-kit/http` adds
 the access token to each request and refreshes it after a 401.
-[Getting started](https://session-kit.pages.dev/docs/getting-started) builds
+[Getting started](https://session-kit.monarcode.dev/docs/getting-started) builds
 this app step by step against a real test backend, and the setup guides add
 your router's guards or server rendering.
 
 ## Pick your setup
 
 Each setup, from plain React to Next.js, Expo Router and Effect, has a guide:
-see [Pick your setup](https://session-kit.pages.dev/docs/installation#pick-your-setup).
+see [Pick your setup](https://session-kit.monarcode.dev/docs/installation#pick-your-setup).
 Every setup but plain React has a runnable app in [`examples/`](./examples).
 
 ## Contributing
