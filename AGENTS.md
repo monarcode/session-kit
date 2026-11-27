@@ -196,8 +196,10 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   or description too long for its image, or with a character its fonts
   can't draw, such as an arrow or an emoji. In dev, open an image's URL to
   see it.
-- `pageHead` also gives each page its canonical URL, with the trailing slash
-  the host serves pages at, and its structured data. `robots.txt` and
+- Pages prerender to flat files (`docs/installation.html`), which
+  Cloudflare Pages serves at `/docs/installation`, the URL every link uses;
+  the URL with a trailing slash redirects there. `pageHead` also gives each
+  page its canonical URL and its structured data. `robots.txt` and
   `sitemap.xml` are routes too, and the sitemap lists the home page and the
   current line's pages. Full URLs use `SITE_URL`: the live site, or a
   Cloudflare preview's own address (`site/src/lib/site.ts`).

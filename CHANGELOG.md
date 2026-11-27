@@ -15,6 +15,9 @@
 - The docs site has a `sitemap.xml` and a `robots.txt`, and each page
   describes itself to search engines with structured data: the home page as
   the site, and each docs page as an article with its place in the docs.
+- Docs pages are served at the URLs the site links to, without a trailing
+  slash, so following a link no longer redirects. A URL with a trailing
+  slash still works: it redirects to the one without.
 
 ## 0.1.0-rc.3
 

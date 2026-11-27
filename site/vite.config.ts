@@ -80,8 +80,18 @@ export default defineConfig({
 		fumadocsMdx(),
 		tailwindcss(),
 		tanstackStart({
-			// Static files only: every page is prerendered to HTML at build time.
-			prerender: { enabled: true, crawlLinks: true },
+			// Static files only: every page is prerendered to HTML at build time,
+			// as `docs/installation.html` rather than `docs/installation/index.html`.
+			// Cloudflare Pages serves the file at `/docs/installation`, the URL
+			// every link uses; a folder's `index.html` would redirect it to a URL
+			// with a trailing slash.
+			prerender: {
+				enabled: true,
+				crawlLinks: true,
+				autoSubfolderIndex: false,
+				// A link to a heading on another page is that page again.
+				filter: ({ path }) => !path.includes("#"),
+			},
 			// Routes no page links to, so the crawler doesn't find them.
 			pages: [
 				...docsPages,
@@ -91,7 +101,7 @@ export default defineConfig({
 				{ path: "/robots.txt" },
 				{ path: "/sitemap.xml" },
 				// Written to `404.html` at the output's root.
-				{ path: "/404", prerender: { autoSubfolderIndex: false } },
+				{ path: "/404" },
 				{ path: HOME_IMAGE_PATH, prerender: imagePrerender },
 				{ path: TOUCH_ICON_PATH, prerender: imagePrerender },
 			],
