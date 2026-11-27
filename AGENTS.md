@@ -187,6 +187,15 @@ developers, not for us. Every comment ships: keep it short, plain and true.
   from what the JSDoc renders.
 - `pnpm run check` doesn't build the site. Run `pnpm run build:site` after
   changing `site/`, a page's MDX or Twoslash blocks.
+- Each docs page, and the home page, has a link-preview image, drawn with
+  Takumi by `site/src/lib/og-image.tsx` and served at `/og/docs/<page>.png`
+  and `/og/home.png`, beside `/apple-touch-icon.png`. `vite.config.ts`
+  lists them for the prerender, which saves responses as text, so it asks
+  for each image as base64 and writes the bytes back. A page's head comes
+  from `pageHead` in `site/src/lib/shared.ts`. The build fails on a title
+  or description too long for its image, or with a character its fonts
+  can't draw, such as an arrow or an emoji. In dev, open an image's URL to
+  see it.
 - Older release lines in `site/content/docs/<line>/` are snapshots. Don't
   edit them for a change in the current line.
 

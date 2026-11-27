@@ -1,0 +1,4 @@
+# Cloudflare Pages reads this file.
+
+# The site's one link-preview image, before each page had its own.
+/og.png /og/home.png 301

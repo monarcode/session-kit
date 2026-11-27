@@ -4,8 +4,11 @@ import { gitConfig } from "@/lib/shared";
 
 import { COLUMN, SectionHead } from "./buffer";
 
-// Each setup with the entry point it imports, its guide and its example app.
-const SETUPS = [
+/**
+ * Each setup with the entry point it imports, its guide and its example
+ * app. The home page's link-preview image names them too.
+ */
+export const SETUPS = [
 	[
 		"TanStack Router",
 		"tanstack-router",

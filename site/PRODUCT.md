@@ -72,6 +72,12 @@ those same checked examples, so the code shown is code that compiles.
   from the JSDoc by `pnpm run docs:reference` and must not be edited by hand.
 - Type tables (`fumadocs-typescript`) and Twoslash hovers read the package's
   published `.d.ts`.
+- Every page has its own link-preview image, drawn at build time in the landing
+  page's style: the title as a comment in Geist Mono, the description, and where
+  the page sits in the sidebar. The build fails on a title or description longer
+  than its image has room for (`TITLE_ROOM` and `DESCRIPTION_ROOM` in
+  `src/lib/og-image.tsx`), or with a character outside Latin letters and common
+  punctuation, which its fonts can't draw.
 - Supported setups: TanStack Router, TanStack Start (SPA and server
   rendering), React Router (declarative, data, framework with and without
   SSR), Next.js App Router, Expo Router (iOS and Android), plain React,

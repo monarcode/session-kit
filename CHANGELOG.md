@@ -7,6 +7,12 @@
 - The documentation site moved to https://session-kit.monarcode.dev. The old
   address, https://session-kit.pages.dev, still serves it.
 
+### Docs
+
+- A link to any page of the docs site shows its own preview image, with the
+  page's title, description and place in the docs. Each page names its
+  canonical URL on the new domain and links to its Markdown version.
+
 ## 0.1.0-rc.3
 
 Fixes for Expo SDK 53 to 57 and for redirects on React Native, and a

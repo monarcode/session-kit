@@ -17,12 +17,13 @@ import {
 
 import { useMDXComponents } from "@/components/mdx";
 import { baseOptions } from "@/lib/layout.shared";
+import { pageImagePath } from "@/lib/og";
 import {
 	getPageMarkdownUrl,
 	gitConfig,
 	LATEST,
 	latestLabel,
-	pageMeta,
+	pageHead,
 	versionOfPath,
 } from "@/lib/shared";
 import { docs, source } from "@/lib/source";
@@ -35,21 +36,28 @@ export const Route = createFileRoute("/docs/$")({
 		await docs.getPage(data.path)?.preload();
 		return data;
 	},
-	head: ({ loaderData }) => ({
-		meta: loaderData
-			? [
-					...pageMeta(
-						`${loaderData.title} | Session kit`,
-						loaderData.description,
-					),
-					// Older lines stay out of search engines, which send readers
-					// to the current docs instead.
-					...(loaderData.older
-						? [{ name: "robots", content: "noindex" }]
-						: []),
-				]
-			: [],
-	}),
+	head: ({ loaderData }) => {
+		if (!loaderData) return {};
+		const head = pageHead({
+			title: `${loaderData.title} | Session kit`,
+			description: loaderData.description,
+			path: loaderData.url,
+			type: "article",
+			markdown: loaderData.markdownUrl,
+			image: pageImagePath(loaderData.slugs),
+		});
+		return {
+			...head,
+			meta: [
+				...head.meta,
+				// Older lines stay out of search engines, which send readers
+				// to the current docs instead.
+				...(loaderData.older
+					? [{ name: "robots", content: "noindex" }]
+					: []),
+			],
+		};
+	},
 });
 
 /**
@@ -82,6 +90,8 @@ const loader = createServerFn({ method: "GET" })
 					};
 		return {
 			path: page.path,
+			url: page.url,
+			slugs: page.slugs,
 			title: page.data.title ?? "",
 			description: page.data.description ?? "",
 			markdownUrl: getPageMarkdownUrl(page).url,

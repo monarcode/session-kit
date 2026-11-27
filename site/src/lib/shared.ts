@@ -1,6 +1,7 @@
 import { createGetUrl } from "fumadocs-core/source";
 
 import { charbox } from "./charbox";
+import { OG_SIZE } from "./og";
 
 export const docsRoute = "/docs";
 
@@ -15,17 +16,83 @@ export const codeThemes = {
 	defaultColor: "dark",
 } as const;
 
+/**
+ * What Session kit is, in a few words: the home page's title after the
+ * name, and the foot of every link-preview image.
+ */
+export const TAGLINE = "Type-safe sessions for React";
+
 /** Where the site is served. Link previews need absolute URLs. */
 export const SITE_URL = "https://session-kit.monarcode.dev";
 
-/** A page's title and description, for the browser and for link previews. */
-export function pageMeta(title: string, description: string) {
+/**
+ * A page's full URL, as the host serves it. Every page is prerendered to a
+ * folder's `index.html`, so its URL ends in a slash, and the URL without one
+ * redirects there.
+ */
+export function pageUrl(path: string): string {
+	return SITE_URL + (path.endsWith("/") ? path : `${path}/`);
+}
+
+/**
+ * The tags that give a link its preview image, from a path such as
+ * `/og/home.png` (see `lib/og.ts`) and the text that describes it.
+ */
+export function imageMeta(path: string, alt: string) {
 	return [
-		{ title },
-		{ name: "description", content: description },
-		{ property: "og:title", content: title },
-		{ property: "og:description", content: description },
+		{ property: "og:image", content: SITE_URL + path },
+		{ property: "og:image:width", content: String(OG_SIZE.width) },
+		{ property: "og:image:height", content: String(OG_SIZE.height) },
+		{ property: "og:image:alt", content: alt },
+		{ name: "twitter:card", content: "summary_large_image" },
 	];
+}
+
+/** What {@link pageHead} needs to describe a page. */
+export interface PageHeadInput {
+	title: string;
+	description: string;
+	/** The page's path, such as `/docs/installation`. */
+	path: string;
+	/** `article` for a docs page, `website` for the home page. */
+	type: "website" | "article";
+	/** The path of the page as Markdown, for LLMs and agents. */
+	markdown?: string | undefined;
+	/** The path of its link-preview image (see `lib/og.ts`). */
+	image?: string | undefined;
+}
+
+/**
+ * A page's head: its title and description, for the browser, search
+ * engines and link previews, with the canonical URL each of them should
+ * use. Full URLs throughout, since these are read away from the site, and
+ * `session-kit.pages.dev` serves the same pages.
+ */
+export function pageHead(page: PageHeadInput) {
+	const url = pageUrl(page.path);
+	return {
+		meta: [
+			{ title: page.title },
+			{ name: "description", content: page.description },
+			{ property: "og:title", content: page.title },
+			{ property: "og:description", content: page.description },
+			{ property: "og:url", content: url },
+			{ property: "og:type", content: page.type },
+			...(page.image ? imageMeta(page.image, page.title) : []),
+		],
+		links: [
+			{ rel: "canonical", href: url },
+			...(page.markdown
+				? [
+						{
+							rel: "alternate",
+							type: "text/markdown",
+							href: SITE_URL + page.markdown,
+						},
+					]
+				: []),
+		],
+	};
 }
 
 /** The route prerendered to `404.html`, and the meta tag that marks it. */

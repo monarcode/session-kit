@@ -12,19 +12,24 @@ import { ScopeNote } from "@/components/landing/scope-note";
 import { Setups } from "@/components/landing/setups";
 import { Tour } from "@/components/landing/tour";
 import { baseOptions } from "@/lib/layout.shared";
-import { pageMeta } from "@/lib/shared";
+import { HOME_IMAGE_PATH } from "@/lib/og";
+import { pageHead, TAGLINE } from "@/lib/shared";
 import { loadLanding } from "@/lib/tour";
 
 import { version } from "../../../package.json";
 
 export const Route = createFileRoute("/")({
 	loader: () => loadLanding(),
-	head: () => ({
-		meta: pageMeta(
-			"Session kit: the session layer for React apps",
-			"Define, validate, and manage application sessions with a schema-driven toolkit built for React and meta frameworks. It never signs users in.",
-		),
-	}),
+	head: () =>
+		pageHead({
+			// The tagline mid-sentence: only its first letter drops to lowercase.
+			title: `Session kit: ${TAGLINE[0]!.toLowerCase()}${TAGLINE.slice(1)}`,
+			description:
+				"Define, validate, and manage application sessions with a schema-driven toolkit built for React and meta frameworks. It never signs users in.",
+			path: "/",
+			type: "website",
+			image: HOME_IMAGE_PATH,
+		}),
 	component: Home,
 });
 

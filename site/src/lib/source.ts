@@ -4,6 +4,7 @@ import {
 	getPageTreeRoots,
 	type Folder,
 	type Item,
+	type Node,
 } from "fumadocs-core/page-tree";
 import { llms, loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
@@ -169,4 +170,33 @@ export function currentPages() {
 	return flattenTree([currentFolder()]).flatMap(
 		(node) => source.getNodePage(node) ?? [],
 	);
+}
+
+/**
+ * Where a page sits in the sidebar: the separator it's listed under, such
+ * as "Setups", then the folders it's in, such as "Using the client". A
+ * folder's name is left out where the page's own title repeats it. The
+ * link-preview images show it.
+ */
+export function pageSection(page: { url: string; title: string }): string[] {
+	function find(nodes: Node[], trail: string[]): string[] | undefined {
+		let separator: string | undefined;
+		for (const node of nodes) {
+			if (node.type === "separator") separator = String(node.name ?? "");
+			const here = separator ? [...trail, separator] : trail;
+			if (node.type === "page" && node.url === page.url) return here;
+			if (node.type !== "folder") continue;
+			const inFolder = [...here, String(node.name)];
+			if (node.index?.url === page.url) return inFolder;
+			const found = find(node.children, inFolder);
+			if (found) return found;
+		}
+		return undefined;
+	}
+	for (const root of getPageTreeRoots(source.getPageTree())) {
+		const found = find(root.children, []);
+		if (found)
+			return found.at(-1) === page.title ? found.slice(0, -1) : found;
+	}
+	return [];
 }
