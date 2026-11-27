@@ -81,8 +81,9 @@ those same checked examples, so the code shown is code that compiles.
   identifier (the npm name, URLs, paths). Use the reader's words ("signed in", "the saved
   session", "another tab", "the access token expired"), never engine names
   such as epoch, revision or flight.
-- Undecided: the site's final URL. `https://session-kit.pages.dev` is assumed
-  until the Cloudflare Pages project or a custom domain is set.
+- The site's URL is `https://session-kit.monarcode.dev`, a custom domain on
+  the Cloudflare Pages project. `https://session-kit.pages.dev` still serves
+  it.
 
 ## Brand Commitments
 

@@ -16,7 +16,7 @@ export const codeThemes = {
 } as const;
 
 /** Where the site is served. Link previews need absolute URLs. */
-export const SITE_URL = "https://session-kit.pages.dev";
+export const SITE_URL = "https://session-kit.monarcode.dev";
 
 /** A page's title and description, for the browser and for link previews. */
 export function pageMeta(title: string, description: string) {
